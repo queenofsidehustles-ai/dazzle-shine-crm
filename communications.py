@@ -34,7 +34,7 @@ CATALOG = [
     ('start_21', 'owner', 'Days left, and nothing set up yet',
      'Day 21', 'Not set up yet'),
     ('activated', 'owner', 'That is it working',
-     'The moment they add a cleaner and a customer', 'Just set up'),
+     'The moment they add a customer and a job (or a team)', 'Just set up'),
     ('first_booking', 'owner', 'Somebody booked you through your own page',
      'The first online booking', 'On a trial'),
     ('feature', 'owner', 'Before your trial ends, try this',

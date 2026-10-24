@@ -1670,6 +1670,8 @@ def payroll():
         if pay_ids else {}
 
     def add_row(s, job, earned, paid, crew=None):
+        if s.is_owner:
+            return          # the owner is not on their own payroll
         row = payroll_data.setdefault(s.name, {'staff': s, 'jobs': [], 'total': 0, 'paid_total': 0})
         pid = crew.payment_id if crew else job.cleaner_payment_id
         row['jobs'].append({'booking': job, 'earned': earned, 'paid': paid, 'crew': crew,
@@ -1781,6 +1783,9 @@ def _send_payout(s, b, earned, method, idem_key, when=None, tip=0.0):
     Flashes and returns None if it couldn't go through. Caller stamps whatever
     it is that got paid — the booking for a solo job, the crew row for one
     member of a crew — and commits."""
+    if s.is_owner:
+        flash('You are not paid through the CRM for your own work.', 'warning')
+        return None
     job_date = b.preferred_date or ''
     desc = f'{s.name} — {b.name or "job"} {job_date}'.strip()
     # The tip is the customer's money passing through — it goes out with the

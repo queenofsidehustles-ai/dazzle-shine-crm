@@ -19,12 +19,13 @@ Ordered by what would hurt most if it were skipped.
 # plain '1' would have gone on being told it had finished a list it had never
 # been shown. A version here means they are asked once more, and then latched
 # again. Bump it whenever a required step is added.
-SETUP_VERSION = '2'
+SETUP_VERSION = '3'
 
 
 def checklist():
-    from models import BusinessSetting, Staff, Booking
+    from models import BusinessSetting, Booking
     import integrations
+    from owner_cleaner import hired_team_count
 
     def setting(key):
         return bool((BusinessSetting.get(key) or '').strip())
@@ -87,9 +88,10 @@ def checklist():
         },
         {
             'key': 'team',
-            'title': 'Add your cleaners',
-            'why': 'You need at least one person to send a job to.',
-            'done': Staff.query.count() > 0,
+            'title': 'Add a team member when you hire',
+            'why': ('You are already on the team, so you can assign jobs to yourself. '
+                    'Add people here when you are ready to send work to someone else.'),
+            'done': hired_team_count() > 0,
             'link': '/contractors/team',
             'critical': False,
         },
@@ -153,19 +155,31 @@ def journey():
     chooses a collection mode never charges a balance. Nothing errors. The
     money simply does not arrive.
 
-    Optional steps are the business's own world -- a cleaner, a customer, a
-    job. They used to be required, which asked somebody on their first
-    evening to invent a customer they did not have in order to finish setup.
-    They are offered, never insisted on, and they no longer gate anything.
+    Since 2026-10-24 the required steps are details, prices and payments.
+    The team is not one of them: the owner is the first cleaner
+    (owner_cleaner.py), created with the account, so a job can be given to
+    her before anyone is hired, and seeing her own name on the roster is
+    already the first thing setup gives back. Adding people is an optional
+    step for when she hires. Terms and balances moved out of the required
+    list: both already have a safe default, so they follow straight after as
+    go-live checks rather than standing between a new owner and her first win.
+
+    Optional steps are the business's own world -- a customer, a job. They
+    used to be required, which asked somebody on their first evening to
+    invent a customer they did not have in order to finish setup. They are
+    offered, never insisted on, and they no longer gate anything.
     """
     import automations
     import integrations
-    from models import BusinessSetting, Staff, Booking, BookingCrew
+    from models import BusinessSetting, Booking, BookingCrew
 
     def setting(key):
         return bool((BusinessSetting.get(key) or '').strip())
 
-    has_staff = Staff.query.filter_by(is_active=True).count() > 0
+    # The owner is the first cleaner (owner_cleaner.py), so having staff says
+    # nothing; what says something is having hired somebody else.
+    from owner_cleaner import hired_team_count
+    has_team = hired_team_count() > 0
     has_client = False
     try:
         from models import Client
@@ -176,7 +190,8 @@ def journey():
     # Assigned means a named cleaner, by either route -- a crew row, or the
     # single-cleaner field older jobs use.
     assigned = (BookingCrew.query.count() > 0
-                or Booking.query.filter(Booking.assigned_cleaner.isnot(None)).count() > 0)
+                or Booking.query.filter(Booking.assigned_cleaner.isnot(None),
+                                   Booking.assigned_cleaner != '').count() > 0)
 
     # The demo has no real keys and cannot be given any -- demo_guard blanks
     # every outbound credential on purpose -- so "connect payments" is a step
@@ -190,14 +205,14 @@ def journey():
         pass
 
     steps = [
-        # ── Required: four, and only one of them is typing ────────────────
+        # ── Required: three, in the order an owner can actually do them ───
         #
-        # Everything here ships with a working default, so a business that
-        # never finishes is already quoting real customers -- with somebody
-        # else's prices, under a generic contract, in New York time. These
-        # are not blanks to fill in. They are the defaults that are wrong for
-        # this particular business, and the whole of setup is confirming
-        # them.
+        # Agreed 2026-10-24: details, prices, payments. The owner is already
+        # the first cleaner, so there is no team step to do first: a job can be
+        # given to herself the moment it exists, and adding people comes after,
+        # when she hires. Most owners have no customer in their first five
+        # minutes, which is why neither the customer nor the job is required.
+        #
         # The phone, and only the phone. The timezone is derived -- from the
         # ZIP at signup, or from the ZIP whenever one arrives -- so requiring
         # it here made the step impossible for every company that signed up
@@ -214,36 +229,40 @@ def journey():
          'title': 'Confirm your prices',
          'why': 'Until you look, Akye is quoting somebody else’s numbers.',
          'cta': 'Confirm prices', 'link': '/settings/pricing'},
-        {'key': 'terms', 'required': True, 'done': setting('terms_reviewed'),
+        # Required now, where it used to be tracked-but-optional. The owner's
+        # point, and the right one: being ready to be paid is the purpose of
+        # setting up before the first job, not something to discover after
+        # it. It is still skippable in the chat -- connecting Stripe wants a
+        # bank account and an SSN or EIN, which nobody has to hand on the
+        # first evening -- but it is not finished until it is done.
+        {'key': 'payments', 'required': True, 'urgent': True,
+         'done': integrations.stripe_mode() == 'live',
+         'title': 'Connect payments',
+         'why': 'Be ready before your first customer books. It takes a few '
+                'minutes, and your bank details stay with you.',
+         'cta': 'Connect payments', 'link': '/settings/connections'},
+        # ── Before you go live: both already have a safe default ──────────
+        #
+        # A standard draft of the terms is in force until the owner writes
+        # her own, and balances default to `ask` -- nothing is charged until
+        # she chooses. So neither blocks setup any more; they come straight
+        # after it, in the same chat, as the go-live checks.
+        {'key': 'terms', 'required': False, 'done': setting('terms_reviewed'),
          'title': 'Accept your customer terms',
          'why': 'Customers agree to these when they book. A standard draft is '
                 'already in force until you say otherwise.',
          'cta': 'Read and accept', 'link': '/settings/business'},
-        {'key': 'balance', 'required': True,
+        {'key': 'balance', 'required': False,
          'done': bool((BusinessSetting.get('balance_collection') or '').strip()),
          'title': 'Decide how balances get paid',
          'why': 'When a job is done, the rest can come off the card on file, or '
                 'wait for you. Until you choose, nothing is taken.',
          'cta': 'Choose', 'link': '/settings/automations'},
-        # ── Tracked, never blocking ───────────────────────────────────────
-        #
-        # Payments is not on the required list, because a business can take
-        # bookings without it and demanding a Stripe account in the first two
-        # minutes is how somebody decides this is too much. It is not
-        # optional either: until it is done no card is ever charged. So it
-        # sits here, amber from the first screen and red once it has been
-        # put off long enough, and it blocks nothing in between.
-        {'key': 'payments', 'required': False, 'urgent': True,
-         'done': integrations.stripe_mode() == 'live',
-         'title': 'Connect payments',
-         'why': 'You can take bookings now. You cannot take card payments until '
-                'this is done — your bank details stay with you.',
-         'cta': 'Connect payments', 'link': '/settings/connections'},
         # ── Optional: your own world in it ────────────────────────────────
         #
-        # Offered one at a time, never as a list of four. These are first
-        # use, not setup, and a business waiting on its first customer has
-        # finished setting up.
+        # Offered one at a time, never as a list. These are first use, not
+        # setup, and a business waiting on its first customer has finished
+        # setting up.
         {'key': 'booking_page', 'video': 'booking_page', 'required': False,
          'done': setting('booking_page_shared'),
          'title': 'Share your booking page',
@@ -251,13 +270,6 @@ def journey():
                 'price and book themselves. It just needs to be somewhere they '
                 'will see it.',
          'cta': 'Show me my page', 'link': '/settings/booking-page'},
-        {'key': 'team', 'video': 'team_and_customer', 'required': False,
-         'done': has_staff,
-         'title': 'Add a cleaner',
-         'why': 'Somebody to send a job to. Add yourself if you are still cleaning.',
-         'cta': 'Add a cleaner', 'link': '/staff/new',
-         'secondary': {'label': 'Already have a team? Import them all at once',
-                       'link': '/migration'}},
         {'key': 'client', 'video': 'team_and_customer', 'required': False,
          'done': has_client,
          'title': 'Add a customer',
@@ -268,9 +280,17 @@ def journey():
         {'key': 'job', 'video': 'book_job', 'required': False,
          'done': bookings > 0 and assigned,
          'title': 'Schedule a job and assign it',
-         'why': 'The cleaner gets a text with the address, the price and the '
-                'checklist.',
+         'why': 'Give it to yourself to start. When you add a cleaner, they get '
+                'a text with the address, the price and the checklist.',
          'cta': 'Book a job', 'link': '/bookings/new'},
+        {'key': 'team', 'video': 'team_and_customer', 'required': False,
+         'done': has_team,
+         'title': 'Add a team member when you hire',
+         'why': 'You are on the team already. Add people when you are ready to '
+                'send work to someone else.',
+         'cta': 'Add a team member', 'link': '/staff/new',
+         'secondary': {'label': 'Already have a team? Import them all at once',
+                       'link': '/migration'}},
     ]
     if demo:
         steps = [s for s in steps if s['key'] != 'payments']
@@ -283,7 +303,7 @@ PAYMENTS_RED_AFTER_DAYS = 3
 def payments_state():
     """How loudly to ask about payments: '', 'amber' or 'red'.
 
-    Amber the moment setup is finished, red once it has been put off for
+    Amber from the start, red once it has been put off for
     three days. Never blocking either way -- the business can work, it just
     cannot be paid by card, and that is a fact to keep in front of somebody
     rather than a door to hold shut.
@@ -325,10 +345,11 @@ def progress():
     question:
 
     `activated` — has this business put its real world into the software? A
-    cleaner they employ and a customer they clean for. That is the moment it
-    stops being a demo: somebody who has entered a person and a customer has
-    enough in front of them to judge the product, and somebody who has not,
-    has not. It is a milestone, and what the setup emails and the Funnel
+    customer they clean for, and a job on the calendar with somebody assigned
+    (the owner counts, as the first cleaner) -- or a hired team and a customer,
+    as it always was. That is the moment it stops being a demo: somebody who has
+    entered a customer and had a job given to someone has enough in front of
+    them to judge the product, and somebody who has not, has not. It is a milestone, and what the setup emails and the Funnel
     watch for. It does not start or move the trial, which runs 30 days from
     signup.
 
@@ -342,7 +363,11 @@ def progress():
     """
     steps = journey()
     required = [s for s in steps if s.get('required')]
-    if all(s['done'] for s in required):
+    # `ready_at` is when the basics were done -- everything required except
+    # payments -- because it is the clock the payments bar escalates on
+    # (amber, then red three days later). Stamped on payments as well, it
+    # could only ever be stamped once payments no longer needed asking about.
+    if all(s['done'] for s in required if s['key'] != 'payments'):
         _mark_ready()
     optional = [s for s in steps if not s.get('required')]
     done = sum(1 for s in required if s['done'])
@@ -365,9 +390,10 @@ def progress():
         # The trial trigger. Both, not either: a cleaner with nobody to clean
         # for, or a customer with nobody to send, is half a setup and shows
         # nothing working end to end.
-        'activated': by_key.get('team', False) and by_key.get('client', False),
-        # How hard to push about payments, which is tracked rather than
-        # required. '' once it is connected.
+        'activated': by_key.get('client', False) and (
+            by_key.get('job', False) or by_key.get('team', False)),
+        # How hard to push about payments: required, but skippable on the
+        # first evening, so it is kept in front of her. '' once connected.
         'payments': payments_state(),
         # Able to trade. The optional steps are offered after this and never
         # hold the card open: a business waiting on its first customer has

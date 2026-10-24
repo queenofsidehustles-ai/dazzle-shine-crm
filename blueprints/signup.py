@@ -522,6 +522,10 @@ def _create_everything(slug, form, password, attribution=None, terms_accepted=Fa
                 owner.set_password(password)
                 db.session.add(owner)
                 db.session.commit()
+                # The owner is the first cleaner, so a job can be assigned
+                # before anyone is hired (owner_cleaner.py).
+                import owner_cleaner
+                owner_cleaner.ensure(owner, form['email'])
                 from models import BusinessSetting
                 BusinessSetting.set('business_name', form['business'])
                 BusinessSetting.set('email', form['email'])

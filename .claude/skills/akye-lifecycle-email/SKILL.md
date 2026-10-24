@@ -28,10 +28,11 @@ start a new module or a new cron for it.
 
 - The trial is **30 days from signup** (`billing.TRIAL_DAYS`), one clock. It
   never "starts" or "has not started", and no email may say it does.
-- Setting up means **one active cleaner and one customer**
-  (`onboarding.progress()['activated']`), recorded as `activated_at`. It is a
-  milestone inside the trial, not what starts it. Not "your first job", not
-  "assign a job".
+- Setting up means **one customer and one job assigned** (`onboarding.progress()
+  ['activated']`), recorded as `activated_at`; hiring a team and adding a
+  customer counts too. The owner is already the first cleaner (a Staff row made
+  at signup, `owner_cleaner.py`), so no email asks them to "add a cleaner"
+  first: it is a milestone inside the trial, not what starts it.
 - When the trial ends they drop to the **free plan and keep everything**.
   Nothing is deleted. No card is on file during the trial.
 - Every owner link goes to **their own address** (`company_url(org)`, e.g.

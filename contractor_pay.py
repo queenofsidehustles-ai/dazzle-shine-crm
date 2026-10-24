@@ -41,7 +41,9 @@ def staff_for_booking(booking):
         s = match_staff(booking.assigned_cleaner)
         if s:
             out.append((s, round(booking.pay_for(s) or 0, 2)))
-    return [(s, amt) for s, amt in out if amt > 0]
+    # The owner is not paid through the CRM for their own work, whatever the
+    # job's pay split says (owner_cleaner.py).
+    return [(s, amt) for s, amt in out if amt > 0 and not s.is_owner]
 
 
 def match_staff(name):

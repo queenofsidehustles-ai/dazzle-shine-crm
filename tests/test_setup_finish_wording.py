@@ -1,13 +1,16 @@
-"""The seam between finishing setup and connecting payments reads straight.
+"""The seam between the first two steps and connecting payments reads straight.
 
-When the four required steps are done, the meter says "4 of 4 done" and the
-page says the business can take bookings. The chat used to undercut that: it
-called payments "the last thing, and it needs you" (as if setup were not
-finished) and, on a reload, prefixed it with a redundant "That step is done."
+Since 2026-10-24 payments is the third and last required step (details,
+prices, payments). With two done, the meter says "2 of 3 done", so
+the chat must not say setup is finished or that the owner can already take
+bookings -- that is what the old wording did, back when payments was an
+optional extra. It also used to call payments "the last thing, and it needs
+you" and, on a reload, prefixed it with a redundant "That step is done."
 
-This holds that at that seam the chat agrees with the meter: it acknowledges
-the essentials are done, frames payments as the optional-but-recommended next
-thing, and does not prepend the generic done line.
+This holds that at that seam the chat agrees with the meter: it calls
+payments the last step, says why (ready to be paid before the first booking),
+keeps the reassurance about bank details, still lets the owner put it off,
+and does not prepend the generic done line.
 """
 import os, sys, tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -35,35 +38,39 @@ def check(cond, m):
 
 with app.app_context():
     db.create_all()
-    # Finish the four required steps: business, pricing, terms, balance.
+    # Finish the first two required steps: business, pricing.
     BusinessSetting.set('business_name', 'Sparkle Co')
     BusinessSetting.set('email', 'o@sparkle.test')
     BusinessSetting.set('phone', '(407) 555-0100')
     BusinessSetting.set('pricing_reviewed', '1')
     db.session.commit()
-with app.app_context(), app.test_request_context():
-    from flask import session
-    session['role'] = 'owner'
-    setup_assistant.accept_terms({'accepted': '1'})
-    setup_assistant.set_balance_mode({'mode': 'ask'})
 
-print('\n1. With the four done, the next step is the optional payments one')
+print('\n1. With two of the three done, the next step is payments, the last required one')
 with app.app_context():
-    reqs = [s for s in onboarding.progress()['steps'] if s.get('required')]
-    check(all(s['done'] for s in reqs), 'all four required steps are done')
+    p = onboarding.progress()
+    reqs = [s for s in p['steps'] if s.get('required')]
+    check([s['key'] for s in reqs if not s['done']] == ['payments'],
+          'business and prices are done; only payments is left')
+    check((p['done'], p['total']) == (2, 3), f"the meter says {p['done']} of {p['total']}")
 with app.app_context(), app.test_request_context():
     from flask import session
     session['role'] = 'owner'
-    text, _cards, key = setup_assistant.next_message()
+    text, cards, key = setup_assistant.next_message()
 check(key == 'payments', f'payments is next ({key})')
 
-print('\n2. It acknowledges setup is done, not "it needs you"')
-check('needs you' not in text.lower(),
-      'it no longer says payments "needs you" as if setup were unfinished')
-check('bookings' in text.lower() and 'card' in text.lower(),
-      'it says bookings work now and payments is about taking card')
-check('bank details stay with you' in text.lower(),
+print('\n2. It says this is the last step, not that setup is already done')
+low = text.lower()
+check(low.startswith('last step'), f'it opens with "Last step" ({text[:40]!r})')
+check('needs you' not in low,
+      'it does not say payments "needs you"')
+check('essentials done' not in low and 'take bookings right now' not in low,
+      'and does not claim setup is finished while the meter says 2 of 3')
+check('before your first customer books' in low,
+      'it says why: be ready to be paid before the first booking')
+check('bank details stay with you' in low,
       'and keeps the reassurance about bank details')
+check('skip' in low and any(c.get('kind') == 'skip' for c in cards),
+      'and it can still be put off for tonight, with a Skip button')
 
 print('\n3. The redundant "That step is done." prefix is dropped at this seam')
 with app.app_context(), app.test_request_context():
@@ -71,9 +78,9 @@ with app.app_context(), app.test_request_context():
     session['role'] = 'owner'
     prefixed, _c, _k = setup_assistant.next_message('That step is done.')
 check(not prefixed.startswith('That step is done.'),
-      'the catch-up does not stack a generic done line before the finish message')
+      'the catch-up does not stack a generic done line before "Last step"')
 
 if failures:
     print(f'\n❌ {len(failures)} finish-wording check(s) failed')
     sys.exit(1)
-print('\n✅ Finishing setup and connecting payments reads as one straight line.')
+print('\n✅ Reaching payments, the last step, reads as one straight line.')
