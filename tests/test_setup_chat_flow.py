@@ -50,6 +50,10 @@ with app.app_context():
     import integrations
     integrations.set('stripe_secret_key', 'sk_live_testonly')
     BusinessSetting.set('balance_collection', 'ask')
+    # The team is a required step since 2026-10-24 (details, team, prices,
+    # payments), so a cleaner is on it here too.
+    from models import Staff
+    db.session.add(Staff(name='Ama', is_active=True))
     db.session.commit()
 
 
@@ -87,7 +91,7 @@ check(len(chat()) == n, 'and does not say it twice on another visit')
 
 print('\n3. Skip for now')
 r = c.post('/settings/getting-started/assistant/skip', json={'step': 'client'}, headers=H).get_json()
-check(r['ok'] and 'job' in r['say'], 'skipping the customer step asks for a job')
+check(r['ok'] and 'book a job' in r['say'].lower(), 'skipping the customer step asks for a job')
 with app.app_context():
     keys = {s['key']: s['done'] for s in onboarding.progress()['steps']}
 check(keys['client'] is False, 'the getting-started list still has the customer step')
@@ -98,7 +102,7 @@ bad = c.post('/settings/getting-started/assistant/skip', json={'step': 'nope'}, 
 check(bad['ok'] is False, 'an unknown step cannot be skipped')
 
 print('\n4. Start over brings skipped steps back')
-c.post('/settings/getting-started/assistant/skip', json={'step': 'team'}, headers=H)
+c.post('/settings/getting-started/assistant/skip', json={'step': 'client'}, headers=H)
 c.post('/settings/getting-started/assistant/reset', headers=H)
 with app.app_context():
     check(setup_assistant.skipped() == [], 'skips cleared')

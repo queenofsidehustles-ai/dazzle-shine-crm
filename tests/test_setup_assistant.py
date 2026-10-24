@@ -129,9 +129,16 @@ check(res['ok'] is True, 'pressing Save works')
 with app.app_context():
     check(BusinessSetting.get('phone') == '(407) 555-0100', 'phone saved as shown')
     check(BusinessSetting.get('email') == 'hello@sparkle.co', 'email saved as shown')
+    # Details, then prices: the owner is already the first cleaner, so there is
+    # no team step to do before the first win.
     check(onboarding.progress()['next']['key'] == 'pricing',
-          'setup moved on to the prices')
-check('2-bed' in (res.get('follow') or ''), 'and the follow-up asks about the prices')
+          'setup moved on to prices')
+    import owner_cleaner
+    check(owner_cleaner.hired_team_count() == 0, 'and nobody was hired by moving on')
+check('what do you charge' in (res.get('follow') or '').lower(),
+      'and the follow-up asks what they charge')
+check(any(x.get('step') == 'pricing' for x in res.get('cards') or []),
+      'with the prices card, not yet saved')
 r = c.post('/settings/getting-started/assistant/confirm',
            json={'token': cards[0]['token']}, headers=H)
 check(r.get_json()['ok'] is False and 'already' in r.get_json()['say'],
@@ -238,8 +245,8 @@ check(done_cards and all(x['done'].startswith('✅') for x in done_cards),
       'a saved card remembers it was saved, even after a second press')
 check(any(m.get('hidden') for m in chat), 'the button press is noted as hidden context')
 r = c.get('/settings/getting-started')
-check(b'pressed the button' in r.data and b'm.hidden' in r.data,
-      'hidden turns are in the data but the page skips them')
+check(b'pressed the button' not in r.data,
+      'hidden turns stay in the stored chat but never reach the page')
 
 print('\n12. Replies the API really sends')
 # Text alongside the tool call, then an empty turn afterwards.

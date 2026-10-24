@@ -126,7 +126,7 @@ with app.app_context():
         print("CHECKLIST TEAM:", [i["done"] for i in onboarding.checklist() if i["key"] == "team"][0])
 print("OK")
 ''', 'journey')
-check("ORDER: ['payments', 'booking_page', 'client', 'job', 'team']" in out,
+check("ORDER: ['terms', 'balance', 'booking_page', 'client', 'job', 'team']" in out,
       'customer, then job, then (when you hire) a team member')
 check('TEAM DONE: False' in out and 'HIRED: 0' in out,
       'the owner alone is not "a team", so the hire step stays an offer')

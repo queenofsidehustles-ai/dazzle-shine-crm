@@ -1,7 +1,7 @@
 """The card's "Step N of M" matches the meter, and terms can be edited.
 
 Two small things the owner noticed:
-- The card said "Step 4 of 9" while the sidebar meter said "4 of 4". The step
+- The card said "Step 4 of 9" while the sidebar meter said "3 of 3". The step
   counter must count the same required steps the meter does, not every step in
   the journey, or the two disagree on the same screen.
 - Accepting the terms is one tap, but somebody who wants to change a line needs
@@ -38,52 +38,84 @@ def next_card(step_key):
         session['role'] = 'owner'
         _text, cards, key = setup_assistant.next_message()
         assert key == step_key, f'expected {step_key} next, got {key}'
-        return [c for c in cards if c.get('kind') in ('form', 'confirm', 'choice')]
+        return [c for c in cards if c.get('kind') in ('form', 'confirm', 'choice', 'team')]
+
+
+def all_cards(step_key):
+    with app.app_context(), app.test_request_context():
+        from flask import session
+        session['role'] = 'owner'
+        _text, cards, key = setup_assistant.next_message()
+        assert key == step_key, f'expected {step_key} next, got {key}'
+        return cards
 
 
 with app.app_context():
     db.create_all()
-    # Enough of a business that the first two required steps are done, so the
-    # next required step is terms.
+    # Details done, prices not yet, so the next required step is prices --
+    # step 2 of the three. (The owner is already the first cleaner, so there is
+    # no team step to do first.)
     BusinessSetting.set('business_name', 'Sparkle Co')
     BusinessSetting.set('email', 'o@sparkle.test')
     BusinessSetting.set('phone', '(407) 555-0100')
-    BusinessSetting.set('pricing_reviewed', '1')
     db.session.commit()
 
-print('\n1. The required steps number 1..4, the same four the meter counts')
+print('\n1. The required steps number 1..3, the same three the meter counts')
 with app.app_context():
-    total = onboarding.progress()['total']
-check(total == 4, f'the meter counts four required steps ({total})')
+    prog = onboarding.progress()
+    total = prog['total']
+    req = [s['key'] for s in prog['steps'] if s.get('required')]
+check(total == 3, f'the meter counts three required steps ({total})')
+check(req == ['business', 'pricing', 'payments'],
+      f'and they are details, prices, payments: {req}')
 
-print('\n2. The terms card says "Step 3 of 4", not "of 9"')
-cards = next_card('terms')
-terms = cards[0]
-check(terms.get('step_total') == 4, f"denominator matches the meter: of {terms.get('step_total')}")
-check(terms.get('step_no') == 3, f"and it is step {terms.get('step_no')} of four")
+print('\n2. The prices card says "Step 2 of 3", not "of 9"')
+cards = next_card('pricing')
+price = cards[0]
+check(price.get('kind') == 'form', f"it is the prices card ({price.get('kind')})")
+check(price.get('step_total') == 3, f"denominator matches the meter: of {price.get('step_total')}")
+check(price.get('step_no') == 2, f"and it is step {price.get('step_no')} of three")
 
-print('\n3. The terms card offers an edit link, not only Accept')
+print('\n3. Payments is next, and is the third of the three the meter counts')
+with app.app_context():
+    BusinessSetting.set('pricing_reviewed', '1')
+    db.session.commit()
+cards = all_cards('payments')
+with app.app_context():
+    req = [s['key'] for s in onboarding.progress()['steps'] if s.get('required')]
+check(req.index('payments') + 1 == 3, 'payments is required step 3 of 3 on the meter')
+numbered = [c for c in cards if c.get('step_no')]
+check(all(c.get('step_no') == 3 and c.get('step_total') == 3 for c in numbered),
+      f'any number on its card says 3 of 3: {[(c.get("step_no"), c.get("step_total")) for c in numbered]}')
+check(any(c.get('kind') == 'skip' for c in cards), 'and it can still be skipped for tonight')
+
+print('\n4. Terms comes after, unnumbered, and offers an edit link, not only Accept')
+with app.app_context(), app.test_request_context():
+    setup_assistant.skip('payments')
+terms = next_card('terms')[0]
+check(not terms.get('step_no') and not terms.get('step_total'),
+      f"terms is a go-live check, not step N of 3 ({terms.get('step_no')}/{terms.get('step_total')})")
 check(terms.get('secondary', {}).get('href') == '/settings/business',
       'a secondary link points at the terms editor')
 check('edit' in (terms.get('secondary', {}).get('label') or '').lower(),
       f"labelled to edit: {terms.get('secondary', {}).get('label')!r}")
 
-print('\n4. Balance is "Step 4 of 4"; the optional payments step gets no number')
+print('\n5. Balance follows terms and gets no number either')
 with app.app_context(), app.test_request_context():
     from flask import session
     session['role'] = 'owner'
     setup_assistant.accept_terms({'accepted': '1'})
 balance = next_card('balance')[0]
-check(balance.get('step_no') == 4 and balance.get('step_total') == 4,
-      f"balance is step {balance.get('step_no')} of {balance.get('step_total')}")
+check(not balance.get('step_no') and not balance.get('step_total'),
+      f"balance is not \"step four of three\" ({balance.get('step_no')}/{balance.get('step_total')})")
 with app.app_context(), app.test_request_context():
     from flask import session
     session['role'] = 'owner'
     setup_assistant.set_balance_mode({'mode': 'ask'})
     _text, cards, key = setup_assistant.next_message()
-check(key == 'payments', f'the next step is the optional payments one ({key})')
+check(key not in ('terms', 'balance'), f'answering it moves on ({key})')
 numbered = [c for c in cards if c.get('step_no')]
-check(not numbered, 'and nothing on it claims to be "step five of four"')
+check(not numbered, 'and nothing after the three claims a step number')
 
 if failures:
     print(f'\n❌ {len(failures)} step-number check(s) failed')
