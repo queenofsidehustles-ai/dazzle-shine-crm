@@ -181,7 +181,8 @@ def journey():
     # Assigned means a named cleaner, by either route -- a crew row, or the
     # single-cleaner field older jobs use.
     assigned = (BookingCrew.query.count() > 0
-                or Booking.query.filter(Booking.assigned_cleaner.isnot(None)).count() > 0)
+                or Booking.query.filter(Booking.assigned_cleaner.isnot(None),
+                                   Booking.assigned_cleaner != '').count() > 0)
 
     # The demo has no real keys and cannot be given any -- demo_guard blanks
     # every outbound credential on purpose -- so "connect payments" is a step

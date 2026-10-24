@@ -219,4 +219,34 @@ check("REMINDERS: 1" in out and "('email', 'cleaner_schedule_reminder', 'dana@sp
 check("('sms', '5553334444')" in out, 'and a text, to the business phone they gave')
 check('MY DAY: 200 True' in out, 'and My day shows them their jobs')
 
+print('\n6. An explicit crew split cannot pay the owner, and a blank assignment is no assignment')
+out = run(STUB + '''
+from app import create_app
+app = create_app()
+import tenancy
+with app.app_context():
+    with tenancy.use_tenant("sparkle"):
+        from extensions import db
+        from models import Staff, Booking, BookingCrew
+        import onboarding, contractor_pay
+        me = Staff.query.filter_by(is_owner=True).first()
+        b = Booking.query.first()
+        db.session.add(BookingCrew(booking_id=b.id, staff_id=me.id, pay_amount=40))
+        db.session.commit()
+        print("CREW PAY:", b.pay_for(me), contractor_pay.summary_for(me)["owed"])
+        BookingCrew.query.delete()
+        Booking.query.update({"assigned_cleaner": ""})
+        db.session.commit()
+        job = [s for s in onboarding.journey() if s["key"] == "job"][0]
+        print("BLANK ASSIGNED:", job["done"])
+        Booking.query.update({"assigned_cleaner": me.name})
+        db.session.commit()
+        job = [s for s in onboarding.journey() if s["key"] == "job"][0]
+        print("NAMED ASSIGNED:", job["done"])
+print("OK")
+''', 'review findings')
+check('CREW PAY: 0.0 0.0' in out, 'a typed crew split still earns the owner nothing, on My day and in what is owed')
+check('BLANK ASSIGNED: False' in out, 'an empty cleaner field is not an assignment')
+check('NAMED ASSIGNED: True' in out, 'a named one is')
+
 print('\n✅ The owner starts as their own first cleaner, and nothing treats them as a contractor.')

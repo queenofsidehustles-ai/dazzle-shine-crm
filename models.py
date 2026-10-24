@@ -593,6 +593,8 @@ class Booking(db.Model):
         owed IS what she would be offered, so this calls the same function the
         offer does and the two cannot drift apart again.
         """
+        if getattr(staff, 'is_owner', False):
+            return 0.0      # whatever a crew split says (owner_cleaner.py)
         if self.crew:
             row = self.crew_row_for(staff)
             return round(row.pay_amount or 0, 2) if row else 0.0
