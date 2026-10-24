@@ -577,6 +577,25 @@ _TEAM_COLUMNS = {
 TEAM_FILE_MAX_ROWS = 50
 
 
+def _sheet_cell_text(c):
+    """What an Excel cell shows, as text, for the team importer.
+
+    A cell formatted as a percentage holds the fraction: "45%" is stored as
+    0.45. Read as plain text that became a 0.45% share of every job, a valid
+    rate that would pay a cleaner one hundredth of the intended amount. So a
+    percent-formatted number comes back as percentage points with its "%", which
+    is also what marks the column as a share of the job rather than hourly."""
+    v = c.value
+    if v is None:
+        return ''
+    fmt = getattr(c, 'number_format', '') or ''
+    if isinstance(v, (int, float)) and not isinstance(v, bool) and '%' in fmt:
+        from decimal import Decimal
+        points = (Decimal(repr(v)) * 100).normalize()
+        return format(points, 'f') + '%'
+    return str(v).strip()
+
+
 def read_team_file(filename, data):
     """Cleaners out of an uploaded CSV or Excel file. (rows, error).
 
@@ -598,8 +617,8 @@ def read_team_file(filename, data):
         if name.endswith(('.xlsx', '.xlsm')):
             import openpyxl
             wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
-            for row in wb.worksheets[0].iter_rows(values_only=True):
-                table.append(['' if v is None else str(v).strip() for v in row])
+            for row in wb.worksheets[0].iter_rows():
+                table.append([_sheet_cell_text(c) for c in row])
                 if len(table) > 1000:
                     break
         elif name.endswith(('.csv', '.txt')):
