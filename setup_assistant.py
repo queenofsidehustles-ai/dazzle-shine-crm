@@ -120,12 +120,12 @@ STEP_PROMPTS = {
     'pricing': 'What do you charge for a standard clean of a 2-bed, 2-bath?',
     'terms': 'Your customer terms are ready. Have a look and accept them.',
     'balance': 'When a job’s finished, should the rest come off the card on file?',
-    'payments': ('That’s the four essentials done — you can take bookings right '
-                 'now. The one thing left, whenever you’re ready: connect '
-                 'payments so customers can pay by card. Your bank details stay '
-                 'with you.'),
+    'team': 'Who cleans for you? Start with yourself if you still clean.',
+    'payments': ('Last step: connect payments, so you’re ready to be paid before '
+                 'your first customer books. It takes a few minutes and your bank '
+                 'details stay with you. No bank details to hand? Skip it for '
+                 'tonight and it will be first on your list tomorrow.'),
     'booking_page': 'Want to put your booking page where customers can find it?',
-    'team': 'Add a cleaner? Yourself counts, if you’re still cleaning.',
     'client': 'Add a customer you already clean for?',
     'job': 'Book a job and send it to a cleaner — that’s the whole loop.',
 }
@@ -226,11 +226,9 @@ def next_message(done_line=''):
         # The business prompt reads differently with boxes already filled in
         # than with blank ones to complete.
         text = text(any(c.get('prefilled') for c in cards))
-    # The payments step is the seam right after the four required ones. Its own
-    # wording already says "that's the essentials done", so a generic "That step
-    # is done." in front of it is both redundant and quietly wrong -- the owner
-    # did not just finish an optional step, they finished setup. Drop the prefix
-    # here only; later optional steps (booking page, team...) still get it.
+    # The payments step is the last of the four required ones, and its own
+    # wording opens with "Last step", so a generic "That step is done." in
+    # front of it is the same news twice. Drop the prefix here only.
     if step.get('key') == 'payments':
         done_line = ''
     # A choice card asks its own question, in the card. Saying it again in a
@@ -242,7 +240,8 @@ def next_message(done_line=''):
         cards.append(_link_card(*link))
     # "Step 2 of 4": counted over the REQUIRED steps only, the same four the
     # progress meter counts, so the card and the meter never disagree. The
-    # optional extras that come after (payments, booking page, team...) get no
+    # go-live checks and extras that come after (terms, balance, booking
+    # page...) get no
     # number -- they are not step five of four, they are what's left to do once
     # setup is already finished.
     try:
@@ -253,7 +252,7 @@ def next_message(done_line=''):
                    if s['key'] == step['key']), None)
         if no:
             for c in cards:
-                if c.get('kind') in ('form', 'confirm', 'choice'):
+                if c.get('kind') in ('form', 'confirm', 'choice', 'team'):
                     c['step_no'], c['step_total'] = no, total
     except Exception:
         pass
@@ -265,6 +264,7 @@ def next_message(done_line=''):
 # the model answers, or a page the owner has to go to.
 _STEP_CARDS = {
     'business': lambda: prefilled_business_card(),
+    'team': lambda: team_card(),
     'pricing': lambda: price_card(),
     'terms': lambda: terms_card(),
     'balance': lambda: balance_cards(),
@@ -504,6 +504,276 @@ def price_card():
                       lines=lines)
     card['prefilled'] = True
     return lines, card
+
+
+def _owner_name():
+    from flask import session
+    from models import User
+    uid = session.get('user_id')
+    u = User.query.get(uid) if uid else None
+    return ((u.name if u else '') or session.get('user_name') or '').strip()
+
+
+def team_card():
+    """Step 2: the owner, already filled in, and room for anyone she has.
+
+    One card, not one per cleaner. The owner's own row arrives filled in from
+    her login and the details she just saved, with "I clean jobs myself"
+    ticked -- a solo owner taps Save and is done. Unticked, the same card is
+    a company adding the team it already has, typed or uploaded. Nothing
+    here emails anybody: inviting is done from each cleaner's page on the
+    Team tab, when the owner has told them (decided 2026-10-24 -- an invite
+    card in the middle of setup read as out of place).
+    """
+    me = {'name': _owner_name(), 'phone': _setting('phone'),
+          'email': _setting('email'), 'cleans': True}
+    card = {'kind': 'team', 'step': 'team', 'title': 'Your team',
+            'note': 'Add everyone who cleans for you — type them in, or upload '
+                    'a spreadsheet. Nobody is emailed.',
+            'me': me, 'label': 'Save my team'}
+    card['prefilled'] = bool(me['name'])
+    return [card]
+
+
+_EMAIL_IN = re.compile(r'[^\s,;<>]+@[^\s,;<>]+\.[^\s,;<>]+')
+
+
+def _parse_team_paste(text):
+    """Rows out of a pasted list: one person per line, in any order of name,
+    email and phone, split by commas, tabs or semicolons. Whatever is not an
+    email or a phone number is the name."""
+    rows = []
+    for line in (text or '').splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        email = ''
+        m = _EMAIL_IN.search(line)
+        if m:
+            email = m.group(0)
+            line = line.replace(email, ' ')
+        name_bits, phone = [], ''
+        for part in re.split(r'[,\t;]', line):
+            part = part.strip()
+            if not part:
+                continue
+            if not phone and _phone_ok(part) and not re.search(r'[A-Za-z]', part):
+                phone = part
+            else:
+                name_bits.append(part)
+        rows.append({'name': ' '.join(name_bits), 'email': email, 'phone': phone})
+    return rows
+
+
+# Column headings people actually use, lowercased with the spaces taken out.
+_TEAM_COLUMNS = {
+    'name': ('name', 'fullname', 'cleaner', 'cleanername', 'employee',
+             'employeename', 'teammember', 'staff', 'contractor'),
+    'first': ('first', 'firstname', 'givenname'),
+    'last': ('last', 'lastname', 'surname', 'familyname'),
+    'email': ('email', 'e-mail', 'emailaddress', 'mail'),
+    'phone': ('phone', 'cell', 'mobile', 'phonenumber', 'cellphone', 'cellnumber',
+              'mobilenumber', 'tel', 'telephone'),
+    'pay': ('pay', 'payrate', 'rate', 'wage', 'hourlyrate', 'hourlypay', 'payperhour',
+            'percent', 'commission', 'split', 'pay%', 'percentofjob'),
+}
+TEAM_FILE_MAX_ROWS = 50
+
+
+def read_team_file(filename, data):
+    """Cleaners out of an uploaded CSV or Excel file. (rows, error).
+
+    Saves nothing: the rows go back onto the team card for the owner to see,
+    and the card's Save checks them like any typed row. With a heading row
+    the columns are matched by name (Name, or First + Last; Email; Phone,
+    Cell or Mobile). Without one, each row is read the way a pasted line is.
+    """
+    import csv
+    import io
+    name = (filename or '').lower()
+    if len(data or b'') > 2_000_000:
+        return None, 'That file is too big. Keep it under 2 MB.'
+    if name.endswith('.xls'):
+        return None, ('That is an old Excel file. Open it and save it as .xlsx '
+                      'or CSV, then upload it again.')
+    table = []
+    try:
+        if name.endswith(('.xlsx', '.xlsm')):
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+            for row in wb.worksheets[0].iter_rows(values_only=True):
+                table.append(['' if v is None else str(v).strip() for v in row])
+                if len(table) > 1000:
+                    break
+        elif name.endswith(('.csv', '.txt')):
+            text = data.decode('utf-8-sig', errors='replace')
+            table = [[c.strip() for c in r] for r in csv.reader(io.StringIO(text))][:1001]
+        else:
+            return None, 'Upload an Excel (.xlsx) or CSV file.'
+    except Exception:
+        return None, ('That file could not be read. Save it as .xlsx or CSV and '
+                      'try again.')
+    table = [r for r in table if any(r)]
+    if not table:
+        return None, 'That file is empty.'
+    head = [re.sub(r'[\s_]+', '', c.lower()) for c in table[0]]
+    cols = {}
+    for key, names in _TEAM_COLUMNS.items():
+        for i, h in enumerate(head):
+            if h in names and key not in cols:
+                cols[key] = i
+    rows = []
+    if 'email' in cols or 'name' in cols or 'first' in cols:
+        def cell(r, k):
+            i = cols.get(k)
+            return r[i].strip() if i is not None and i < len(r) else ''
+        for r in table[1:]:
+            nm = cell(r, 'name') or ' '.join(x for x in (cell(r, 'first'), cell(r, 'last')) if x)
+            row = {'name': nm, 'email': cell(r, 'email'), 'phone': cell(r, 'phone')}
+            if any(row.values()):
+                # Pay comes over only when the sheet says it plainly: a "%"
+                # or a percent-style heading is a share of the job, a "$" or
+                # an hourly heading is hourly. Anything else is left for the
+                # owner to fill in, never guessed.
+                raw = cell(r, 'pay')
+                h = head[cols['pay']] if 'pay' in cols else ''
+                row['pay_rate'] = re.sub(r'[^\d.]', '', raw)
+                row['pay_type'] = ('percent' if '%' in raw or h in ('percent', 'commission', 'split', 'pay%', 'percentofjob')
+                                   else 'hourly' if '$' in raw or 'hour' in h or h == 'wage'
+                                   else '')
+                if not row['pay_type'] or not row['pay_rate']:
+                    row['pay_type'], row['pay_rate'] = '', ''
+                rows.append(row)
+    else:
+        rows = _parse_team_paste('\n'.join(', '.join(c for c in r if c) for r in table))
+    if not rows:
+        return None, 'No cleaners found in that file — it needs a name on each row.'
+    if len(rows) > TEAM_FILE_MAX_ROWS:
+        return None, (f'That file has {len(rows)} people. Upload up to '
+                      f'{TEAM_FILE_MAX_ROWS} here, or use the full importer on '
+                      f'the Team page for more.')
+    return rows, None
+
+
+PAY_TYPES = {'percent': '% of the job', 'hourly': '$ per hour'}
+
+
+def _pay(row):
+    """(pay_type, rate, problem) for one row of the team card.
+
+    Required on every row, the owner's included. A blank box used to become
+    the model's default -- half of every job -- which is somebody else's pay
+    scale, quietly written into payroll. Owners pay differently, so the owner
+    says what it is. 0 is allowed: an owner may not pay herself through here."""
+    kind = (row.get('pay_type') or '').strip().lower()
+    text = str(row.get('pay_rate') or '').strip().replace('%', '').replace('$', '').replace(',', '')
+    who = row.get('name') or 'Someone'
+    if kind not in PAY_TYPES:
+        return None, None, f'{who} needs a pay type (% of the job or $ per hour)'
+    if not text:
+        return None, None, f'{who} needs a pay rate'
+    try:
+        rate = round(float(text), 2)
+    except ValueError:
+        return None, None, f'{who}’s pay "{text}" is not a number'
+    cap = 100 if kind == 'percent' else 500
+    if not 0 <= rate <= cap:
+        return None, None, (f'{who}’s pay looks off — use 0 to 100 for % of the job'
+                            if kind == 'percent' else
+                            f'{who}’s pay looks off — use $0 to $500 an hour')
+    return kind, rate, ''
+
+
+def _team_rows(fields):
+    """The people on a submitted team card, owner first. (rows, problems).
+
+    Every row is checked before any is written, so a card with one bad email
+    saves nobody rather than half a team -- fixing the one box and pressing
+    Save again must not then trip over the people the first press added."""
+    from blueprints.staff import _name_taken
+    rows, problems = [], []
+    if str(fields.get('me_cleans') or '') in ('1', 'true', 'on', 'yes'):
+        rows.append({'name': _clean(fields.get('me_name')),
+                     'phone': _clean(fields.get('me_phone')),
+                     'email': _clean(fields.get('me_email')).lower(), 'me': True,
+                     'pay_type': _clean(fields.get('me_pay_type'), 20),
+                     'pay_rate': _clean(fields.get('me_pay_rate'), 20)})
+    others = fields.get('others')
+    for o in (others if isinstance(others, list) else [])[:50]:
+        if isinstance(o, dict):
+            rows.append({'name': _clean(o.get('name')), 'phone': _clean(o.get('phone')),
+                         'email': _clean(o.get('email')).lower(),
+                         'pay_type': _clean(o.get('pay_type'), 20),
+                         'pay_rate': _clean(o.get('pay_rate'), 20)})
+    for o in _parse_team_paste(str(fields.get('paste') or '')[:5000]):
+        rows.append({'name': _clean(o['name']), 'phone': _clean(o['phone']),
+                     'email': _clean(o['email']).lower(),
+                     'pay_type': _clean(fields.get('paste_pay_type'), 20),
+                     'pay_rate': _clean(fields.get('paste_pay_rate'), 20)})
+    # A row with nothing in it is an empty box, not a person.
+    rows = [r for r in rows if r['name'] or r['phone'] or r['email']]
+    seen = set()
+    for r in rows:
+        who = r['name'] or r['email'] or r['phone']
+        if not r['name']:
+            problems.append(f'{who} needs a name')
+            continue
+        long = _too_long(r, STAFF_LIMITS)
+        if long:
+            problems.append(f'{r["name"]}: ' + long.replace('Not offered: ', ''))
+        if r['phone'] and not _phone_ok(r['phone']):
+            problems.append(f'{r["name"]}’s phone "{r["phone"]}" is not a full number')
+        if r['email'] and not _email_ok(r['email']):
+            problems.append(f'{r["name"]}’s email "{r["email"]}" is not complete')
+        r['pay_type'], r['pay_rate'], pay_problem = _pay(r)
+        if pay_problem:
+            problems.append(pay_problem)
+        # Names must be distinct: a solo job pays the cleaner it names, and
+        # two Marias share one pay history (blueprints/staff._name_taken).
+        key = r['name'].lower()
+        if key in seen:
+            problems.append(f'{r["name"]} is on the list twice — add a surname or initial')
+        elif _name_taken(r['name']):
+            problems.append(f'you already have a team member called {r["name"]}')
+        seen.add(key)
+    return rows, problems
+
+
+def save_team(fields):
+    """Write the team card: every row, or none of them."""
+    import entitlements
+    from flask import session
+    from extensions import db
+    from models import Staff, User
+    rows, problems = _team_rows(fields or {})
+    if problems:
+        return False, 'Please check: ' + '; '.join(problems) + '.'
+    if not rows:
+        return False, ('Add at least one cleaner, or tick “I clean jobs myself” '
+                       'if it’s you for now.')
+    left = entitlements.remaining('field_workers')
+    if left is not None and len(rows) > left:
+        _ok, why = entitlements.check_limit('field_workers')
+        room = f'{left} more cleaner{"" if left == 1 else "s"}'
+        return False, (why or f'Your plan has room for {room}.') + (
+            f' This card has {len(rows)}.')
+    added = []
+    for r in rows:
+        s = Staff(name=r['name'], phone=r['phone'], email=r['email'], is_active=True,
+                  pay_type=r['pay_type'], pay_rate=r['pay_rate'])
+        if r.get('me'):
+            # Her own login, linked from the start, so she never gets a
+            # "join the team" email from her own business.
+            uid = session.get('user_id')
+            if uid and User.query.get(uid) and not Staff.query.filter_by(user_id=uid).first():
+                s.user_id = uid
+        db.session.add(s)
+        added.append(r['name'] + (' (you)' if r.get('me') else ''))
+    db.session.commit()
+    said = f'Your team: {", ".join(added)}.'
+    if any(not r.get('me') for r in rows):
+        said += ' Nobody was emailed — invite them from the Team tab when you’re ready.'
+    return True, said
 
 
 def terms_card():
@@ -807,11 +1077,16 @@ def system_prompt(opening):
         'three short sentences, then one question. They may be on a phone.\n\n'
 
         'THE SETUP STEPS, IN ORDER\n'
-        'business (contact details customers see), pricing (one price for a '
-        '2 bed / 2 bath standard clean sets the whole list), booking_page '
-        '(share the self-booking link), team (add a cleaner, or themselves), '
-        'client (add one real customer), job (book and assign a job). After '
-        'that, payments are connected on the Connections page by the owner.\n'
+        'Required, in this order: business (contact details customers see), '
+        'team (the owner herself if she cleans, plus anyone who already cleans '
+        'for her; the card on screen takes them all at once), pricing (one '
+        'price for a 2 bed / 2 bath standard clean sets the whole list), '
+        'payments (the owner connects Stripe herself on the Connections page, '
+        'so she is ready to be paid before her first booking). Then, before '
+        'going live: terms (accept the customer terms), balance (charge the '
+        'rest automatically or not). Then optional: booking_page (share the '
+        'self-booking link), client (add one real customer), job (book and '
+        'assign a job).\n'
         'Work on the next unfinished step unless they ask about something else. '
         'Ask for one step at a time. If they want to skip, move on.\n\n'
 
@@ -1081,6 +1356,8 @@ def save_form(step, fields):
         if not payload:
             return False, 'Add at least one detail before saving.'
         return save_business(payload)
+    if step == 'team':
+        return save_team(fields)
     if step == 'pricing':
         try:
             anchor = float(re.sub(r'[^\d.]', '', str(fields.get('two_bed_two_bath'))) or 0)

@@ -54,6 +54,43 @@ def transcript(catch_up=True):
     return chat
 
 
+def for_display(chat):
+    """The conversation as the page shows it: finished steps as one ✓ line.
+
+    The stored chat keeps everything, because Nana needs it as context. But
+    replaying it card for card put every step the owner had already done back
+    on screen, editable, as if it were still waiting -- and when the current
+    step had been asked twice, its card showed twice. On screen:
+
+    - a step that is done is a single ✓ line, once, with no card;
+    - the step being asked about keeps its card on its latest ask only;
+    - Nana's free-text answers stay, but only the newest ones keep cards.
+    """
+    import onboarding
+    steps = onboarding.progress()['steps']
+    done = {s['key']: s['title'] for s in steps if s['done']}
+    nxt = setup_assistant._next_step()
+    current = nxt['key'] if nxt else 'done'
+    last = max((i for i, m in enumerate(chat)
+                if m.get('role') == 'assistant' and m.get('step') == current),
+               default=-1)
+    out, ticked = [], set()
+    for i, m in enumerate(chat):
+        if m.get('hidden'):
+            continue
+        step = m.get('step') if m.get('role') == 'assistant' else None
+        if step and step in done:
+            if step not in ticked:
+                ticked.add(step)
+                out.append({'role': 'assistant', 'tick': f'✓ {done[step]}'})
+            continue
+        if step == current and i != last:
+            continue
+        keep_cards = i >= last
+        out.append(dict(m, cards=(m.get('cards') or []) if keep_cards else []))
+    return out
+
+
 def _was_finished(step_key):
     import onboarding
     for s in onboarding.progress()['steps']:
@@ -86,9 +123,13 @@ def ask():
 def confirm():
     data = request.get_json(silent=True) or {}
     token = (data.get('token') or request.form.get('token') or '').strip()
+    # The chat as it stood BEFORE the press. Read after it, a chat the owner
+    # has not typed into yet is rebuilt from scratch -- an opening line about
+    # the step that is now next -- and the next question was then added under
+    # it: the same card twice.
+    chat = transcript(catch_up=False)
     ok, said = setup_assistant.confirm(token)
     follow = ''
-    chat = transcript(catch_up=False)
     # The card remembers what happened to it, so after a reload it shows the
     # outcome instead of a button that would only say it is already done.
     for m in chat:
@@ -130,10 +171,10 @@ def save():
     if step not in {s['key'] for s in onboarding.progress()['steps']}:
         return jsonify({'ok': False, 'say': 'That step is not on your list.',
                         'cards': []})
+    chat = transcript(catch_up=False)   # before the save; see confirm()
     ok, said = setup_assistant.save_form(step, fields)
     follow, cards = '', []
     if ok:
-        chat = transcript(catch_up=False)
         follow, cards, key = setup_assistant.next_message()
         chat = chat + [
             {'role': 'user', 'content': f'(I saved my {step} details.)', 'hidden': True},
@@ -156,14 +197,36 @@ def skip():
     import onboarding
     if step not in {s['key'] for s in onboarding.progress()['steps']}:
         return jsonify({'ok': False, 'say': '', 'cards': []})
+    chat = transcript(catch_up=False)   # before the skip; see confirm()
     setup_assistant.skip(step)
     text, cards, key = setup_assistant.next_message('No problem, we can come back to that.')
-    chat = transcript(catch_up=False) + [
+    chat = chat + [
         {'role': 'user', 'content': f'(I skipped the {step} step for now.)', 'hidden': True},
         {'role': 'assistant', 'content': text, 'cards': cards, 'step': key},
     ]
     setup_assistant.save_chat(chat)
     return jsonify({'ok': True, 'say': text, 'cards': cards})
+
+
+@setup_assistant_bp.route('/team-file', methods=['POST'])
+@login_required
+@owner_required
+def team_file():
+    """Read a spreadsheet of cleaners into the team card. Saves nothing.
+
+    The rows come back to the card as boxes the owner can see and correct;
+    the card's own Save is still the only thing that writes, with the same
+    checks as rows typed by hand."""
+    f = request.files.get('file')
+    if not f or not f.filename:
+        return jsonify({'ok': False, 'say': 'Choose a file first.', 'rows': []})
+    rows, err = setup_assistant.read_team_file(f.filename, f.read(2_000_001))
+    if err:
+        return jsonify({'ok': False, 'say': err, 'rows': []})
+    n = len(rows)
+    return jsonify({'ok': True, 'rows': rows,
+                    'say': f'Found {n} cleaner{"" if n == 1 else "s"}. Check them, '
+                           f'then press Save my team.'})
 
 
 @setup_assistant_bp.route('/reset', methods=['POST'])

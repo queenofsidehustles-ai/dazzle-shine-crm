@@ -109,18 +109,21 @@ def getting_started():
     p = onboarding.progress()
     # The setup chat, for the owner, when a Claude API key is set. Without one
     # (or in the demo) the page is exactly the list it always was.
-    chat, chat_step = None, None
+    chat, chat_step, started = None, None, False
     import setup_assistant
     if session.get('role') == 'owner' and setup_assistant.configured():
-        from blueprints.setup_assistant_routes import transcript
-        chat = transcript()
+        from blueprints.setup_assistant_routes import transcript, for_display
+        stored = transcript()
+        # Counted on the stored chat: the display drops the hidden "(I saved
+        # ...)" turns, and without them every visit looks like the first.
+        started = any(m.get('role') == 'user' for m in stored)
+        chat = for_display(stored)
         # The step Nana is on, so the list does not offer it a second time.
         nxt = setup_assistant._next_step()
         chat_step = nxt['key'] if nxt else None
     # Opened as a focused window the first time, or when a pop-up sent them
     # here to use it. After that it sits on the page with the list.
-    focus = bool(chat) and (request.args.get('focus') == '1'
-                            or not any(m.get('role') == 'user' for m in chat))
+    focus = bool(chat) and (request.args.get('focus') == '1' or not started)
     return render_template('admin/getting_started.html', p=p, chat=chat,
                            chat_focus=focus, chat_step=chat_step,
                            assistant_name=setup_assistant.NAME)
