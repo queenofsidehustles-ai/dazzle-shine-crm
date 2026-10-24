@@ -62,8 +62,7 @@ test.describe.serial('Booking → assign cleaner → notify (email + text)', () 
     test.skip(!ADMIN_PASS, 'Set ADMIN_PASS to run the assign + notify flow.');
     await login(page);
     await page.goto(CRM + '/bookings/' + shared.bookingId);
-    // "Next: who's cleaning this one?" points at the one picker, in Who's doing it.
-    await page.click('#nextCleaner a');
+    // Who's doing it is the first card, and is the assign form until someone is on the job.
     await page.selectOption('#assignTo', { label: CLEANER });
     await Promise.all([page.waitForLoadState('networkidle'), page.click('button:has-text("Assign & send")')]);
     // The flash confirms the work order (+ text if phone) went out

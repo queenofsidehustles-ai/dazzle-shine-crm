@@ -252,6 +252,11 @@ def create(out_dir=DEFAULT_DIR, database_url=None, quiet=False):
                               for s in schemas if s != PUBLIC},
             'source': _safe_url(url),
             'release': _release(),
+            # Which migration each schema was on. A restore builds today's
+            # tables and skips the migrations, so a data change one of them
+            # makes (0036's $43 cleaner rate) is applied by the restore to the
+            # schemas a backup shows were taken before it. See restore().
+            'revisions': {s: _revision(engine, s) for s in schemas},
         }) + '\n')
         evidence = {}
         with engine.connect() as conn:
@@ -544,6 +549,56 @@ def _sanity_check(manifest, previous=None):
     return out
 
 
+def _revision(engine, schema):
+    """The migration a schema is on, or None if it has no record."""
+    from sqlalchemy import text
+    table = 'alembic_version' if schema == PUBLIC else f'"{schema}".alembic_version'
+    try:
+        with engine.connect() as conn:
+            return conn.execute(text(f'SELECT version_num FROM {table}')).scalar()
+    except Exception:
+        return None
+
+
+def _reached(revision, target):
+    """Whether a schema at `revision` had already run migration `target`.
+    No revision (a backup from before backups recorded one) has not; a
+    revision this code does not know is newer than it, so it has."""
+    if not revision:
+        return False
+    import migrate
+    from alembic.script import ScriptDirectory
+    try:
+        return target in {r.revision for r in ScriptDirectory.from_config(
+            migrate._config()).iterate_revisions(revision, 'base')}
+    except Exception:
+        return True
+
+
+def _keep_old_cleaner_rate(db, url, header, schemas, quiet=False):
+    """Apply migration 0036's rule to each restored schema the backup was
+    taken before it: a company in use that never saved a cleaner rate keeps
+    the $43 it was paying, rather than dropping to the new $25 default."""
+    import pricing
+    from sqlalchemy import text
+    revisions = header.get('revisions') or {}
+    for schema in schemas:
+        if _reached(revisions.get(schema), pricing.KEEP_OLD_RATE_REVISION):
+            continue
+        try:
+            with db.engine.begin() as conn:
+                if url.startswith('postgres'):
+                    conn.execute(text(f'SET LOCAL search_path TO "{schema}"'))
+                if pricing.keep_old_rate(conn) and not quiet:
+                    print(f'  ✅ {schema}: kept the ${pricing.OLD_LABOR_RATE_DEFAULT} cleaner rate '
+                          'it was paying when this backup was taken')
+        except Exception as e:
+            # A schema without these tables (the control plane) has no rate.
+            if 'pricing_setting' in str(e) or 'user' in str(e) or 'booking' in str(e):
+                continue
+            print(f'  ⚠️  {schema}: could not check its cleaner rate: {e}')
+
+
 def _release():
     try:
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -667,6 +722,7 @@ def restore(path, into_url, quiet=False):
             flush()
         for schema, tables in order.items():
             _fix_sequences(db, conn_url=url, tables=tables, schema=schema)
+        _keep_old_cleaner_rate(db, url, header, list(order), quiet=quiet)
         _stamp_schema()
     if not quiet:
         print(f'  ✅ restored {sum(counts.values()):,} rows'

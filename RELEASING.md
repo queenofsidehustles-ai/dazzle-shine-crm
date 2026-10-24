@@ -41,7 +41,39 @@ checked commit, each required check with the run it passed in, the migration
 head every company moves to, the changes, and the rollback command; `--go`
 prints the same at the end.
 
-`--rollback` starts from the release `akye-stable` is on and goes back one,
+### Releasing from the console
+
+The console's **Release** page (`/console/release`) shows what `main` has that
+`akye-stable` lacks: commits, changed files, lines, the four required checks on
+that exact commit, and anything that touches migrations, dependencies, deploy
+machinery, sign-in or money. The console owner releases with a reason, the
+short commit id typed back, and their password and code.
+
+The button does not push code. It starts the **Release Akye** workflow
+(`.github/workflows/release.yml`), which runs `release.py --akye --go --expect
+<commit>` on GitHub: same checks, same suites, same tag. `--expect` makes it
+release only the commit the page showed; if `main` moved, nothing is released.
+It takes about half an hour.
+
+Set up once:
+
+- Railway variable `GITHUB_REPO`: `owner/name` of this repository.
+- Railway variable `GITHUB_RELEASE_TOKEN`: a fine-grained token on this
+  repository only, with Contents: read and Actions: read and
+  write. It cannot push.
+- Optional GitHub secret `RELEASE_PUSH_TOKEN`: a token that can push to `main`
+  and `akye-stable`. Without it the workflow pushes as `GITHUB_TOKEN`, which
+  works but does not start the checks that normally run on a push to `main`.
+  If `main` is protected, this token's owner must be allowed to push to it.
+
+**Roll back** on the same page runs the **Roll back Akye** workflow
+(`rollback.yml`): `akye-stable` goes back to the release before the one it is
+on, with no tests, in a minute or two. It moves the branch backwards, so
+`RELEASE_PUSH_TOKEN` is required for it, and its owner must be allowed to
+force-push `akye-stable`; with the default token the push is refused and
+nothing changes. `release.py --akye --rollback` from a checkout still works.
+
+`--rollback` (or the console's Roll back button) starts from the release `akye-stable` is on and goes back one,
 so running it twice goes back two.
 
 Everything that touches production runs the release, not `main`: Railway,

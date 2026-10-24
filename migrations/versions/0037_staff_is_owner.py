@@ -9,8 +9,8 @@ NULL, which means false.
 from alembic import op
 import sqlalchemy as sa
 
-revision = '0036_staff_is_owner'
-down_revision = '0035_commercial_jobs'
+revision = '0037_staff_is_owner'
+down_revision = '0036_keep_cleaner_rate'
 branch_labels = None
 depends_on = None
 

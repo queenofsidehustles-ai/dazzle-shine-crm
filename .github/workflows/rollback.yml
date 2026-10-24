@@ -1,0 +1,50 @@
+name: Roll back Akye
+
+# What `python3 release.py --akye --rollback` does by hand, started from the
+# console's Release page: akye-stable goes back to the release before the one
+# it is on. Only code changes; no company's data is touched. Nothing is tested
+# first, because the point is speed and the target already shipped.
+#
+# `to_tag` must be the release the page showed. If akye-stable has moved since,
+# the release before it is a different one and nothing happens.
+#
+# akye-stable is moved backwards, so the push needs a token allowed to force-push
+# it: set the RELEASE_PUSH_TOKEN secret and let its owner bypass the branch rule.
+
+on:
+  workflow_dispatch:
+    inputs:
+      to_tag:
+        description: The release to put every company back on
+        required: true
+
+concurrency:
+  group: akye-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  rollback:
+    name: Roll back akye-stable
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TO_TAG: ${{ inputs.to_tag }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PUSH_TOKEN || github.token }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Identify the committer
+        run: |
+          git config user.name "Akye release"
+          git config user.email "release@akyehq.com"
+      - name: Roll back
+        run: python release.py --akye --rollback --confirm-tag "$TO_TAG"

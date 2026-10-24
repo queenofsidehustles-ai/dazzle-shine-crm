@@ -50,7 +50,7 @@ with app.app_context():
     check('Confirmed Date' not in html and 'Requested Date' not in html,
           'and no two labels for the same date')
     check('Save Changes' not in html, 'the catch-all "Save Changes" form is gone')
-    money = html[html.index('data-card-key="money"'):html.index('data-card-key="who"')]
+    money = html[html.index('data-card-key="money"'):html.index('data-card-key="talk"')]
     check('name="status"' not in money and 'access_notes' not in money,
           'the money card holds no status or notes')
     check(money.index('Customer pays') < money.index('id="numbersBox"'),
@@ -86,8 +86,8 @@ with app.app_context():
     c.post(f'/bookings/{b.id}', data={'assigned_cleaner': ''})
     b = Booking.query.get(b.id)
     check(not b.assigned_cleaner and b.price == 260, 'taking it off clears the name and nothing else')
-    check('id="nextCleaner"' in c.get(f'/bookings/{b.id}').get_data(as_text=True),
-          'and the page asks who is cleaning it instead')
+    check('Nobody yet' in c.get(f'/bookings/{b.id}').get_data(as_text=True),
+          'and the page says nobody is on it')
 
     print('\n5. A phone booking\'s private note is private on the booking page')
     c.post('/bookings/new', data={'name': 'Phone Note', 'phone': '4075550111',

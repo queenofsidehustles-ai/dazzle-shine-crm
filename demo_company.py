@@ -85,7 +85,7 @@ BIZ_TZ = COMPANY['timezone']
 
 # name, email, phone digits, level, language, color, months on the team.
 # Everybody is paid the way Akye actually pays: the labor rate (pricing.
-# get_labor_rate, $43) per person-hour a job is priced at. A per-cleaner
+# get_labor_rate, $25 for a new company) per person-hour a job is priced at. A per-cleaner
 # percentage here would put "48% of job" beside earnings that are not 48%.
 TEAM = [
     ('Maria Lopez',     'maria.lopez',     '5125550140', 'senior', 'es', '#2F7D6D', 9),
