@@ -221,8 +221,12 @@ def texting_ready():
 
 
 def voice_ready():
-    return all((twilio_account_sid(), twilio_phone(), twilio_api_key_sid(),
-                twilio_api_key_secret(), twilio_twiml_app_sid()))
+    # The auth token is not used to connect the browser, but Twilio's four
+    # reports are signature-checked with it (security.validate_twilio_webhook),
+    # so without it every call would be refused after the Call button said ready.
+    return all((twilio_account_sid(), twilio_auth_token(), twilio_phone(),
+                twilio_api_key_sid(), twilio_api_key_secret(),
+                twilio_twiml_app_sid()))
 
 
 def email_ready():
@@ -251,7 +255,8 @@ def missing_for(area):
     groups = {
         'stripe': ['stripe_secret_key', 'stripe_publishable_key'],
         'texting': ['twilio_account_sid', 'twilio_auth_token', 'twilio_phone'],
-        'voice': ['twilio_account_sid', 'twilio_phone', 'twilio_api_key_sid',
+        'voice': ['twilio_account_sid', 'twilio_auth_token', 'twilio_phone',
+                  'twilio_api_key_sid',
                   'twilio_api_key_secret', 'twilio_twiml_app_sid'],
         'email': ['resend_api_key'],
         'photos': ['cloudinary_cloud_name', 'cloudinary_api_key', 'cloudinary_api_secret'],

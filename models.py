@@ -1999,7 +1999,7 @@ class CallLog(db.Model):
     afterwards (voice.py): how it ended, how long it ran, and the recording.
     """
     id = db.Column(db.Integer, primary_key=True)
-    prospect_id = db.Column(db.Integer, db.ForeignKey('prospect.id'), index=True)
+    prospect_id = db.Column(db.Integer, db.ForeignKey('prospect.id', ondelete='SET NULL'), index=True)
     user_id = db.Column(db.Integer)
     agent = db.Column(db.String(100))
     to_number = db.Column(db.String(40))

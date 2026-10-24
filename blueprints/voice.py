@@ -13,7 +13,7 @@ from flask import (Blueprint, Response, abort, jsonify, request, session,
                    url_for)
 
 import voice
-from auth import login_required
+from auth import login_required, owner_required
 from entitlements import requires_plan
 from extensions import db
 from models import CallLog, Prospect
@@ -114,10 +114,45 @@ def outbound():
         return _xml(voice.hangup_twiml())
     with _in_company(data):
         call = CallLog.query.get(data['c'])
-        if call and not call.call_sid:
-            call.call_sid = (request.form.get('CallSid') or '')[:64] or None
-            db.session.commit()
+        if not call:
+            return _xml(voice.hangup_twiml())
+        # Single use: a ticket rings once. The claim is one conditional UPDATE,
+        # so two requests with the same ticket cannot both win it, and a
+        # replay cannot ring again or slip past the monthly count (it is one
+        # CallLog row) or a "don't call again" set since.
+        if _stale_since_start(call):
+            return _xml(voice.hangup_twiml())
+        claimed = (CallLog.query
+                   .filter(CallLog.id == call.id, CallLog.call_sid.is_(None))
+                   .update({'call_sid': (request.form.get('CallSid') or '')[:64]
+                            or 'pending'}))
+        db.session.commit()
+        if claimed != 1:
+            return _xml(voice.hangup_twiml())
     return _xml(voice.outbound_twiml(data, ticket, _urls(ticket)))
+
+
+def _stale_since_start(call):
+    """True if the prospect can no longer be called: marked "don't call
+    again", or the hours closed, in the minutes since Call was pressed."""
+    p = Prospect.query.get(call.prospect_id) if call.prospect_id else None
+    if p is None or p.status == 'do_not_contact':
+        return True
+    return bool(voice.calling_hours_block() or voice.local_hours_block(call.to_number))
+
+
+@voice_bp.route('/find-leads/call/recording-setting', methods=['POST'])
+@owner_required
+def recording_setting():
+    """The owner's switch for recording calls. Off means no recording and no
+    notice; on is the default."""
+    from flask import flash, redirect
+    from models import BusinessSetting
+    on = request.form.get('recording') == '1'
+    BusinessSetting.set('call_recording', '1' if on else '0')
+    flash('Calls will be recorded, and the person who answers is told.' if on
+          else 'Calls will not be recorded.', 'success')
+    return redirect(url_for('places_finder.call_sheet'))
 
 
 @voice_bp.route('/voice/notice', methods=['POST'])

@@ -11,7 +11,8 @@ Four things are decided on the server, none of them by the page:
     signed ticket. The browser never sends a number, so this cannot be turned
     into a dialer for anywhere else.
   * WHEN. 11am-9pm Eastern, which keeps every continental US time zone inside
-    8am-9pm. Not for the caller's convenience: for the person picking up.
+    8am-9pm, and 8am-9pm local for Alaska and Hawaii numbers. Not for the
+    caller's convenience: for the person picking up.
   * WHETHER. Not for anyone marked "don't call again", not while the Calling
     switch in the console is off, and not past MONTHLY_CALLS a company a month.
   * RECORDING. On unless the company turned it off, and when it is on the
@@ -30,6 +31,7 @@ import lead_outreach
 MONTHLY_CALLS = int(os.environ.get('VOICE_MONTHLY_CALLS') or 1000)
 TICKET_SALT = 'voice-call-ticket'
 TICKET_MAX_AGE = 600           # seconds from pressing Call to Twilio asking
+CALLBACK_MAX_AGE = 24 * 3600   # Twilio's later reports: a long call, a delayed or retried recording
 TOKEN_TTL = 600
 RING_SECONDS = 30
 NOTICE = 'This call may be recorded for quality and training purposes.'
@@ -55,7 +57,7 @@ def read_ticket(ticket):
     if not ticket:
         return None
     try:
-        data = _serializer().loads(ticket, max_age=TICKET_MAX_AGE * 6)
+        data = _serializer().loads(ticket, max_age=CALLBACK_MAX_AGE)
     except BadData:
         return None
     return data if isinstance(data, dict) and 'c' in data and 'to' in data else None
@@ -91,8 +93,30 @@ def calling_hours_block(now_utc=None):
     eastern = now.astimezone(ZoneInfo('America/New_York'))
     if 11 <= eastern.hour < 21:
         return None
-    return ('calls only go out 11am-9pm Eastern (8am-9pm in every US time '
-            f'zone); it is {eastern.strftime("%-I:%M %p")} Eastern now')
+    return ('calls only go out 11am-9pm Eastern (8am-9pm in every continental '
+            f'US time zone); it is {eastern.strftime("%-I:%M %p")} Eastern now')
+
+
+# Alaska and Hawaii are the two places the Eastern window does not keep inside
+# 8am-9pm: 11am Eastern is 7am in Anchorage and 5-6am in Honolulu. Their area
+# codes say where the number is, so those calls also wait for local morning.
+_FAR_ZONES = {'907': 'America/Anchorage', '808': 'Pacific/Honolulu'}
+
+
+def local_hours_block(to_number, now_utc=None):
+    """Why a number in Alaska or Hawaii cannot be called now, or None."""
+    from datetime import timezone
+    from zoneinfo import ZoneInfo
+    digits = ''.join(ch for ch in (to_number or '') if ch.isdigit())
+    zone = _FAR_ZONES.get(digits[-10:-7]) if len(digits) >= 10 else None
+    if not zone:
+        return None
+    now = (now_utc or datetime.utcnow()).replace(tzinfo=timezone.utc)
+    local = now.astimezone(ZoneInfo(zone))
+    if 8 <= local.hour < 21:
+        return None
+    return ('calls to Alaska and Hawaii only go out 8am-9pm their time; '
+            f'it is {local.strftime("%-I:%M %p")} there now')
 
 
 def recording_on():
@@ -112,9 +136,10 @@ def refusal(prospect, now_utc=None):
         return 'There is no usable US phone number for this business.'
     if prospect.status == 'do_not_contact':
         return 'This business is marked "don\'t call again".'
-    closed = calling_hours_block(now_utc)
+    closed = calling_hours_block(now_utc) or local_hours_block(
+        lead_outreach.us_number(prospect.phone), now_utc)
     if closed:
-        return closed.capitalize() + '.'
+        return closed[0].upper() + closed[1:] + '.'
     if calls_this_month(now_utc) >= MONTHLY_CALLS:
         return (f'You have used all {MONTHLY_CALLS} calls for this month. '
                 'The count starts again on the 1st.')

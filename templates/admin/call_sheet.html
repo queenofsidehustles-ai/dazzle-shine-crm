@@ -64,6 +64,13 @@
       {% if calling.recording %}Calls are recorded, and the person who answers is told.{% endif %}
       {% endif %}
     </p>
+    {% if is_owner %}
+    <form method="POST" action="{{ url_for('voice.recording_setting') }}" style="margin:6px 0 0">
+      <input type="hidden" name="recording" value="{{ '0' if calling.recording else '1' }}">
+      <button type="submit" class="btn btn-outline" style="font-size:0.8rem;padding:4px 10px">
+        {{ 'Stop recording calls' if calling.recording else 'Record calls' }}</button>
+    </form>
+    {% endif %}
     {% else %}
     <a href="tel:{{ current.phone }}" class="btn btn-gold" style="font-size:1.05rem;padding:12px 26px">
       📞 {{ current.phone }}

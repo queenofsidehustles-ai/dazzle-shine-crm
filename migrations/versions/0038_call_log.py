@@ -4,12 +4,16 @@ One row per call, written when the caller presses Call and filled in from
 Twilio's reports afterwards. It is what the monthly call limit counts, and it
 is where a recording is found again. A new table and nothing else, so a
 company that never calls has an empty one and notices nothing.
+
+The prospect link is ON DELETE SET NULL: removing a business from the call list
+must not be blocked by the calls once made to it. The call stays, for the
+monthly count, and simply no longer points anywhere.
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = '0037_call_log'
-down_revision = '0036_keep_cleaner_rate'
+revision = '0038_call_log'
+down_revision = '0037_staff_is_owner'
 branch_labels = None
 depends_on = None
 
@@ -34,7 +38,7 @@ def upgrade():
     op.create_table(
         'call_log',
         sa.Column('id', sa.Integer, primary_key=True),
-        sa.Column('prospect_id', sa.Integer, sa.ForeignKey('prospect.id')),
+        sa.Column('prospect_id', sa.Integer, sa.ForeignKey('prospect.id', ondelete='SET NULL')),
         sa.Column('user_id', sa.Integer),
         sa.Column('agent', sa.String(100)),
         sa.Column('to_number', sa.String(40)),

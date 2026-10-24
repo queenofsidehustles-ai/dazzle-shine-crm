@@ -122,6 +122,21 @@ with app.app_context():
     r = signed_post(app.test_client(), '/voice/outbound', {'ticket': ticket, 'CallSid': 'CA111'})
     check(r.status_code == 200 and b'+12565550142' in r.data, 'outbound rings the number in the ticket')
     check(CallLog.query.get(call.id).call_sid == 'CA111', 'and remembers the call sid')
+    r = signed_post(app.test_client(), '/voice/outbound', {'ticket': ticket, 'CallSid': 'CA222'})
+    check(r.status_code == 200 and b'<Hangup' in r.data and b'<Dial' not in r.data,
+          'the same ticket cannot ring a second time')
+    check(CallLog.query.get(call.id).call_sid == 'CA111' and CallLog.query.count() == 1,
+          'and it neither changes the call nor adds one')
+    r2 = c.post(f'/find-leads/call/{p.id}/start', headers={'Origin': 'http://localhost'})
+    t2 = (r2.get_json() or {}).get('ticket')
+    p.status = 'do_not_contact'
+    db.session.commit()
+    r = signed_post(app.test_client(), '/voice/outbound', {'ticket': t2, 'CallSid': 'CA333'})
+    check(b'<Hangup' in r.data and b'<Dial' not in r.data,
+          'a prospect marked "don\'t call again" after Call was pressed is not rung')
+    p.status = 'new'
+    CallLog.query.filter(CallLog.id != call.id).delete()
+    db.session.commit()
     r = signed_post(app.test_client(), '/voice/outbound', {'ticket': 'junk', 'To': '+19995550000'})
     check(r.status_code == 200 and b'<Hangup' in r.data and b'9995550000' not in r.data,
           'a forged ticket hangs up and dials nothing, whatever number is posted')
@@ -139,6 +154,39 @@ with app.app_context():
     check(r.status_code == 403, 'a report with a forged ticket is refused')
     page = c.get('/find-leads/call')
     check(page.status_code == 200, 'the call sheet renders with the softphone')
+
+    print('\n5b. The review fixes')
+    old_ready = os.environ.pop('TWILIO_AUTH_TOKEN')
+    import integrations
+    check(not integrations.voice_ready(), 'calling is not ready without the auth token')
+    check(any('auth' in x.lower() for x in integrations.missing_for('voice')), 'and the token is listed as missing')
+    os.environ['TWILIO_AUTH_TOKEN'] = old_ready
+    check(voice.read_ticket(voice.make_ticket('a', 1, '+12565550142', True)) is not None, 'a callback ticket is good for the report')
+    stale = voice._serializer().dumps({'s': '', 'c': 1, 'to': '+1'})
+    check(voice.read_ticket(stale) is not None, 'and a recording callback an hour+ later is still accepted')
+    check(voice.read_fresh_ticket(voice.make_ticket('a', 1, '+1', True)) is not None, 'while a fresh ticket still works to start a call')
+    check(voice.local_hours_block('+19075550100', datetime(2026, 10, 20, 15, 0)) is not None, '7am in Anchorage is too early')
+    check(voice.local_hours_block('+18085550100', datetime(2026, 10, 20, 17, 0)) is not None, '7am in Honolulu is too early')
+    check(voice.local_hours_block('+19075550100', datetime(2026, 10, 20, 21, 0)) is None, '1pm in Anchorage is fine')
+    check(voice.local_hours_block('+12565550142', datetime(2026, 10, 20, 15, 0)) is None, 'other area codes are on the Eastern window')
+    ak = Prospect(business_name='Ak', phone='907-555-0100')
+    db.session.add(ak); db.session.commit()
+    check('alaska' in (voice.refusal(ak, datetime(2026, 10, 20, 15, 0)) or '').lower(), 'an Alaska prospect is refused at 7am their time')
+    cl = CallLog(prospect_id=ak.id, to_number='+19075550100')
+    db.session.add(cl); db.session.commit()
+    r = c.post(f'/find-leads/{ak.id}/delete', headers={'Origin': 'http://localhost'})
+    check(r.status_code in (200, 302) and Prospect.query.get(ak.id) is None, 'a prospect with a call can be removed')
+    check(CallLog.query.get(cl.id) is not None and CallLog.query.get(cl.id).prospect_id is None, 'its call stays, pointing nowhere')
+    check(voice.recording_on(), 'recording is on by default')
+    r = c.post('/find-leads/call/recording-setting', data={'recording': '0'}, headers={'Origin': 'http://localhost'})
+    check(r.status_code == 302 and not voice.recording_on(), 'the owner can turn recording off')
+    staff = app.test_client()
+    with staff.session_transaction() as s:
+        s.update(logged_in=True, role='cleaner', user_name='Sam')
+    staff.post('/find-leads/call/recording-setting', data={'recording': '1'}, headers={'Origin': 'http://localhost'})
+    check(not voice.recording_on(), 'and nobody else can turn it back on')
+    c.post('/find-leads/call/recording-setting', data={'recording': '1'}, headers={'Origin': 'http://localhost'})
+    check(voice.recording_on(), 'the owner can')
 
     print('\n6. The welcome text')
     import control_plane, twilio.rest

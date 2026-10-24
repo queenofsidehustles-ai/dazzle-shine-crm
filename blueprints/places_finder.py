@@ -685,6 +685,7 @@ def call_sheet(prospect_id=None):
         'admin/call_sheet.html',
         current=current,
         calling=calling,
+        is_owner=_is_owner(),
         queue_left=len(queue),
         done_today=done,
         stint_over=stint_over,
@@ -1671,6 +1672,10 @@ def my_numbers():
 @login_required
 def delete(prospect_id):
     p = _lead(prospect_id)
+    # Calls already placed stay (they count toward the month); they just stop
+    # pointing at a business that is gone.
+    from models import CallLog
+    CallLog.query.filter_by(prospect_id=p.id).update({'prospect_id': None})
     db.session.delete(p)
     db.session.commit()
     flash('Removed from call list.', 'success')
