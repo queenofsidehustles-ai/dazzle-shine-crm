@@ -103,7 +103,10 @@ sql('ratenew', 'INSERT INTO "user" (username, password_hash, role, name, active)
 out = tempfile.mkdtemp()
 path, manifest = backup.create(out_dir=out, database_url=os.environ['DATABASE_URL'], quiet=True)
 header = backup.read_manifest(path)
-check(header.get('revisions', {}).get(tenancy.schema_for('ratenew')) == '0036_keep_cleaner_rate',
+from alembic.config import Config as _AlembicConfig
+from alembic.script import ScriptDirectory as _ScriptDirectory
+_head = _ScriptDirectory.from_config(_AlembicConfig('alembic.ini')).get_current_head()
+check(header.get('revisions', {}).get(tenancy.schema_for('ratenew')) == _head,
       'a backup records the migration each company was on')
 scratch_url = fresh_postgres.url('akye_cleaner_rate_restore')
 
