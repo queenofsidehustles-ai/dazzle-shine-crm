@@ -303,7 +303,8 @@ def signup():
 
     if request.method == 'POST':
         form = {k: (request.form.get(k) or '').strip()
-                for k in ('business', 'slug', 'name', 'email', 'phone')}
+                for k in ('business', 'slug', 'name', 'email', 'zip_code',
+                          'browser_tz', 'phone')}
         form['email'] = form['email'].lower()
         password = request.form.get('password') or ''
         slug = form['slug'].lower() or suggest_slug(form['business'])
