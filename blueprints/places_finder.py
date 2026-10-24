@@ -668,9 +668,24 @@ def call_sheet(prospect_id=None):
         except Exception:
             can_email = False
 
+    # The softphone (voice.py). All of it is computed here so the page only
+    # ever shows what the server would also accept.
+    import integrations
+    import voice
+    from models import CallLog
+    calling = {'ready': integrations.voice_ready(), 'block': None,
+               'used': voice.calls_this_month(), 'limit': voice.MONTHLY_CALLS,
+               'recording': voice.recording_on(), 'past': []}
+    if current is not None:
+        calling['block'] = voice.refusal(current) if calling['ready'] else None
+        calling['past'] = (CallLog.query.filter_by(prospect_id=current.id)
+                           .order_by(CallLog.created_at.desc()).limit(5).all())
+
     return render_template(
         'admin/call_sheet.html',
         current=current,
+        calling=calling,
+        is_owner=_is_owner(),
         queue_left=len(queue),
         done_today=done,
         stint_over=stint_over,
@@ -1657,6 +1672,10 @@ def my_numbers():
 @login_required
 def delete(prospect_id):
     p = _lead(prospect_id)
+    # Calls already placed stay (they count toward the month); they just stop
+    # pointing at a business that is gone.
+    from models import CallLog
+    CallLog.query.filter_by(prospect_id=p.id).update({'prospect_id': None})
     db.session.delete(p)
     db.session.commit()
     flash('Removed from call list.', 'success')
