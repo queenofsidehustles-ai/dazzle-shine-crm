@@ -1412,6 +1412,31 @@ class Staff(db.Model):
     EMPLOYEE_ONLY_STEPS = {'supply_kit'}
     UNIFORM_STEPS = {'uniform_size'}
 
+    # Somebody who already cleaned for this company before it came to Akye --
+    # added in setup or by the team import, not hired through it. Hiring steps
+    # (interview, background check, orientation, shadow shift...) happened
+    # before we existed or never will, and eleven unticked boxes on every
+    # long-serving cleaner is a checklist nobody finishes. What is left is the
+    # paperwork that pays and protects the business: the work agreement, the
+    # forms, payout details -- and the W-9 and ID in the documents card.
+    # Decided 2026-10-24. Kept as a marker in onboarding_steps, so no column.
+    EXISTING_TEAM = 'existing_team'
+    HIRING_STEPS = {'phone_interview', 'background_check', 'welcome_email',
+                    'uniform_size', 'orientation', 'supply_kit', 'shadow_job',
+                    'first_solo_job'}
+
+    @property
+    def is_existing_team(self):
+        return self.EXISTING_TEAM in self.get_onboarding()
+
+    def mark_existing_team(self, owner=False):
+        """Brought over, not hired. The owner's own row is marked fully done:
+        she does not sign an agreement with her own business."""
+        steps = set(self.get_onboarding()) | {self.EXISTING_TEAM}
+        if owner:
+            steps |= {k for k, _ in self.ONBOARDING_STEPS}
+        self.onboarding_steps = json.dumps(sorted(steps))
+
     def get_onboarding(self):
         try:
             return json.loads(self.onboarding_steps or '[]')
@@ -1431,6 +1456,8 @@ class Staff(db.Model):
                 skip |= self.UNIFORM_STEPS
         except Exception:
             pass
+        if self.is_existing_team:
+            skip |= self.HIRING_STEPS
         return [(k, v) for k, v in self.ONBOARDING_STEPS if k not in skip]
 
     def pay_label(self):

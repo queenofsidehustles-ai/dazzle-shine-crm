@@ -761,6 +761,8 @@ def save_team(fields):
     for r in rows:
         s = Staff(name=r['name'], phone=r['phone'], email=r['email'], is_active=True,
                   pay_type=r['pay_type'], pay_rate=r['pay_rate'])
+        # Brought over, not hired: their checklist is the paperwork only.
+        s.mark_existing_team(owner=bool(r.get('me')))
         if r.get('me'):
             # Her own login, linked from the start, so she never gets a
             # "join the team" email from her own business.

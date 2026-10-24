@@ -211,7 +211,18 @@
                       style="background:none;border:1px solid var(--warn-soft);border-radius:7px;padding:6px 10px;
                              color:var(--warn);cursor:pointer;font-family:inherit;font-size:0.8rem">✕</button>
             </form>
-          {% elif kind != 'bgcheck' %}
+          {% else %}
+            {# A copy she already has: filed straight from here. #}
+            <form method="POST" enctype="multipart/form-data" style="display:inline"
+                  action="{{ url_for('contractors.owner_upload_document', staff_id=s.id, kind=kind) }}">
+              <label style="border:1px solid var(--line);border-radius:7px;padding:6px 12px;font-size:0.8rem;
+                            font-weight:600;color:var(--ink-2);cursor:pointer">
+                Upload
+                <input type="file" name="document" accept=".pdf,image/*" hidden onchange="this.form.submit()">
+              </label>
+            </form>
+          {% endif %}
+          {% if not doc and kind != 'bgcheck' %}
             <form method="POST" action="{{ url_for('contractors.request_document', staff_id=s.id, kind=kind) }}"
                   style="display:inline">
               <button type="submit"
@@ -410,6 +421,12 @@
 
     <div class="card">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Onboarding Checklist</h2>
+      {% if s.is_existing_team %}
+      <p style="font-size:0.8rem;color:var(--softer);line-height:1.55;margin:-8px 0 14px">
+        Already on your team before Akye, so only the paperwork is listed. Have their
+        W-9 or ID already? Upload it under Documents on File.
+      </p>
+      {% endif %}
       {% set completed = s.get_onboarding() %}
       {% set steps = s.get_applicable_steps() %}
       {% set total = steps|length %}
