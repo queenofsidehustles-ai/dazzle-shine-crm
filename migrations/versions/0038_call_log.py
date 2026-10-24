@@ -8,8 +8,8 @@ company that never calls has an empty one and notices nothing.
 from alembic import op
 import sqlalchemy as sa
 
-revision = '0037_call_log'
-down_revision = '0036_keep_cleaner_rate'
+revision = '0038_call_log'
+down_revision = '0037_staff_is_owner'
 branch_labels = None
 depends_on = None
 
