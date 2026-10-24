@@ -442,7 +442,13 @@ def hiring_ads():
     import tenancy
     slug = (tenancy.current_schema() or '').replace(tenancy.SCHEMA_PREFIX, '')
     base = branding.crm_base() or 'https://www.akyehq.com'
-    apply_url = f"{base}/apply"
+    # url_for, not a hand-built path. This read f"{base}/apply", and there is
+    # no /apply route -- the form is at /contractors/apply. So every advert
+    # this page produced sent applicants to a 404, and a company that pasted
+    # one into Indeed got applications through Indeed's own Apply button
+    # instead, which never reach this CRM at all. Built from the routing table
+    # so it cannot drift from the route again.
+    apply_url = base.rstrip('/') + url_for('contractors.apply')
     model = (BusinessSetting.get('worker_model') or 'contractor')
     city = (BusinessSetting.get('city') or 'your area')
     state = (BusinessSetting.get('state') or '')

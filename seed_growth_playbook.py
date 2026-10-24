@@ -354,7 +354,7 @@ The seven days, their order and the signup targets are the 90-Day plan's. These 
 | 3 | Two asks for the warm list: owners try it, connectors introduce | Someone who doesn't run a cleaning business says no to "try my software" but often says yes to "who's one owner I should talk to?" |
 | 4 | One follow-up, 48 hours after every first message | Many replies come from a single polite follow-up. More than one reads as pressure. |
 | 5 | Request group membership on Day 1, post from Day 4 | Admin approval can take days. Requested on Day 4, the groups open in week 2. |
-| 6 | Set up every signup within 24 hours | The trial starts at the first assigned job. A short setup call is the fastest way there. |
+| 6 | Set up every signup within 24 hours | The 30-day trial runs from signup, so every day unused is a day lost. A short setup call is the fastest way to get them using it. |
 | 7 | Lead with cleaning businesses | Akye is built for cleaning companies (cleaner pay, cleaning checklists, a cleaning price book). The Week 1 templates also name lawn care and handyman businesses. Save those for later, or drop them. |
 | 8 | Settle the card question before Day 3 | Checkout asks for a card even when the total is $0. The Day 3 announcement goes to the biggest audience, so its wording must match what checkout does. |
 | 9 | Decide whether a lifetime deal fits before applying | A lifetime deal sold during the founding-cohort offer competes with it, and Pro's texts and Nana cost money every month. |

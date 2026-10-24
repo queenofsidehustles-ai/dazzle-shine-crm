@@ -2,9 +2,20 @@
 {% block title %}Companies{% endblock %}
 {% block body %}
 {% include "console/_ops_style.html" %}
-<h2 style="font-size:1.05rem;margin:0 0 var(--s3)">{{ 'Archived companies' if show_archived else 'Companies' }} ({{ rows|length }})</h2>
+{% set meter_class = {'help': 'ops-failing', 'watch': 'ops-stale', 'ok': 'ops-ok'} %}
+<h2 style="font-size:1.05rem;margin:0 0 var(--s3)">{{ 'Archived companies' if show_archived else ('Needing support' if needs else 'Companies') }} ({{ rows|length }})</h2>
+{% if not show_archived %}
+<p style="margin:0 0 var(--s3)">
+  {% if needs %}<a href="{{ url_for('console.companies', q=q or None) }}">Show every company</a>
+  {% else %}<a href="{{ url_for('console.companies', needs=1, q=q or None) }}"><strong>Needs support</strong></a>:{% endif %}
+  <span class="ops-badge ops-failing">{{ support.help }} needs help</span>
+  <span class="ops-badge ops-stale">{{ support.watch }} watch</span>
+  <span class="ops-dim">· from sign-ups, setup, use and errors. Test and demo accounts are left out.</span>
+</p>
+{% endif %}
 <form method="get" style="display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap;margin:0 0 var(--s3)">
   {% if show_archived %}<input type="hidden" name="show" value="archived">{% endif %}
+  {% if needs %}<input type="hidden" name="needs" value="1">{% endif %}
   <input type="search" name="q" value="{{ q }}" placeholder="Search name, address or email" aria-label="Search companies" style="min-width:16rem;flex:1;max-width:26rem">
   <button class="btn btn-outline btn-sm">Search</button>
   {% if q %}<a href="{{ url_for('console.companies', show='archived' if show_archived) }}" class="ops-dim">Clear</a>{% endif %}
@@ -13,13 +24,19 @@
 </form>
 {% if rows %}
 <div class="ops-scroll"><table class="con">
-  <tr><th>Company</th><th>Status</th><th>Trial / plan</th><th>Last sign-in</th>
-      <th>Last 30 days</th><th>Needs a look</th></tr>
+  <tr><th>Company</th><th>Support</th><th>Status</th><th>Trial / plan</th><th>Owner last in</th>
+      <th>Last 30 days</th></tr>
   {% for r in rows %}
   {% set s = r.snap %}
   <tr>
     <td><a href="{{ url_for('console.company', slug=r.slug) }}"><strong>{{ r.name }}</strong></a>
         <br><span class="ops-dim">{{ r.slug }}{% if r.owner_email %} · {{ r.owner_email }}{% endif %}</span></td>
+    <td class="wrap" style="min-width:12rem">
+      <span class="ops-badge {{ meter_class.get(r.meter.level, '') }}">{{ r.meter.label }}</span>
+      {% if r.meter.level in ('help', 'watch') %}
+        {% for why in r.meter.reasons %}<br><span class="{{ 'ops-bad' if r.meter.level == 'help' and loop.first else 'ops-dim' }}">{{ why }}</span>{% endfor %}
+      {% elif r.meter.level == 'none' and r.meter.reasons %}<br><span class="ops-dim">{{ r.meter.reasons[0] }}</span>{% endif %}
+    </td>
     <td><span class="ops-badge ops-{{ r.status }}">{{ r.status }}</span>
         {% if r.grandfathered %}<br><span class="ops-dim">grandfathered</span>{% endif %}
         {% if r.is_test %}<br><span class="ops-dim">test account</span>{% endif %}</td>
@@ -29,22 +46,15 @@
         {% else %}{{ r.trial.days_left }}d left{% endif %}
       {% else %}{{ r.plan or 'solo' }} · {{ r.subscription_status }}{% endif %}
     </td>
-    <td>{% if s and s.ok %}{{ s.owner_last_login.strftime('%d %b') if s.owner_last_login else '—' }}{% else %}—{% endif %}</td>
-    <td>{% if s and s.ok %}{{ s.bookings_30d }} booked · {{ s.completed_30d }} done{% else %}—{% endif %}</td>
-    <td>
-      {% if s is none %}<span class="ops-dim">not read ({{ r.status }})</span>
-      {% elif not s.ok %}<span class="ops-bad">could not read</span>
-      {% else %}
-        {% if s.open_errors %}<span class="ops-bad">{{ s.open_errors }} error{{ 's' if s.open_errors != 1 }}</span>{% endif %}
-        {% if s.jobs_broken %}<span class="ops-bad">{{ s.jobs_broken }} automation{{ 's' if s.jobs_broken != 1 }}</span>{% endif %}
-        {% if not s.open_errors and not s.jobs_broken %}<span class="ops-good">fine</span>{% endif %}
-      {% endif %}
-    </td>
+    <td>{{ r.seen.strftime('%d %b') if r.seen else '—' }}</td>
+    <td>{% if s and s.ok %}{{ s.bookings_30d }} booked · {{ s.completed_30d }} done
+        <br><span class="ops-dim">{{ s.clients }} customer{{ 's' if s.clients != 1 }} · {{ s.users }} login{{ 's' if s.users != 1 }}</span>
+        {% elif s is none %}<span class="ops-dim">not read ({{ r.status }})</span>{% else %}<span class="ops-bad">could not read</span>{% endif %}</td>
   </tr>
   {% endfor %}
 </table></div>
 {% else %}
-<div class="con-empty">{{ 'No companies match.' if q else ('Nothing archived.' if show_archived else 'No companies yet.') }}</div>
+<div class="con-empty">{{ 'No companies match.' if q else ('Nothing archived.' if show_archived else ('Nobody needs support right now.' if needs else 'No companies yet.')) }}</div>
 {% endif %}
 
 <div style="display:flex;align-items:baseline;gap:var(--s4);margin:var(--s6) 0 var(--s3);flex-wrap:wrap">

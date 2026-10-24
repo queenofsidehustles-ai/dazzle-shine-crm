@@ -14,7 +14,21 @@
     {{ a.category_label }} · {{ a.frequency_label }}<br>
     {% if a.source == 'find_leads' %}📞 closed from Find Leads{% else %}✍️ added by hand{% endif %}
   </div>
+  <a href="{{ url_for('commercial.book', account_id=a.id) }}" class="btn btn-gold" style="padding:10px 20px">📅 Book a job</a>
 </div>
+
+{% if jobs %}
+<div class="card" id="accountJobs" style="margin-bottom:18px">
+  <h3 style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--softer);margin:0 0 10px">Jobs</h3>
+  {% for j in jobs %}
+  <p style="font-size:0.88rem;margin:0 0 6px">
+    <a href="{{ url_for('bookings.detail', booking_id=j.id) }}">#{{ j.id }}</a> · {{ j.preferred_date or 'no date' }}{% if j.preferred_time %} {{ j.preferred_time }}{% endif %}
+    · ${{ '%.2f' % (j.price or 0) }} · {{ j.status_label }}{% if j.assigned_cleaner %} · {{ j.assigned_cleaner }}{% endif %}
+    {% if j.paid_at %}<span class="status status-completed">paid</span>{% elif j.invoice_number %}<span style="color:var(--softer)">· invoice {{ j.invoice_number }}</span>{% endif %}
+  </p>
+  {% endfor %}
+</div>
+{% endif %}
 
 <div class="card">
   <form method="POST" action="{{ url_for('commercial.detail', account_id=a.id) }}"
@@ -47,6 +61,21 @@
   </form>
 </div>
 
+{% if agreements %}
+<div class="card" id="accountAgreements" style="margin-top:18px">
+  <h3 style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--softer);margin:0 0 10px">Signed agreements</h3>
+  {% for ag, terms, signer, replaced in agreements %}
+  <p style="font-size:0.88rem;line-height:1.55;margin:0 0 10px">
+    {% if not replaced %}<span class="status status-completed">in force</span>{% else %}<span class="status status-cancelled">replaced</span>{% endif %}
+    <strong>Agreement #{{ ag.id }}</strong> from {{ ag.effective_on.strftime('%b %d, %Y') }}{% if terms and terms.monthly_price %} — ${{ '{:,.2f}'.format(terms.monthly_price|float) }}/mo{% endif %}{% if signer %}, signed by {{ signer }}{% endif %}
+    · <a href="{{ url_for('quotes.review', quote_id=ag.quote_id) }}">quote #{{ ag.quote_id }}</a>
+    {% if ag.amends_agreement_id %}<br><span style="color:var(--softer)">Amends agreement #{{ ag.amends_agreement_id }}.</span>{% endif %}
+    {% if replaced %}<br><span style="color:var(--softer)">Replaced by agreement #{{ replaced.id }} from {{ replaced.effective_on.strftime('%b %d, %Y') }}.</span>{% endif %}
+  </p>
+  {% endfor %}
+</div>
+{% endif %}
+
 <!-- Commission / first-invoice status -->
 <div class="card" style="margin-top:18px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;align-items:center">
   <div style="font-size:0.9rem">
@@ -64,13 +93,8 @@
   {% endif %}
 </div>
 
-<!-- Roadmap hint -->
-<div class="card" style="margin-top:18px;border-left:4px solid var(--amber);background:rgba(211,168,79,0.08)">
-  <strong>Coming next (Phase 2):</strong> auto-repeating visits on your calendar and monthly invoices for this account. 🗓️🧾
-</div>
-
 <form method="POST" action="{{ url_for('commercial.delete', account_id=a.id) }}"
-      onsubmit="return confirm('Delete {{ a.business_name }}? This cannot be undone.')" style="margin-top:16px">
+      onsubmit="return confirm('Delete {{ a.business_name|js }}? This cannot be undone.')" style="margin-top:16px">
   <button type="submit" class="btn btn-outline" style="padding:7px 14px;font-size:0.82rem;color:var(--warn)">Delete account</button>
 </form>
 

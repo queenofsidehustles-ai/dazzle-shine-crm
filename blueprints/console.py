@@ -300,11 +300,25 @@ def companies():
     # Most recent sign-ups first.
     orgs.sort(key=lambda o: o.get('created_at') or datetime.min, reverse=True)
     snaps = console_data.snapshots(orgs)
-    rows = [dict(o, trial=billing.trial_state(o), snap=snaps.get(o['slug']))
-            for o in orgs]
+    rows = []
+    for o in orgs:
+        trial = billing.trial_state(o)
+        snap = snaps.get(o['slug'])
+        rows.append(dict(o, trial=trial, snap=snap,
+                         seen=console_data.owner_last_seen(o, snap),
+                         meter=console_data.support_meter(o, snap, trial)))
+    support = {level: sum(1 for r in rows if r['meter']['level'] == level)
+               for level in ('help', 'watch')}
+    needs = request.args.get('needs') == '1'
+    if needs:
+        # Who needs somebody to reach out: "needs help" first, then "watch",
+        # newest sign-ups first within each, as the full list is.
+        rows = [r for r in rows if r['meter']['level'] in ('help', 'watch')]
+        rows.sort(key=lambda r: r['meter']['level'] != 'help')
     return render_template('console/companies.html', rows=rows, q=q,
                            show_archived=show_archived,
                            archived_count=archived_count,
+                           needs=needs, support=support,
                            leads=console_data.dedupe_leads(control_plane.all_leads(engine)),
                            me=request.console_user, counts=_counts(engine))
 
@@ -324,11 +338,15 @@ def company(slug):
     import attribution
     readable = (org.get('status') or 'active') in console_data.READABLE
     closed_at = org.get('closed_at')
+    trial = billing.trial_state(org)
+    snap = console_data.snapshot(slug) if readable else None
     return render_template(
-        'console/company.html', org=org, trial=billing.trial_state(org),
+        'console/company.html', org=org, trial=trial,
         came_from=attribution.label(org),
         referred=control_plane.referred_by(engine, slug),
-        snap=console_data.snapshot(slug) if readable else None,
+        snap=snap,
+        meter=console_data.support_meter(org, snap, trial),
+        owner_seen=console_data.owner_last_seen(org, snap),
         reports=[f for f in control_plane.all_feedback(engine)
                  if f.get('org_slug') == slug][:20],
         history=[r for r in control_plane.console_log_all(engine)
@@ -337,6 +355,9 @@ def company(slug):
         email_labels=__import__('communications').LABELS,
         purge_from=(closed_at + timedelta(days=tenant_data_lifecycle.RETENTION_DAYS)
                     if closed_at else None),
+        lc=_lifecycle_view(engine, org),
+        stripe_links=billing.dashboard_links(org),
+        is_owner=_is_owner(),
         may_operate=_may_operate(),
         me=request.console_user, counts=_counts(engine))
 
@@ -594,8 +615,14 @@ def archive_company(slug):
     control_plane.set_archived(engine, slug, archive)
     control_plane.log_console(engine, request.console_user['email'],
                               'archived' if archive else 'unarchived', slug)
-    flash(f'{org["name"]} is {"archived — find it under Archived" if archive else "back in the main list"}.',
-          'success')
+    # Archive only tidies the list; say so, so nobody archives a company
+    # expecting it to stop being billed or signed in to. Suspending stops
+    # sign-in and automations but not Stripe (set_status touches neither),
+    # so billing is named as Stripe's.
+    flash(f'{org["name"]} is archived — find it under Archived. Only the list changes: '
+          f'its sign-in, billing and automations carry on. Suspending stops sign-in and '
+          f'automations; billing stops only by canceling the subscription in Stripe.'
+          if archive else f'{org["name"]} is back in the main list.', 'success')
     return redirect(url_for('console.companies') if archive
                     else url_for('console.company', slug=slug))
 
@@ -609,15 +636,258 @@ def reactivate_company(slug):
     engine = _engine()
     org = control_plane.find(engine, slug)
     if not org or org.get('status') != 'suspended':
-        # Closed is deliberately not reversible from here: closure starts the
-        # retention clock, and reopening is an operator decision made from a
-        # terminal (tenant_lifecycle_cli.py), not a button.
-        flash('Only a suspended company can be reactivated here.', 'error')
+        # A closed company is not reactivated here: closure started a retention
+        # clock, and undoing it is the owner's decision, made with a fresh
+        # password and a reason, under Lifecycle on the company page.
+        flash('Only a suspended company can be reactivated here. A closed one is '
+              'reopened under Lifecycle, by the console owner.', 'error')
         return redirect(here)
     control_plane.set_status(engine, slug, 'active')
     control_plane.log_console(engine, request.console_user['email'],
                               'reactivated', slug)
     flash(f'{org["name"]} is active again.', 'success')
+    return redirect(here)
+
+
+# --------------------------------------------------------------------------
+# Closing, exporting and purging a company
+#
+# These used to be terminal-only (tenant_lifecycle_cli.py), on the reasoning
+# that they start and end a legal retention period and should not be a button.
+# They are here now because the terminal does not scale past one person who
+# holds the production database URL, and because the owner of a closed company
+# has no way to ask for their own data except through staff.
+#
+# So the friction moves with them. A terminal asked for the company's address;
+# the console asks for more, because a browser tab left open is easier to
+# misuse than a command somebody had to type:
+#
+#   * close, reopen and purge are the console OWNER's alone; export, which only
+#     reads, is a manager's;
+#   * every one needs the person's password again (and their authenticator code
+#     when two-factor is on), so an unattended session cannot do it. A wrong
+#     attempt counts toward the same lockout as a wrong sign-in;
+#   * every one needs a written reason, which goes in the Record;
+#   * close and purge need the company's address typed out;
+#   * purge also needs a tick saying the owner has been offered their data, and
+#     the library refuses it before the retention deadline whatever the form says.
+#
+# The rules themselves are not here. They are in tenant_data_lifecycle.py, the
+# same module the terminal uses, so the two cannot disagree about when a purge
+# is allowed.
+
+_LIVE_SUBSCRIPTION = ('active', 'trialing', 'past_due', 'unpaid', 'incomplete')
+
+
+def _is_owner():
+    role = (getattr(request, 'console_user', {}) or {}).get('role')
+    return control_plane.rank(role) >= control_plane.rank('owner')
+
+
+def _live_subscription(org):
+    """Still being billed by Stripe. Our own free trial has no Stripe id."""
+    return bool(org.get('stripe_subscription_id')) and \
+        (org.get('subscription_status') or '').lower() in _LIVE_SUBSCRIPTION
+
+
+def _lifecycle_view(engine, org):
+    """What the Lifecycle section of a company page needs to draw itself."""
+    import tenant_data_lifecycle as lifecycle
+    now = datetime.utcnow()
+    closed_at, purged_at = org.get('closed_at'), org.get('purged_at')
+    eligible_at = closed_at + timedelta(days=lifecycle.RETENTION_DAYS) if closed_at else None
+    blockers = []
+    if org.get('is_demo'):
+        blockers.append('This is the demo company. It is rebuilt from its seed, not closed.')
+    if _live_subscription(org):
+        blockers.append('They have a live Stripe subscription. Cancel it in Stripe first, '
+                        'or they will keep being billed for a workspace nobody can open.')
+    last = control_plane.console_log_for(engine, org['slug'], 'exported company data', 1)
+    return {
+        'state': ('purged' if purged_at else 'closed' if org.get('status') == 'closed'
+                  else org.get('status') or 'active'),
+        'closed_at': closed_at, 'purged_at': purged_at, 'eligible_at': eligible_at,
+        # Rounded up: 29 days and 23 hours left is "30", and the last day is "1",
+        # never "0 days" while purge is still refused.
+        'days_left': (max(0, -(-int((eligible_at - now).total_seconds()) // 86400))
+                      if eligible_at else None),
+        'eligible': bool(eligible_at and now >= eligible_at and not purged_at),
+        'blockers': blockers, 'retention_days': lifecycle.RETENTION_DAYS,
+        'last_export': last[0] if last else None,
+    }
+
+
+def _reauthenticate():
+    """(ok, message): fresh proof it is still the same person at the keyboard.
+
+    Reuses the sign-in checks, so a wrong password or code counts toward the
+    same lockout as signing in: this form cannot be used to guess a password
+    with an open session.
+    """
+    engine = _engine()
+    email = request.console_user['email']
+    user, why = control_plane.check_console_login(
+        engine, email, request.form.get('password') or '', record_login=False)
+    if not user:
+        return False, ('Too many wrong attempts. Try again later.' if why == 'locked'
+                       else 'That password was not right. Nothing was changed.')
+    if user.get('totp_enabled'):
+        user, why = control_plane.check_console_code(
+            engine, email, request.form.get('code') or '', record_login=False)
+        if not user:
+            return False, ('Too many wrong attempts. Try again later.' if why == 'locked'
+                           else 'That code was not right. Nothing was changed.')
+    return True, None
+
+
+def _lifecycle_preflight(slug, *, owner_only, typed):
+    """Everything every lifecycle action needs before it may begin.
+
+    Returns (org, reason, None) to go ahead, or (None, None, response) to stop.
+    Checked in order of cheapness, and the password last, so a mistyped
+    confirmation does not spend a password attempt."""
+    here = url_for('console.company', slug=slug)
+
+    def stop(message):
+        flash(message, 'error')
+        return None, None, redirect(here)
+
+    if owner_only and not _is_owner():
+        return stop('Only the console owner can close, reopen or purge a company.')
+    if not owner_only and not _may_operate():
+        return None, None, _refuse(here)
+    org = control_plane.find(_engine(), slug)
+    if not org:
+        flash(f'No company at {slug}.', 'error')
+        return None, None, redirect(url_for('console.companies'))
+    reason = (request.form.get('reason') or '').strip()
+    if len(reason) < 5:
+        return stop('Say why, in a sentence. It goes in the record.')
+    if typed and (request.form.get('confirm') or '').strip() != slug:
+        return stop(f'Type the company address ({slug}) exactly to confirm.')
+    ok, why = _reauthenticate()
+    if not ok:
+        return stop(why)
+    return org, reason, None
+
+
+@console_bp.route('/companies/<slug>/lifecycle/export', methods=['POST'])
+@console_required
+def export_company(slug):
+    """A zip of one company's customers, jobs, workers, pay and expenses."""
+    import tenant_export
+    here = url_for('console.company', slug=slug)
+    org, reason, stopped = _lifecycle_preflight(slug, owner_only=False, typed=False)
+    if stopped:
+        return stopped
+    engine = _engine()
+    who = request.console_user['email']
+    try:
+        data, counts = tenant_export.build(engine, slug, by=who)
+    except tenant_export.ExportError as exc:
+        flash(str(exc), 'error')
+        return redirect(here)
+    rows = sum(counts.values())
+    control_plane.log_console(engine, who, 'exported company data', slug,
+                              f'{rows} rows. Reason: {reason}')
+    return Response(data, mimetype='application/zip', headers={
+        'Content-Disposition': f'attachment; filename="{slug}-export-{datetime.utcnow():%Y%m%d}.zip"',
+        'Cache-Control': 'no-store'})
+
+
+@console_bp.route('/companies/<slug>/lifecycle/close', methods=['POST'])
+@console_required
+def close_company(slug):
+    """End a company's access now and start its 30-day retention."""
+    import tenant_data_lifecycle as lifecycle
+    here = url_for('console.company', slug=slug)
+    org, reason, stopped = _lifecycle_preflight(slug, owner_only=True, typed=True)
+    if stopped:
+        return stopped
+    engine = _engine()
+    who = request.console_user['email']
+    if org.get('purged_at') or org.get('status') not in ('active', 'suspended'):
+        flash('Only an active or suspended company can be closed.', 'error')
+        return redirect(here)
+    blockers = _lifecycle_view(engine, org)['blockers']
+    if blockers:
+        flash(blockers[0], 'error')
+        return redirect(here)
+    try:
+        state = lifecycle.close_tenant(engine, slug)
+    except lifecycle.LifecycleError as exc:
+        flash(f'Not closed: {exc}', 'error')
+        return redirect(here)
+    control_plane.log_console(engine, who, 'closed company', slug,
+                              f'Retained until {state["eligible_at"]:%d %b %Y}. Reason: {reason}')
+    flash(f'{org["name"]} is closed. Nobody there can sign in. Their data is kept until '
+          f'{state["eligible_at"]:%d %b %Y}; export it for them before then if they ask.',
+          'success')
+    return redirect(here)
+
+
+@console_bp.route('/companies/<slug>/lifecycle/reopen', methods=['POST'])
+@console_required
+def reopen_company(slug):
+    """Take a closure back, while the data still exists. Comes back suspended."""
+    import tenant_data_lifecycle as lifecycle
+    here = url_for('console.company', slug=slug)
+    org, reason, stopped = _lifecycle_preflight(slug, owner_only=True, typed=False)
+    if stopped:
+        return stopped
+    engine = _engine()
+    try:
+        lifecycle.reopen_tenant(engine, slug)
+    except lifecycle.LifecycleError as exc:
+        flash(f'Not reopened: {exc}.', 'error')
+        return redirect(here)
+    control_plane.log_console(engine, request.console_user['email'],
+                              'reopened company', slug, f'Reason: {reason}')
+    flash(f'{org["name"]} is reopened, and suspended: nobody can sign in until you '
+          f'reactivate it below.', 'success')
+    return redirect(here)
+
+
+@console_bp.route('/companies/<slug>/lifecycle/purge', methods=['POST'])
+@console_required
+def purge_company(slug):
+    """Permanently delete a closed company's data, once retention has passed."""
+    import tenant_data_lifecycle as lifecycle
+    here = url_for('console.company', slug=slug)
+    org, reason, stopped = _lifecycle_preflight(slug, owner_only=True, typed=True)
+    if stopped:
+        return stopped
+    engine = _engine()
+    who = request.console_user['email']
+    if request.form.get('ack') != '1':
+        flash('Tick the box to confirm the owner has been offered their data.', 'error')
+        return redirect(here)
+    if org.get('purged_at'):
+        flash(f'{org["name"]} was already purged. Nothing more to do.', 'info')
+        return redirect(here)
+    if not lifecycle.purge_eligible(engine, slug):
+        # The library will not purge early either; this is so the person is told
+        # why in words, not by an exception.
+        state = lifecycle.lifecycle_state(engine, slug) or {}
+        when = state.get('eligible_at')
+        flash('Purge refused: ' + (f'the 30-day retention runs until {when:%d %b %Y}.'
+                                   if when else 'the company has to be closed first.'), 'error')
+        return redirect(here)
+    try:
+        result = lifecycle.purge_tenant(engine, slug)
+    except Exception as exc:  # noqa: BLE001 -- anything: the tenant stays closed
+        control_plane.log_console(engine, who, 'purge failed', slug,
+                                  f'{type(exc).__name__}: {exc}'[:300])
+        flash(f'The purge did not complete ({type(exc).__name__}: {exc}). The company '
+              f'is still closed and nothing was reactivated. It is safe to try again.',
+              'error')
+        return redirect(here)
+    media = (result or {}).get('media') or {}
+    control_plane.log_console(
+        engine, who, 'purged company', slug,
+        f'Media deleted: {media.get("deleted", 0)}. Reason: {reason}')
+    flash(f'{org["name"]} is permanently purged. Copies in encrypted backups age out '
+          f'within 30 days.', 'success')
     return redirect(here)
 
 
@@ -655,6 +925,112 @@ def _csv_safe(value):
     return "'" + text if text[:1] in ('=', '+', '-', '@', '\t', '\r') else text
 
 
+@console_bp.route('/release')
+@console_required
+def release_view():
+    """What is on main that the companies do not have yet, and the way to ship it."""
+    import release_control
+    ov = release_control.overview()
+    return render_template(
+        'console/release.html', ov=ov, blocked=release_control.blockers(ov),
+        rollback_blocked=release_control.rollback_blockers(ov),
+        flags=ov.get('flags') or {}, is_owner=_is_owner(), me=request.console_user,
+        repo=release_control.repo(),
+        counts=_counts(_engine()))
+
+
+@console_bp.route('/release/go', methods=['POST'])
+@console_required
+def release_go():
+    """Start the release of exactly the commit the page showed."""
+    import release_control
+    here = url_for('console.release_view')
+    if not _is_owner():
+        flash('Only the console owner can release.', 'error')
+        return redirect(here)
+    ov = release_control.overview()
+    head = ov.get('main_sha') or ''
+    # The page was drawn from one commit; the release must be of that commit.
+    if (request.form.get('sha') or '') != head or \
+            (request.form.get('stable') or '') != ov.get('stable_sha'):
+        flash('main or akye-stable has moved since you opened this page. Look at the new changes '
+              'and release again.', 'error')
+        return redirect(here)
+    why = release_control.blockers(ov)
+    if why:
+        flash('Not released: ' + why[0], 'error')
+        return redirect(here)
+    reason = (request.form.get('reason') or '').strip()
+    if len(reason) < 5:
+        flash('Say why, in a sentence. It goes in the record.', 'error')
+        return redirect(here)
+    if (request.form.get('confirm') or '').strip().lower() != head[:7]:
+        flash(f'Type the commit ({head[:7]}) exactly to confirm.', 'error')
+        return redirect(here)
+    ok, why_not = _reauthenticate()
+    if not ok:
+        flash(why_not, 'error')
+        return redirect(here)
+    started, message = release_control.start(head, ov['stable_sha'])
+    who = request.console_user['email']
+    if not started:
+        control_plane.log_console(_engine(), who, 'release failed to start', 'akye-stable',
+                                  f'{head[:7]}: {message}'[:300])
+        flash(message, 'error')
+        return redirect(here)
+    control_plane.log_console(_engine(), who, 'started release', 'akye-stable',
+                              f'{head[:7]}, {ov["ahead"]} commit(s). Reason: {reason}'[:300])
+    flash(f'Release started for {head[:7]}. It runs every suite first, so allow about '
+          f'half an hour; companies get it a few minutes after it finishes.', 'success')
+    return redirect(here)
+
+
+@console_bp.route('/release/rollback', methods=['POST'])
+@console_required
+def release_rollback():
+    """Put every company back on the release before the one they are on."""
+    import release_control
+    here = url_for('console.release_view')
+    if not _is_owner():
+        flash('Only the console owner can roll back.', 'error')
+        return redirect(here)
+    ov = release_control.overview()
+    why = release_control.rollback_blockers(ov)
+    if why:
+        flash('Not rolled back: ' + why[0], 'error')
+        return redirect(here)
+    target = ov['previous_tag']
+    # The page named a release; if the channel has moved since, that is not
+    # the one the owner decided on.
+    if (request.form.get('to') or '') != target or \
+            (request.form.get('from') or '') != ov['current_tag']:
+        flash('The releases changed since you opened this page. Look again.', 'error')
+        return redirect(here)
+    reason = (request.form.get('reason') or '').strip()
+    if len(reason) < 5:
+        flash('Say why, in a sentence. It goes in the record.', 'error')
+        return redirect(here)
+    if (request.form.get('confirm') or '').strip() != target:
+        flash(f'Type the release ({target}) exactly to confirm.', 'error')
+        return redirect(here)
+    ok, why_not = _reauthenticate()
+    if not ok:
+        flash(why_not, 'error')
+        return redirect(here)
+    started, message = release_control.start_rollback(target)
+    who = request.console_user['email']
+    if not started:
+        control_plane.log_console(_engine(), who, 'rollback failed to start', 'akye-stable',
+                                  f'{target}: {message}'[:300])
+        flash(message, 'error')
+        return redirect(here)
+    control_plane.log_console(_engine(), who, 'started rollback', 'akye-stable',
+                              f'{ov["current_tag"]} to {target}. Reason: {reason}'[:300])
+    flash(f'Rolling back to {target}. This takes a minute or two, and companies '
+          f'redeploy a few minutes after. Their data is untouched.', 'success')
+    return redirect(here)
+
+
 @console_bp.route('/health')
 @console_required
 def health():
@@ -668,10 +1044,13 @@ def health():
     preview = trial_nudges.run(engine, dry_run=True)
     names = {o['slug']: o['name'] for o in orgs}
     closed = [dict(o, purge_from=o['closed_at'] + timedelta(
-                  days=tenant_data_lifecycle.RETENTION_DAYS))
+                  days=tenant_data_lifecycle.RETENTION_DAYS),
+                   ready=datetime.utcnow() >= o['closed_at'] + timedelta(
+                       days=tenant_data_lifecycle.RETENTION_DAYS))
               for o in orgs if o.get('status') == 'closed' and o.get('closed_at')
               and not o.get('purged_at')]
     job_labels = [(key, label) for key, label, _b, _c in _automation_jobs()]
+    import llm
     import affiliates
     import billing
     import partner_payouts
@@ -681,12 +1060,31 @@ def health():
                'partners': len(partners),
                'ready': sum(1 for a in partners if a.get('payout_ready')),
                'waiting': affiliates.waiting_count(engine)}
+    # Why a signup was refused, rather than guessing. See signups_view below.
+    import security as _sec
+    import blueprints.signup as _signup
+    attempts = control_plane.signup_attempts_by_ip(
+        engine, datetime.utcnow() - timedelta(days=1))
+    signups = {
+        'attempts': attempts,
+        'total': sum(a['count'] for a in attempts),
+        'addresses': len(attempts),
+        'per_address_cap': _signup.SIGNUPS_PER_ADDRESS_PER_DAY,
+        'limits_on': _signup._limits_apply(),
+        # What this very request looks like to the cap, beside the header it
+        # was derived from. If everybody shares one address, these two
+        # disagreeing is where it shows.
+        'you': _sec.client_ip(),
+        'forwarded': (request.headers.get('X-Forwarded-For') or '')[:120],
+    }
     import platform_health
     ph = platform_health.build(engine, orgs, snaps)
     return render_template(
-        'console/health.html', ph=ph, payouts=payouts,
+        'console/health.html', ph=ph, signups=signups, payouts=payouts,
         orgs=[o for o in orgs if o['slug'] in snaps],
         snaps=snaps, job_labels=job_labels, mail=product.mail_status(),
+        ai={'key': bool(llm.key()), 'fast': llm.FAST_MODEL,
+            'smart': llm.SMART_MODEL},
         nudges=preview.get('plan') or [], names=names, closed=closed,
         may_operate=_may_operate(), me=request.console_user,
         counts=_counts(engine))
@@ -765,6 +1163,26 @@ def test_email():
     return redirect(url_for('console.health'))
 
 
+@console_bp.route('/health/test-ai', methods=['POST'])
+@console_required
+def test_ai():
+    """Ask Claude one question, on the model this deployment is configured with.
+
+    Every other path swallows an API failure to keep a page working, which is
+    right for a customer and wrong for whoever has to know. This is the one
+    place the error is the answer.
+    """
+    import llm
+    engine = _engine()
+    me = request.console_user
+    ok, detail = llm.check()
+    control_plane.log_console(engine, me['email'], 'tested Claude',
+                              llm.SMART_MODEL, ('ok: ' if ok else 'failed: ') + detail[:300])
+    flash(detail if ok else f'Claude did not answer: {detail}',
+          'success' if ok else 'error')
+    return redirect(url_for('console.health'))
+
+
 @console_bp.route('/health/trial-emails', methods=['POST'])
 @console_required
 def send_trial_emails():
@@ -823,6 +1241,47 @@ def sales_view():
                         days=funnel.WINDOWS[window])
     return render_template('console/sales.html', s=data, window=window,
                            windows=list(funnel.WINDOWS),
+                           me=request.console_user, counts=_counts(engine))
+
+
+@console_bp.route('/funnel/tips')
+@console_required
+def tips_view():
+    """Which help tips work, across every real company: how many people read
+    each one, and how many of them opened the feature within a week -- and
+    how the once-a-sign-in "Did you know?" fares. The wording lives in
+    help_tips.py; this is how to tell which of it to rewrite."""
+    import adoption
+    import funnel
+    import help_tips
+    engine = _engine()
+    window = request.args.get('window', funnel.DEFAULT_WINDOW)
+    if window not in funnel.WINDOWS:
+        window = funnel.DEFAULT_WINDOW
+    days = funnel.WINDOWS[window]
+    since = datetime.utcnow() - timedelta(days=days) if days else None
+    got = control_plane.tip_report(engine, since)
+    order = list(help_tips.DISCOVER) + sorted(k for k in help_tips.TIPS if k not in help_tips.DISCOVER)
+
+    def pct(a, b):
+        return round(100 * a / b) if b else None
+
+    rows = []
+    for key in order:
+        n = got.get(key, {})
+        if not n and key not in help_tips.DISCOVER:
+            continue
+        rows.append({
+            'key': key, 'title': help_tips.TIPS[key][0],
+            'opened': n.get('open', 0), 'used': n.get('used', 0),
+            'used_pct': pct(n.get('used', 0), n.get('open', 0)),
+            'suggested': n.get('suggested', 0), 'clicked': n.get('clicked', 0),
+            'dismissed': n.get('dismissed', 0),
+            'clicked_pct': pct(n.get('clicked', 0), n.get('suggested', 0)),
+            'discover': key in help_tips.DISCOVER,
+        })
+    return render_template('console/tips.html', rows=rows, window=window,
+                           windows=list(funnel.WINDOWS), used_within=adoption.USED_WITHIN.days,
                            me=request.console_user, counts=_counts(engine))
 
 
@@ -917,13 +1376,13 @@ def affiliate_action(affiliate_id, action):
         flash(f'{partner["name"]} is now {status}. Companies already referred stay credited '
               f'to them.', 'success')
     elif action == 'link':
-        from blueprints.partners import deliver_link
+        from blueprints.partners import deliver_link, _trusted_url
         raw = affiliates.issue_login(engine, affiliate_id)
         if not raw:
             flash('A link was already sent several times in the last hour. Try again later.', 'error')
         else:
             ok, detail = deliver_link(
-                partner, url_for('partners.confirm', token=raw, _external=True))
+                partner, _trusted_url('partners.confirm', token=raw))
             flash(f'Sign-in link sent to {partner["email"]}.' if ok
                   else f'The email did not send: {detail}', 'success' if ok else 'error')
             control_plane.log_console(engine, who, 'sent partner link', partner['code'])
@@ -974,11 +1433,13 @@ def affiliate_action(affiliate_id, action):
               else f'Stripe did not answer: {ready}', 'success' if ok and ready else 'error')
     elif action == 'reverse':
         result = affiliates.reverse(engine, request.form.get('invoice') or '',
-                                    (request.form.get('reason') or 'reversed by staff')[:200])
+                                    (request.form.get('reason') or 'reversed by staff')[:200],
+                                    affiliate_id=partner['id'])
         control_plane.log_console(engine, who, 'reversed commission', partner['code'],
                                   f'{request.form.get("invoice")}: {result}')
         flash({'reversed': 'Commission reversed.',
-               'already paid': 'That commission was already paid out. Settle it with the partner by hand.',
+               'debited': 'That commission was already paid out, so a matching debit now comes off their next payout.',
+               'already debited': 'A debit for that commission is already recorded.',
                'already reversed': 'Already reversed.',
                'being paid': 'That commission is part of a payout being sent. Wait for it to finish, then reverse it if it was released, or settle with the partner if it was paid.',
                'none': 'No such commission.'}.get(result, result),
@@ -1258,9 +1719,16 @@ def leads_upload():
         flash('Could not read that file as text.', 'error')
         return redirect(url_for('console.leads_view'))
 
-    reader = csv.DictReader(io.StringIO(text))
-    if not reader.fieldnames:
-        flash('That file has no header row.', 'error')
+    # newline='' lets the csv module read \r, \n and \r\n endings alike;
+    # without it a file saved with old-Mac \r endings raises "new-line
+    # character seen in unquoted field".
+    reader = csv.DictReader(io.StringIO(text, newline=''))
+    try:
+        if not reader.fieldnames:
+            flash('That file has no header row.', 'error')
+            return redirect(url_for('console.leads_view'))
+    except csv.Error:
+        flash('Could not read that file as a CSV. Save it as "CSV (comma delimited)" and try again.', 'error')
         return redirect(url_for('console.leads_view'))
     # Case-insensitive, so "Email" and "email" both find the column.
     by_lower = {(h or '').strip().lower(): h for h in reader.fieldnames}
@@ -1271,7 +1739,12 @@ def leads_upload():
 
     import notifications
     added = skipped = already = flagged = failed = 0
-    for row in reader:
+    try:
+        rows = list(reader)
+    except csv.Error:
+        flash('Could not read that file as a CSV. Save it as "CSV (comma delimited)" and try again.', 'error')
+        return redirect(url_for('console.leads_view'))
+    for row in rows:
         email = (row.get(by_lower.get('email', ''), '') or '').strip().lower()
         phone = (row.get(by_lower.get('phone', ''), '') or '').strip()
         # notifications.looks_like_email, not just "has an @": "person@example"
@@ -1796,7 +2269,8 @@ def communications():
     return render_template(
         'console/communications.html',
         catalog=comms.CATALOG, labels=comms.LABELS,
-        always_on=comms.ALWAYS_ON, switches=smap,
+        always_on=comms.ALWAYS_ON,
+        switches={k: comms.state(k, smap) for k, *_ in comms.CATALOG},
         owner_on=smap.get(comms.ALL_OWNER, True),
         lead_on=smap.get(comms.ALL_LEAD, True),
         sent=comms.sent_counts(engine),

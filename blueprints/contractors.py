@@ -383,7 +383,13 @@ def add_applicant():
         years_experience=request.form.get('years_experience', ''),
         availability=request.form.get('availability', ''),
         has_transportation=request.form.get('has_transportation') == 'on',
-        admin_notes=f"Source: {request.form.get('source','Other')}\n{request.form.get('notes','').strip()}",
+        # Into the column, not only into free text. There is a `source` field
+        # with a default of 'Website', and this form has always collected the
+        # real answer and buried it in the notes -- so every hand-entered
+        # applicant, including every one rescued from Indeed, reported itself
+        # as having come from the website.
+        source=(request.form.get('source') or 'Other').strip()[:50],
+        admin_notes=(request.form.get('notes') or '').strip(),
         status='new',
     )
     db.session.add(a)

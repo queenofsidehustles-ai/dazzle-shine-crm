@@ -19,6 +19,14 @@ database hiccup: all mean ON. A kill switch that fails closed would take the
 product down whenever the database blinked, which is the opposite of what an
 emergency control is for.
 
+## Except the one that sends money
+
+`partner_payouts` is the exception: it fails CLOSED. An unreadable table or an
+unreachable control plane means no transfer is sent, because a switch that
+cannot be read is not permission to move money. `PARTNER_PAYOUTS_OPEN=0` shuts
+it from the environment too, whatever the console says, the same way
+`SIGNUPS_OPEN=0` holds the door shut: it works when the database does not.
+
 ## Cached for a few seconds
 
 Signups are checked on every marketing page and texts on every send, so the
@@ -61,6 +69,10 @@ SWITCHES = [
 ]
 KEYS = [k for k, *_ in SWITCHES]
 
+# Switches that mean OFF when they cannot be read, and the environment variable
+# that closes each one whatever the console says (set to 0).
+FAIL_CLOSED = {'partner_payouts': 'PARTNER_PAYOUTS_OPEN'}
+
 _cache = {'at': 0.0, 'map': {}}
 
 
@@ -75,26 +87,34 @@ def _engine():
 
 
 def _load(engine=None):
+    """{key: enabled}, or None when the table could not be read."""
     now = time.monotonic()
-    if _cache['map'] is not None and now - _cache['at'] < CACHE_SECONDS and _cache['at']:
+    if _cache['at'] and now - _cache['at'] < CACHE_SECONDS:
         return _cache['map']
     try:
         import control_plane
-        raw = control_plane.switches(engine or _engine())
+        raw = control_plane.switches_checked(engine or _engine())
         loaded = {k[len(PREFIX):]: v for k, v in raw.items() if k.startswith(PREFIX)}
     except Exception:
-        loaded = {}
+        loaded = None
     _cache['map'] = loaded
     _cache['at'] = now
     return loaded
 
 
 def is_on(key, engine=None):
-    """Whether this part of the product may run. True unless turned off."""
+    """Whether this part of the product may run. True unless turned off, and
+    for the fail-closed switches, False unless the answer could be read."""
+    env = FAIL_CLOSED.get(key)
+    if env and os.environ.get(env) == '0':
+        return False
     try:
-        return bool(_load(engine).get(key, True))
+        loaded = _load(engine)
     except Exception:
-        return True
+        loaded = None
+    if loaded is None:
+        return key not in FAIL_CLOSED
+    return bool(loaded.get(key, True))
 
 
 def set_switch(engine, key, on, by=None):
@@ -106,9 +126,10 @@ def set_switch(engine, key, on, by=None):
 
 
 def states(engine):
-    """[{key, label, blurb, caution, on, by, at, held_by_env}] for the console."""
+    """[{key, label, blurb, caution, on, by, at, held_by_env, unreadable}] for the console."""
     import control_plane
     rows = {}
+    unreadable = False
     try:
         with engine.connect() as conn:
             from sqlalchemy import select
@@ -116,13 +137,16 @@ def states(engine):
                 if r['key'].startswith(PREFIX):
                     rows[r['key'][len(PREFIX):]] = r
     except Exception:
-        pass
+        unreadable = True
     out = []
     for key, label, blurb, caution in SWITCHES:
         r = rows.get(key)
+        held = (key == 'signups' and os.environ.get('SIGNUPS_OPEN') == '0') \
+            or os.environ.get(FAIL_CLOSED.get(key, '')) == '0'
+        closed_blind = unreadable and key in FAIL_CLOSED   # shown off, as is_on() acts
         out.append({'key': key, 'label': label, 'blurb': blurb, 'caution': caution,
-                    'on': bool(r['enabled']) if r else True,
+                    'on': bool(r['enabled']) if r else not (closed_blind or (held and key in FAIL_CLOSED)),
                     'by': r['updated_by'] if r else None,
                     'at': r['updated_at'] if r else None,
-                    'held_by_env': key == 'signups' and os.environ.get('SIGNUPS_OPEN') == '0'})
+                    'held_by_env': held, 'unreadable': closed_blind})
     return out

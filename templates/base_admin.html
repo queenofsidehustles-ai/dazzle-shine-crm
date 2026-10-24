@@ -58,6 +58,16 @@
        but it was only ever loaded on the interview page, so their expand and
        collapse buttons did nothing and every card rendered fully expanded. -->
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<style>
+  .city-switch{margin-top:12px;display:flex;flex-direction:column;gap:3px}
+  .city-switch-label{font-size:0.62rem;font-weight:700;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--softer);margin-bottom:3px}
+  .city-switch a{display:block;padding:8px 11px;border-radius:8px;
+    background:rgba(255,255,255,.06);color:var(--muted);text-decoration:none;
+    font-weight:600;font-size:0.86rem}
+  .city-switch a::before{content:'\2192  '}
+  .city-switch a:hover{background:rgba(255,255,255,.13);color:#fff}
+</style>
 </head>
 <body>
   <div class="nav-overlay" id="navOverlay" onclick="closeNav()"></div>
@@ -65,6 +75,19 @@
     <div class="sidebar-brand">
       <span class="script">{{ BIZ }}</span>
       <span class="sub">Back Office</span>
+      {# Only when there is somewhere to go -- one city is the ordinary case and
+         a menu offering a single choice is clutter. Shown open rather than
+         behind a disclosure: the first version was a collapsed <details> with a
+         small uppercase summary, and a control you have to find and then expand
+         is one most people never discover at all. #}
+      {% if OTHER_CITIES %}
+      <nav class="city-switch" aria-label="Switch city">
+        <span class="city-switch-label">Switch city</span>
+        {% for c in OTHER_CITIES %}
+        <a href="{{ url_for('admin.switch_city', slug=c.slug) }}" title="{{ c.name }}">{{ c.label }}</a>
+        {% endfor %}
+      </nav>
+      {% endif %}
     </div>
     {# Ask Nana moved into the Knowledge Base -- a place to go looking, not
        the front-line spot she held right under Dashboard. This is what
@@ -78,18 +101,23 @@
        once, and typing into this one just reloaded the page you were
        already on. #}
     {% if session.get('role') == 'owner' and request.endpoint != 'assistant.page' %}
+    {# Clicking it opens her page, rather than sitting there looking like a
+       search box that does nothing until you type and press Enter. The page
+       has the voice input, the suggested questions and the history; this box
+       has none of them, so there is no reason to keep somebody in it. #}
     <form class="ask-nana-quick" action="{{ url_for('assistant.page') }}" method="GET">
       <span class="ask-nana-quick-icon">💬</span>
       <input type="text" name="q" placeholder="Ask Nana anything…"
-             aria-label="Ask Nana" autocomplete="off" />
+             aria-label="Ask Nana" autocomplete="off"
+             onfocus="this.form.submit()" />
     </form>
     {% endif %}
     {# How far through setup, on every screen rather than only on the page
        about setup. Somebody who cannot see how much is left assumes it is a
        lot, and a job half done that looks endless is the one that gets
        abandoned. Disappears for good once the last step is ticked. #}
-    {% if SETUP and not SETUP.complete %}
-    <a href="{{ url_for('settings.getting_started') }}" class="setup-meter">
+    {% if SETUP and SETUP.next %}
+    <a href="{{ url_for('settings.getting_started') }}" class="setup-meter" id="setup-meter">
       <span class="setup-line">
         <span>Setting up</span>
         <span class="setup-count">{{ SETUP.done }} of {{ SETUP.total }}</span>
@@ -107,8 +135,10 @@
       {# A page their plan doesn't include is drawn greyed with a padlock, not
          removed. An owner who can see Hiring sitting there knows the product
          does it; one who can't, doesn't. #}
-      <a href="{{ url_for(item.endpoint) }}" class="{{ 'active' if NAV_ACTIVE == item.endpoint }}{{ ' locked' if item.locked }}"{% if item.locked %} title="Included in Pro"{% endif %}>
+      <a href="{{ url_for(item.endpoint) }}" class="{{ 'active' if NAV_ACTIVE == item.endpoint }}{{ ' locked' if item.locked }}"{% if MENU_TIPS.get(item.endpoint) %} data-tip="{{ item.endpoint }}"{% endif %}>
         <span class="icon">{{ item.icon }}</span> {{ item.label }}
+        {# A few features this person has never opened (adoption.py). #}
+        {% if item.endpoint in NAV_DOTS or item.tabs | selectattr('endpoint', 'in', NAV_DOTS) | list %}<span class="nav-dot" title="You haven't opened this yet"><span class="sr-only">— not opened yet</span></span>{% endif %}
         {% if item.locked %}<span style="margin-left:auto;font-size:0.72rem;opacity:0.75">🔒</span>{% endif %}
         {% if item.endpoint == 'messages.inbox' and nav_unread %}<span style="margin-left:auto;background:var(--warn);color:#fff;border-radius:999px;min-width:18px;height:18px;padding:0 5px;font-size:0.68rem;font-weight:700;display:inline-flex;align-items:center;justify-content:center">{{ nav_unread }}</span>{% endif %}
       </a>
@@ -116,7 +146,7 @@
       {% endfor %}
     </nav>
     <div class="sidebar-footer">
-      {% if session.get('user_name') %}<div style="font-size:0.75rem;color:var(--softer);margin-bottom:6px">{{ session.get('user_name') }}{% if not is_owner %} · Team{% endif %}</div>{% endif %}
+      {% if session.get('user_name') %}<div style="font-size:0.75rem;color:var(--softer);margin-bottom:6px">{{ session.get('user_name') }}{% if not is_owner %} · {{ {'admin': 'Admin', 'dispatcher': 'Dispatcher', 'sales': 'Sales', 'cleaner': 'Cleaner', 'limited': 'Limited'}.get(session.get('role'), 'Team') }}{% endif %}</div>{% endif %}
       {# Was a second link to the same page, right next to Sign out -- Security
          now has its own place in the main menu, under Settings. #}
       <a href="{{ url_for('admin.logout') }}">Sign out</a>
@@ -132,6 +162,7 @@
     <div class="topbar">
       <button class="hamburger" onclick="toggleNav()" aria-label="Open menu">☰</button>
       <h1>{% block page_title %}{{ NAV_TITLE or 'Dashboard' }}{% endblock %}</h1>
+      {% if PAGE_TIP %}{{ tip(PAGE_TIP) }}{% endif %}
 
       {% if BRAND_LENS_CHOICES %}
       {# Which side of the business is on screen. Deliberately loud when it is
@@ -172,7 +203,7 @@
     {% if NAV_TABS %}
     <div class="section-tabs">
       {% for t in NAV_TABS %}
-      <a href="{{ url_for(t.endpoint) }}" class="{{ 'active' if NAV_ACTIVE_TAB == t.endpoint }}" {% if t.locked %}style="opacity:0.45" title="Included in Pro"{% endif %}>{{ t.label }}{% if t.locked %} 🔒{% endif %}</a>
+      <a href="{{ url_for(t.endpoint) }}" class="{{ 'active' if NAV_ACTIVE_TAB == t.endpoint }}" {% if t.locked %}style="opacity:0.45"{% endif %}{% if MENU_TIPS.get(t.endpoint) %} data-tip="{{ t.endpoint }}"{% endif %}>{{ t.label }}{% if t.endpoint in NAV_DOTS %}<span class="nav-dot" title="You haven't opened this yet"><span class="sr-only">— not opened yet</span></span>{% endif %}{% if t.locked %} 🔒{% endif %}</a>
       {% endfor %}
     </div>
     {% endif %}
@@ -190,7 +221,7 @@
       {% endif %}
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% for category, msg in messages %}
-          <div class="flash flash-{{ category }}">{{ msg }}</div>
+          <div class="flash {{ category }}">{{ msg }}</div>
         {% endfor %}
       {% endwith %}
       {# One reminder a day, naming the single next step and nothing else.
@@ -205,7 +236,7 @@
          nudge and becomes an obstacle, and the person it annoys most is the
          one who has decided to do it later today anyway. It comes back
          tomorrow, and it stops for good when setup is finished. #}
-      {% if SETUP and not SETUP.complete and SETUP.next
+      {% if SETUP and SETUP.next
             and request.endpoint not in ('admin.dashboard', 'settings.getting_started') %}
       <div class="setup-nudge" id="setupnudge" hidden>
         <div class="setup-nudge-body">
@@ -241,9 +272,11 @@
         }
       </script>
       {% endif %}
-      {# Where they are in the trial: always a countdown, because a trial with
-         no visible end is how it becomes something somebody thinks they can
-         come back to whenever. One clock, thirty days from signup. #}
+      {# Where they are in the trial: one countdown, from signup. There were
+         two clocks here -- a fortnight that began when a company added a
+         cleaner and a customer, inside a month to make that start -- and two
+         numbers in one sentence read as self-contradicting however they were
+         worded. One clock needs one sentence. #}
       {# Only where somebody is deciding what to do next. On a phone these
          banners plus the Getting started card filled the whole first screen,
          so you scrolled past three blocks of nagging to reach today's jobs. #}
@@ -259,6 +292,22 @@
         <span class="go">Confirm →</span>
       </a>
       {% endif %}
+      {# Payments is tracked rather than required: a business can take
+         bookings without it and cannot be paid without it, so it stays in
+         front of somebody instead of blocking them. Amber once setup is
+         done, red after three days of being put off. Not on the
+         getting-started page itself: that page already offers payments as its
+         next step, and the bar on top made it the same ask twice on screen. #}
+      {% if ON_START and SETUP and SETUP.payments
+            and request.endpoint != 'settings.getting_started' %}
+      <a href="{{ url_for('settings.connections') }}"
+         class="setupbar {{ 'urgent' if SETUP.payments == 'red' }}">
+        <b>{% if SETUP.payments == 'red' %}Still no way to take card payments.
+           {% else %}You can take bookings. You can't take payments yet.{% endif %}</b>
+        Connecting Stripe takes a few minutes and your bank details stay with you.
+        <span class="go">Connect →</span>
+      </a>
+      {% endif %}
       {% if ON_START and TRIAL and not TRIAL.expired %}
       <a href="{{ url_for('billing.upgrade') }}" class="trialbar {{ 'urgent' if TRIAL.days_left <= 3 }}">
         <b>{{ TRIAL.days_left }} day{{ 's' if TRIAL.days_left != 1 }} left</b>
@@ -272,6 +321,26 @@
         You are on the free plan — everything you entered is still here.
         <span class="go">See plans →</span>
       </a>
+      {% endif %}
+
+      {# One "Did you know?" per sign-in, for a feature this person has
+         never opened (adoption.py). "Not now" means never again. #}
+      {% if SUGGESTION %}
+      <div class="suggest" id="tipSuggest" role="region" aria-label="Did you know?">
+        <span class="suggest-icon" aria-hidden="true">💡</span>
+        <div class="suggest-body">
+          <strong>Did you know? {{ SUGGESTION.title }}</strong>
+          <span>{{ SUGGESTION.text }}</span>
+        </div>
+        <div class="suggest-actions">
+          <a href="{{ url_for('tips.go', key=SUGGESTION.key) }}" class="btn btn-gold">Show me →</a>
+          <form method="POST" action="{{ url_for('tips.dismiss') }}" data-tip-dismiss>
+            <input type="hidden" name="key" value="{{ SUGGESTION.key }}">
+            <input type="hidden" name="next" value="{{ request.full_path }}">
+            <button type="submit" class="btn btn-outline">Not now</button>
+          </form>
+        </div>
+      </div>
       {% endif %}
 
       {% block content %}{% endblock %}
@@ -325,10 +394,14 @@
     })();
   </script>
   <script src="{{ url_for('static', filename='card-reorder.js') }}" defer></script>
+  {# What each menu item is for (help_tips.py), read by tips.js on hover. #}
+  <script type="application/json" id="menuTips">{{ MENU_TIPS | tojson }}</script>
+  <div id="menuTip" class="menu-tip" role="tooltip" hidden></div>
+  <script src="{{ url_for('static', filename='tips.js') }}" defer></script>
   {# On every screen, deliberately. A beta tester who has to go and find
      somewhere to report a problem mostly does not. #}
   {% if session.get('logged_in') %}{% include '_feedback.html' %}{% endif %}
-{% if SETUP and not SETUP.complete and SETUP_CHAT and request.endpoint == 'admin.dashboard' %}
+{% if SETUP and SETUP.next and SETUP_CHAT and request.endpoint == 'admin.dashboard' %}
   {% include "admin/_nana_welcome.html" %}
 {% endif %}
 </body>

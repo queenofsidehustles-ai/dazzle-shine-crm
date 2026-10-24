@@ -82,9 +82,15 @@ def _add_month(anchor_year, anchor_month, anchor_day, months_out):
     return date(year, month, min(anchor_day, calendar.monthrange(year, month)[1]))
 
 
-def _copy_visit(seed, on_date, group):
+def clone_booking(seed, on_date, group=None, **overrides):
+    """A fresh, unstarted booking for `on_date` carrying over everything about
+    the job that stays the same: customer, home, service, price, card on file.
+
+    Payment, invoice, confirmation and clock-in state are deliberately left
+    behind. Used by recurring plans (with a `group`) and by "Book again" on a
+    finished job (no group); `overrides` replace any field."""
     from models import Booking
-    return Booking(
+    fields = dict(
         client_id=seed.client_id, service_type=seed.service_type,
         bedrooms=seed.bedrooms, bathrooms=seed.bathrooms, extras=seed.extras,
         sqft=seed.sqft, frequency=seed.frequency,
@@ -102,7 +108,14 @@ def _copy_visit(seed, on_date, group):
         stripe_payment_method_id=seed.stripe_payment_method_id,
         monthly_mode=getattr(seed, 'monthly_mode', None),
         recurring_group=group, recurring_active=True,
+        **seed.commercial_carry(),
     )
+    fields.update(overrides)
+    return Booking(**fields)
+
+
+def _copy_visit(seed, on_date, group):
+    return clone_booking(seed, on_date, group)
 
 
 def _visit_dates(seed, from_date, horizon, anchor=None):

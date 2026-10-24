@@ -66,9 +66,15 @@ def org(days_old=0, **kw):
 
 
 def running(days_in, **kw):
-    """Set up `days_in` days ago, two days after signing up. The end date is
-    30 days from signup and setting up does not move it."""
-    return org(days_old=days_in + 2, activated_at=NOW - timedelta(days=days_in), **kw)
+    """Got it working `days_in` days ago. The clock still runs from signup."""
+    return org(days_old=days_in + 2,
+               activated_at=NOW - timedelta(days=days_in), **kw)
+
+
+def ending_soon(days_old=28, **kw):
+    """Nearly out of its thirty days, and it did get going."""
+    return org(days_old=days_old,
+               activated_at=NOW - timedelta(days=days_old - 8), **kw)
 
 
 print('\n1. The first week is no longer silent')
@@ -111,21 +117,23 @@ check(tn.due(running(9, nudges_sent='activated,day2'), next_step=step) == 'featu
       'day 9 with a step undone — the feature note')
 check(tn.due(running(9, nudges_sent='activated,day2')) is None,
       'with nothing undone, nothing')
-check(tn.due(running(25, nudges_sent='activated,day2'), next_step=step) == 'ending',
+check(tn.due(ending_soon(28, nudges_sent='activated,day2'), next_step=step) == 'ending',
       'and never in competition with "3 days left"')
 subj, html = tn.compose(running(9), 'feature', step)
 check('Share your booking page' in html and '/settings/booking-page' in html,
       'it names the step and links to it')
 
 print('\n5. A week after it lapses, once, and only for somebody who used it')
-lapsed = dict(running(22), trial_ends_at=NOW - timedelta(days=8),
+lapsed = dict(running(22), created_at=NOW - timedelta(days=38),
+              trial_ends_at=NOW - timedelta(days=8),
               nudges_sent='activated,day2,ending,ended')
 check(tn.due(lapsed) == 'winback', 'a week on — here is what you would get back')
 check(tn.due(dict(lapsed, nudges_sent=lapsed['nudges_sent'] + ',winback')) is None,
       'and only once')
 check(tn.due(dict(lapsed, activated_at=None)) is None,
       'never to a trial that lapsed without being started')
-check(tn.due(dict(lapsed, trial_ends_at=NOW - timedelta(days=90))) is None,
+check(tn.due(dict(lapsed, created_at=NOW - timedelta(days=200),
+                  trial_ends_at=NOW - timedelta(days=90))) is None,
       'never to one that lapsed months ago')
 
 print('\n6. Never to the people the rules already protect')
@@ -136,9 +144,55 @@ for label, o in (('paying', org(days_old=1, subscription_status='active')),
                  ('suspended', org(days_old=1, status='suspended'))):
     check(tn.due(o) is None, f'{label}: nothing')
 
+print('\n6b. Gone quiet: set up and stopped coming back, or never started')
+away = lambda d: NOW - timedelta(days=d)          # noqa: E731
+quiet = running(10, nudges_sent='activated,day2,feature', owner_active_at=away(8))
+check(tn.due(quiet) == 'quiet', 'on a trial, set up, away 8 days: did the week get away?')
+check(tn.due(dict(quiet, owner_active_at=away(3))) is None, 'not after a few days away')
+check(tn.due(dict(quiet, owner_active_at=away(20))) is None,
+      'not once they are long gone: the window ends')
+check(tn.due(dict(quiet, owner_active_at=None)) is None,
+      'never on a guess: no recorded activity is not "away"')
+check(tn.due(dict(quiet, nudges_sent='activated,day2,feature,quiet')) is None, 'and only once')
+check(tn.due(dict(quiet, activated_at=None, created_at=NOW - timedelta(days=12),
+                  nudges_sent='day1,day2,day4,day5,start_7')) != 'quiet',
+      'never to somebody who never set up (they get the getting-started notes)')
+check(tn.due(dict(quiet, subscription_status='active')) is None, 'never to a paying customer')
+both = dict(quiet, nudges_sent='activated,day2')
+step = {'key': 'job', 'title': 'Book a job'}
+check(tn.due(both, next_step=step) == 'quiet', 'quiet and feature both due: quiet first')
+check(tn.due(both, next_step=step, skip={'quiet'}) == 'feature',
+      'but with quiet switched off, feature still goes (it is not swallowed)')
+check(tn.due(both, next_step=step, skip=set(tn.ALL)) is None,
+      'and with everything switched off, nothing')
+
+free = dict(running(30), created_at=NOW - timedelta(days=60),
+            trial_ends_at=NOW - timedelta(days=30),
+            nudges_sent='activated,day2,ending,ended,winback', owner_active_at=away(20))
+check(tn.due(free) == 'free_quiet', 'free plan, set up, away 20 days: need a hand?')
+check(tn.due(dict(free, owner_active_at=away(10))) is None, 'not after 10 days away')
+check(tn.due(dict(free, owner_active_at=away(45))) is None, 'not after a month and a half')
+check(tn.due(dict(free, owner_active_at=None)) is None, 'and not without recorded activity')
+check(tn.due(dict(free, nudges_sent=free['nudges_sent'] + ',free_quiet')) is None, 'only once')
+
+never = org(days_old=46, trial_ends_at=NOW - timedelta(days=16),
+            nudges_sent='day1,day2,day4,day5,start_7,start_21,ending,ended')
+check(tn.due(never) == 'free_start', 'free plan, never set up, 16 days on: still here')
+check(tn.due(dict(never, created_at=NOW - timedelta(days=120),
+                  trial_ends_at=NOW - timedelta(days=90))) is None,
+      'never to a trial that ended months ago')
+check(tn.due(dict(never, trial_ends_at=NOW - timedelta(days=5))) is None, 'nor in its first week')
+check(tn.due(dict(never, nudges_sent=never['nudges_sent'] + ',free_start')) is None, 'only once')
+for label, o in (('test account', dict(free, is_test=True)), ('demo', dict(free, is_demo=True)),
+                 ('opted out', dict(free, nudges_opted_out=True)),
+                 ('suspended', dict(free, status='suspended'))):
+    check(tn.due(o) is None, f'{label}: no gone-quiet note either')
+check(tn.due(dict(free, nudge_last_at=NOW - timedelta(hours=2))) is None,
+      'and still one email a day')
+
 print('\n7. Every new email reads right')
 for kind in ('day1', 'day2', 'day4', 'day5', 'activated', 'feature',
-             'first_booking', 'winback'):
+             'first_booking', 'winback', 'quiet', 'free_quiet', 'free_start'):
     subj, html = tn.compose(running(1), kind, step)
     check('Brightside' in subj and 'brightside.rollcall.test' in html
           and '/billing' in html,
@@ -245,7 +299,7 @@ SENT.clear()
 r = client.post('/signup', data={
     'business': 'Sparkle Cleaning', 'slug': 'sparkle', 'name': 'Dana Reed',
     'email': 'dana@sparkle.test', 'password': 'a-perfectly-fine-password',
-    'terms_accepted': '1'}, headers=PRODUCT)
+    'terms_accepted': '1', 'zip_code': '32801'}, headers=PRODUCT)
 check(r.status_code == 302, 'signup still goes straight into the account')
 token = r.headers['Location'].split('/welcome/')[1]
 check(not leads_for('dana@sparkle.test'), 'and they are no longer a half-finished signup')
@@ -254,8 +308,8 @@ code = email_confirm.code('sparkle', 'dana@sparkle.test')
 check(len(welcome) == 1, 'one email to them, not a welcome and a separate confirm')
 check(welcome and code in welcome[0]['html'] and 'sparkle.rollcall.test' in welcome[0]['html'],
       'it carries their address and their code')
-check(welcome and 'thirty days start today' in ' '.join(welcome[0]['html'].split()),
-      'and the trial rule the code actually uses: thirty days from today')
+check(welcome and 'Your thirty days start today' in ' '.join(welcome[0]['html'].split()),
+      'and the trial rule the code actually uses: thirty days from signup')
 link = re.search(r'href="(https?://sparkle\.rollcall\.test/confirm-email/[^"]+)"',
                  welcome[0]['html']) if welcome else None
 check(link is not None, 'and a link to the "is this you?" page on their own address')
@@ -312,7 +366,7 @@ client.post('/confirm-email', headers=COMPANY, data={'code': new_code})
 check(control_plane.find(engine, 'sparkle').get('email_confirmed_at'),
       'the new code does')
 
-print('\n14. The moment they are set up, a note — once')
+print('\n14. The moment they get it working, a note — once')
 SENT.clear()
 with app.app_context(), tenancy.use_tenant('sparkle'):
     from extensions import db
@@ -323,8 +377,8 @@ with app.app_context(), tenancy.use_tenant('sparkle'):
     db.session.remove()
 client.get('/', headers=COMPANY, follow_redirects=True)
 client.get('/', headers=COMPANY, follow_redirects=True)
-got = [m for m in SENT if 'you are set up' in m['subject']]
-check(len(got) == 1, 'the "you are set up" email, sent when it happened')
+got = [m for m in SENT if 'that is it working' in m['subject'].lower()]
+check(len(got) == 1, 'the "that is it working" email, sent when it happened')
 check('activated' in (control_plane.find(engine, 'sparkle').get('nudges_sent') or ''),
       'and recorded, so it is never sent again')
 

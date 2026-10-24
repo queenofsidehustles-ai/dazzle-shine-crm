@@ -10,12 +10,155 @@
 
   <!-- LEFT: Client & Service Info -->
   <div data-reorder-col="left">
-    <div class="card" data-card-key="customer">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">
-        Client Info
-        <a href="#" onclick="document.getElementById('contactBox').open=true;this.blur();return false"
-           style="float:right;font-size:0.72rem;color:var(--amber-deep);text-transform:none;letter-spacing:0;font-weight:600">✎ edit</a>
-      </h2>
+  <div class="card" data-card-key="booking">
+    <h2 style="font-size:1rem;font-weight:700;margin:0 0 4px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">The booking</h2>
+    {% if booking.status == 'completed' %}
+    {# Repeat this job on demand. Sits at the top of the booking, where the owner
+       is looking when a client asks for another clean; the client page's
+       "Repeat last clean" links to #book-again, so that link opens it. #}
+    <details id="book-again" style="margin:6px 0 14px;border:1px solid var(--line);border-radius:10px;background:var(--ground)">
+      <summary style="cursor:pointer;padding:10px 13px;font-size:0.85rem;font-weight:700;color:var(--muted)">
+        🔁 Book again — repeat this clean on a new date
+      </summary>
+      <form id="bookAgainForm" method="POST" action="{{ url_for('bookings.book_again', booking_id=booking.id) }}"
+            style="padding:0 13px 14px">
+        <p style="font-size:0.8rem;color:var(--muted);margin:0 0 10px">
+          A one-off booking, not a recurring plan — nothing else gets scheduled.
+        </p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="form-group" style="margin-bottom:9px">
+            <label style="font-size:0.78rem">Date</label>
+            <input type="date" name="repeat_date" required
+                   style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:0.9rem">
+          </div>
+          <div class="form-group" style="margin-bottom:9px">
+            <label style="font-size:0.78rem">Arrival time</label>
+            <input type="text" name="repeat_time" value="{{ booking.preferred_time or '' }}" placeholder="10:00 AM"
+                   style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:0.9rem">
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:9px">
+          <label style="font-size:0.78rem">Price</label>
+          <input type="text" name="repeat_price" value="{{ '%.2f'|format(booking.price) if booking.price else '' }}"
+                 placeholder="e.g. 150"
+                 style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:0.9rem">
+        </div>
+        {% if booking.assigned_cleaner and (booking.crew_size or 1) == 1 %}
+        <label style="display:flex;gap:8px;align-items:center;font-size:0.85rem;margin-bottom:12px">
+          <input type="checkbox" name="same_cleaner" value="1" checked> Same cleaner ({{ booking.assigned_cleaner }})
+        </label>
+        {% endif %}
+        <p id="bookAgainError" role="alert" hidden
+           style="font-size:0.82rem;color:var(--warn);font-weight:600;margin:0 0 10px"></p>
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">🔁 Book again</button>
+      </form>
+      {# Drawn in place of the form once the repeat is booked — no page change. #}
+      <div id="bookAgainDone" hidden style="padding:0 13px 14px" aria-live="polite">
+        <div style="background:var(--good-soft);color:var(--good);border-radius:9px;padding:11px 14px;font-weight:600;font-size:0.9rem">
+          ✅ <span id="bookAgainSummary"></span>
+        </div>
+        <p id="bookAgainSent" hidden style="font-size:0.85rem;color:var(--good);font-weight:600;margin:10px 0 0"></p>
+        <p id="bookAgainConfirmError" role="alert" hidden
+           style="font-size:0.82rem;color:var(--warn);font-weight:600;margin:10px 0 0"></p>
+        <button type="button" id="bookAgainConfirm" class="btn btn-gold"
+                style="width:100%;justify-content:center;margin-top:10px"></button>
+        <p id="bookAgainNoContact" hidden style="font-size:0.8rem;color:var(--softer);margin:10px 0 0">
+          No email or phone on file, so there's nobody to ask — add one on the new booking.</p>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;font-size:0.85rem;font-weight:600">
+          <a id="bookAgainPreview" href="#" target="_blank" rel="noopener" style="color:var(--amber-deep)">Preview what they'd get</a>
+          <a id="bookAgainOpen" href="#" style="color:var(--amber-deep)">Open the new booking →</a>
+          <a id="bookAgainAnother" href="#" style="color:var(--muted)">Book another</a>
+        </div>
+      </div>
+    </details>
+    <script>
+      if (location.hash === '#book-again') document.getElementById('book-again').open = true;
+
+      // Post the repeat in the background and draw the result in place. Without
+      // JavaScript the form still submits normally and redirects.
+      (function () {
+        const form = document.getElementById('bookAgainForm');
+        if (!form) return;
+        const $ = (id) => document.getElementById(id);
+        const post = async (url, body) => {
+          const res = await fetch(url, { method: 'POST', body, headers: { 'X-Requested-With': 'fetch' } });
+          let data = null;
+          try { data = await res.json(); } catch (e) {}
+          if (!data) {
+            // No answer we can read, so it may have gone through. Asking again
+            // is safe: a repeat made twice in a row is only booked once.
+            throw new Error("Couldn't confirm that it went through — try again; it won't be done twice.");
+          }
+          if (!res.ok || !data.ok) {
+            throw new Error(data.error || 'Something went wrong — nothing was changed.');
+          }
+          return data;
+        };
+
+        form.addEventListener('submit', async (ev) => {
+          ev.preventDefault();
+          const btn = form.querySelector('button[type=submit]');
+          const err = $('bookAgainError');
+          err.hidden = true;
+          btn.disabled = true;
+          try {
+            const r = await post(form.action, new FormData(form));
+            const price = r.price ? ' · $' + Number(r.price).toFixed(2) : '';
+            $('bookAgainSummary').textContent = 'Booked again for ' + r.when + price + ' — booking #' + r.id;
+            $('bookAgainOpen').href = r.url;
+            $('bookAgainPreview').href = r.preview_url;
+            $('bookAgainSent').hidden = true;
+            $('bookAgainConfirmError').hidden = true;
+            const cta = $('bookAgainConfirm');
+            cta.hidden = !r.can_confirm;
+            $('bookAgainNoContact').hidden = r.can_confirm;
+            $('bookAgainPreview').hidden = !r.can_confirm;
+            cta.disabled = false;
+            cta.textContent = '📨 Ask ' + ((r.name || 'them').split(' ')[0]) + ' to confirm';
+            cta.onclick = async () => {
+              cta.disabled = true;
+              $('bookAgainConfirmError').hidden = true;
+              const body = new FormData();
+              body.set('to', 'customer');
+              body.set('plan_frequency', 'one_time');
+              body.set('plan_date', r.plan_date);
+              body.set('plan_time', r.plan_time);
+              if (r.price) body.set('plan_price', r.price);
+              try {
+                const sent = await post(r.confirm_url, body);
+                $('bookAgainSent').textContent = sent.already
+                  ? 'Already sent a moment ago — you\'ll be told either way.'
+                  : 'Sent by ' + sent.sent.join(' and ') + " — you'll be told either way.";
+                $('bookAgainSent').hidden = false;
+                cta.hidden = true;
+              } catch (e) {
+                $('bookAgainConfirmError').textContent = e.message;
+                $('bookAgainConfirmError').hidden = false;
+                cta.disabled = false;
+              }
+            };
+            form.hidden = true;
+            $('bookAgainDone').hidden = false;
+          } catch (e) {
+            err.textContent = e.message;
+            err.hidden = false;
+          } finally {
+            btn.disabled = false;
+          }
+        });
+
+        $('bookAgainAnother').addEventListener('click', (ev) => {
+          ev.preventDefault();
+          $('bookAgainDone').hidden = true;
+          form.reset();
+          form.hidden = false;
+        });
+      })();
+    </script>
+    {% endif %}
+
+      <div style="">
+      <h3 style="font-size:0.82rem;font-weight:700;margin:0 0 12px;color:var(--softer);text-transform:uppercase;letter-spacing:0.1em">Customer</h3>
       <div class="detail-row"><span class="dl">Name</span><span class="dv">{{ booking.name }}</span></div>
       <div class="detail-row"><span class="dl">Email</span><span class="dv">
         {% if booking.email %}<a href="mailto:{{ booking.email }}" style="color:var(--muted)">{{ booking.email }}</a>
@@ -192,26 +335,44 @@
       {% endif %}
     </div>
 
-    <div class="card" data-card-key="service">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">
-        Service Details
-        <a href="#" onclick="document.getElementById('serviceBox').open=true;this.blur();return false"
-           style="float:right;font-size:0.72rem;color:var(--amber-deep);text-transform:none;letter-spacing:0;font-weight:600">✎ edit</a>
-      </h2>
+      <div style="border-top:1px solid var(--line);padding-top:18px;margin-top:18px">
+      <h3 style="font-size:0.82rem;font-weight:700;margin:0 0 12px;color:var(--softer);text-transform:uppercase;letter-spacing:0.1em">The job</h3>
       <div class="detail-row"><span class="dl">Service</span><span class="dv">{{ booking.service_label }}</span></div>
+      {% if booking.is_commercial %}
+      {% set acct = booking.commercial_account %}
+      {% if acct %}<div class="detail-row"><span class="dl">Account</span><span class="dv"><a href="{{ url_for('commercial.detail', account_id=acct.id) }}">🏢 {{ acct.business_name }}</a></span></div>{% endif %}
+      <div class="detail-row"><span class="dl">Square feet</span><span class="dv">{{ '{:,}'.format(booking.sqft) if booking.sqft else '—' }}</span></div>
+      <div class="detail-row"><span class="dl">Scope of work</span><span class="dv" style="white-space:pre-line;text-align:left">{{ booking.scope_of_work or '—' }}</span></div>
+      {% else %}
       <div class="detail-row"><span class="dl">Bedrooms</span><span class="dv">{{ booking.bedrooms or '—' }}</span></div>
       <div class="detail-row"><span class="dl">Bathrooms</span><span class="dv">{{ booking.bathrooms or '—' }}</span></div>
       <div class="detail-row"><span class="dl">Add-ons</span><span class="dv">{{ booking.extras or '—' }}</span></div>
+      {% endif %}
       <div class="detail-row"><span class="dl">Repeats</span><span class="dv">{{ FREQUENCY_LABELS.get(booking.frequency, '—') }}</span></div>
-      <div class="detail-row"><span class="dl">Requested Date</span><span class="dv">{{ booking.preferred_date or '—' }}</span></div>
-      <div class="detail-row"><span class="dl">Requested Time</span><span class="dv">{{ booking.preferred_time or '—' }}</span></div>
+      <div class="detail-row"><span class="dl">Date</span><span class="dv">{{ booking.preferred_date or '—' }}</span></div>
+      <div class="detail-row"><span class="dl">Time</span><span class="dv">{{ booking.preferred_time or '—' }}</span></div>
       <div class="detail-row"><span class="dl">Received</span><span class="dv" style="color:var(--softer);font-size:0.88rem">{{ booking.created_at.strftime('%B %d, %Y at %I:%M %p') }}</span></div>
 
       {# What was booked could not be corrected at all: the only way to change a
          bedroom count was to cancel and re-key the job, losing its history. #}
+      {% if booking.is_commercial %}
+      <details id="scopeBox" style="margin-top:12px;border:1px solid var(--line);border-radius:10px;background:var(--ground)">
+        <summary style="cursor:pointer;padding:10px 13px;font-size:0.85rem;font-weight:700;color:var(--muted)">
+          ✎ Correct the scope of work
+        </summary>
+        <form method="POST" action="{{ url_for('bookings.update_scope', booking_id=booking.id) }}" style="padding:0 13px 13px">
+          <div class="form-group"><label>Scope of work <span style="font-weight:400;color:var(--softer)">— one task a line; the customer and the cleaner both see this</span></label>
+            <textarea name="scope_of_work" rows="6">{{ booking.scope_of_work or '' }}</textarea></div>
+          <div class="form-group"><label>Square feet</label>
+            <input type="number" name="sqft" step="50" value="{{ booking.sqft or '' }}"></div>
+          <p style="font-size:0.8rem;color:var(--softer);margin:0 0 10px">The price stays as it is — change it with Correct price.</p>
+          <button type="submit" class="btn btn-gold" style="width:100%;padding:10px;font-size:0.9rem">Save scope of work</button>
+        </form>
+      </details>
+      {% else %}
       <details id="serviceBox" style="margin-top:12px;border:1px solid var(--line);border-radius:10px;background:var(--ground)">
         <summary style="cursor:pointer;padding:10px 13px;font-size:0.85rem;font-weight:700;color:var(--muted)">
-          ✎ Correct what was booked
+          ✎ Change the job, date or time
         </summary>
         <form method="POST" action="{{ url_for('bookings.update_service', booking_id=booking.id) }}"
               id="svcForm" style="padding:0 13px 14px">
@@ -274,12 +435,12 @@
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:10px">
             <div class="form-group" style="margin:0">
-              <label style="font-size:0.78rem">Requested date</label>
+              <label style="font-size:0.78rem">Date</label>
               <input type="date" name="preferred_date" value="{{ booking.preferred_date or '' }}"
                      style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:0.9rem">
             </div>
             <div class="form-group" style="margin:0">
-              <label style="font-size:0.78rem">Requested time</label>
+              <label style="font-size:0.78rem">Time</label>
               <input type="text" name="preferred_time" value="{{ booking.preferred_time or '' }}"
                      placeholder="e.g. 10:00 AM"
                      style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:0.9rem">
@@ -306,23 +467,24 @@
               </span>
             </label>
           </div>
-          <button type="submit" class="btn btn-gold" style="width:100%;padding:10px;font-size:0.9rem">Save service details</button>
+          <button type="submit" class="btn btn-gold" style="width:100%;padding:10px;font-size:0.9rem">Save</button>
         </form>
       </details>
+      {% endif %}
     </div>
-  </div>
 
-  <!-- RIGHT: Edit Status & Notes -->
-  <div data-reorder-col="right">
-    <div class="card" data-card-key="manage">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Manage Booking</h2>
+      {# Status and notes. They shared the money card's form with the price, the
+         lead fee, the date and a cleaner picker; they are about the job, so
+         they sit with it. #}
+      <div style="border-top:1px solid var(--line);padding-top:18px;margin-top:18px">
+      <h3 style="font-size:0.82rem;font-weight:700;margin:0 0 12px;color:var(--softer);text-transform:uppercase;letter-spacing:0.1em">Status &amp; notes</h3>
       {% if booking.status not in ('completed', 'cancelled', 'on_hold') %}
-      <form method="POST" action="{{ url_for('bookings.mark_complete', booking_id=booking.id) }}" style="margin-bottom:16px"
+      <form method="POST" action="{{ url_for('bookings.mark_complete', booking_id=booking.id) }}" style="margin-bottom:14px"
             onsubmit="return confirm('Mark this booking complete? No photos needed.')">
         <button type="submit" class="btn btn-outline btn-sm">✅ Mark complete (no photos needed)</button>
       </form>
       {% endif %}
-      <form method="POST" id="jobEditForm">
+      <form method="POST" id="statusNotesForm" action="{{ url_for('bookings.detail', booking_id=booking.id) }}">
         <div class="form-group">
           <label>Status</label>
           <select name="status">
@@ -333,159 +495,223 @@
           </select>
         </div>
         <div class="form-group">
-          <label>Total price ($) <span style="font-weight:400;color:var(--softer)">— what the customer pays</span></label>
-          <input type="number" id="f-price" name="price" step="0.01" placeholder="e.g. 150" value="{{ booking.price or '' }}" />
-        </div>
-        <div class="form-group">
-          <label>📣 Lead fee ($) <span style="font-weight:400;color:var(--softer)">— ad cost, part of the total but excluded from the cleaner's cut</span></label>
-          <input type="number" id="f-leadfee" name="lead_fee" step="0.01" placeholder="0" value="{{ booking.lead_fee or '' }}" />
-        </div>
-
-        {# The lead fee is pricing — a slice of the customer's price set aside
-           to cover ads. The money paid to Google is a separate real expense.
-           This writes one from the other so the same figure isn't typed twice. #}
-        {% if booking.lead_fee and not ad_expense %}
-        <div style="background:var(--info-soft);border:1px solid var(--info-soft);border-radius:9px;padding:11px 13px;margin:-6px 0 14px">
-          <div style="font-size:0.85rem;color:var(--info);font-weight:700;margin-bottom:3px">
-            💡 Did you actually pay ${{ '%.2f' % booking.lead_fee }} for this lead?
-          </div>
-          <p style="font-size:0.78rem;color:var(--info);margin:0 0 8px">
-            The lead fee above is what you built into her price. Logging what you really paid puts it
-            in your Expenses and Profit &amp; Loss — no need to type it again over there.
-          </p>
-          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-            <select name="category" form="adCostForm" style="flex:1;min-width:140px;padding:7px 9px;font-size:0.82rem;margin:0">
-              {% for key, label in ad_categories %}
-              <option value="{{ key }}">{{ label.replace('Advertising — ', '') }}</option>
-              {% endfor %}
-            </select>
-            <span style="font-size:0.85rem;color:var(--info)">$</span>
-            <input type="number" step="0.01" min="0" name="amount" form="adCostForm"
-                   value="{{ '%.2f' % booking.lead_fee }}" style="width:88px;padding:7px 9px;margin:0" />
-            <button type="submit" form="adCostForm" class="btn btn-outline" style="padding:6px 13px;font-size:0.8rem">Log it</button>
-          </div>
-        </div>
-        {% elif ad_expense %}
-        <p style="font-size:0.8rem;color:var(--good);margin:-6px 0 14px">
-          ✅ ${{ '%.2f' % ad_expense.amount }} of ad cost logged for this job on {{ ad_expense.date }} —
-          <a href="{{ url_for('money.expenses') }}" style="color:var(--good);font-weight:600">see it in Expenses</a>.
-        </p>
-        {% endif %}
-        {# LIVE breakdown. This tile and the one on the pay card below are the
-           same sum and must never disagree: both end at what she actually
-           keeps, after the cleaner is paid. This one used to stop at
-           price − lead fee and call THAT "You keep", so the two tiles on one
-           screen showed different money and the bigger number was the wrong
-           one. Cleaner pay is committed_labor — the figure the offer promises
-           — and it does not move as she edits the price, which is the point. #}
-        <div style="background:var(--ink);color:#fff;border-radius:12px;padding:14px 16px;margin-bottom:16px"
-             data-labor="{{ '%.2f' % booking.committed_labor if booking.committed_labor is not none else '' }}">
-          <div style="display:flex;justify-content:space-between;font-size:0.88rem;color:rgba(255,255,255,0.7);padding:2px 0">
-            <span>Customer pays</span><span id="rt-total">$0.00</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;font-size:0.88rem;color:rgba(255,255,255,0.7);padding:2px 0">
-            <span>Lead fee (yours)</span><span id="rt-fee">$0.00</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;font-size:0.88rem;color:rgba(255,255,255,0.7);padding:2px 0">
-            <span>Cleaner pay</span><span id="rt-labor">—</span>
-          </div>
-          <div style="border-top:1px solid rgba(255,255,255,0.18);margin:8px 0"></div>
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <span style="font-weight:700">{{ 'You keep' if booking.committed_labor is not none else 'Before cleaner pay' }}</span>
-            <span id="rt-base" style="font-weight:700;font-size:1.2rem;color:var(--amber)">$0.00</span>
-          </div>
-          <p style="font-size:0.72rem;color:rgba(255,255,255,0.45);margin-top:5px">
-            {% if booking.committed_labor is not none %}
-              Cleaner pay is set by the hours on the pay card, not by this price. Discount the job and their pay doesn't move.
-            {% else %}
-              No cleaner pay set yet, so this is only what's left before paying anyone. This job still pays the old 50% — add the hours on the pay card to switch it to ${{ '%.0f' % labor_rate }}/hour.
-            {% endif %}
-          </p>
-        </div>
-        <div class="form-group">
-          <label>Confirmed Date</label>
-          <input type="date" name="preferred_date" value="{{ booking.preferred_date or '' }}" />
-        </div>
-        <div class="form-group">
-          <label>Confirmed Time</label>
-          <input type="text" name="preferred_time" placeholder="e.g. 10:00 AM" value="{{ booking.preferred_time or '' }}" />
-        </div>
-        <div class="form-group">
-          <label>{{ 'Lead Cleaner' if booking.is_crew_job else 'Assigned Cleaner' }}
-            {% if booking.is_crew_job %}<span style="font-weight:400;color:var(--softer)">(this is a {{ booking.crew_size }}-cleaner job — manage the full crew below)</span>{% endif %}</label>
-          <select name="assigned_cleaner">
-            <option value="">— Unassigned —</option>
-            {% for s in staff %}
-            <option value="{{ s.name }}" {{ 'selected' if booking.assigned_cleaner == s.name }}>{{ s.name }}</option>
-            {% endfor %}
-            {% if booking.assigned_cleaner and booking.assigned_cleaner not in (staff | map(attribute='name') | list) %}
-            <option value="{{ booking.assigned_cleaner }}" selected>{{ booking.assigned_cleaner }}</option>
-            {% endif %}
-          </select>
-          {% if booking.assigned_cleaner %}
-          <div style="margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-            {% if booking.cleaner_notified_at %}
-              <span style="font-size:0.78rem;color:var(--softer)">📨 Notified {{ booking.cleaner_notified_at.strftime('%b %d, %Y') }}</span>
-            {% else %}
-              <span style="font-size:0.78rem;color:var(--amber-deep)">⚠️ Not yet notified — save to send</span>
-            {% endif %}
-            {% if booking.cleaner_response == 'accepted' %}
-              <span style="background:var(--good-soft);color:var(--good);padding:2px 10px;border-radius:999px;font-size:0.75rem;font-weight:700">✅ Accepted</span>
-            {% elif booking.cleaner_response == 'declined' %}
-              <span style="background:var(--warn-soft);color:var(--warn);padding:2px 10px;border-radius:999px;font-size:0.75rem;font-weight:700">❌ Declined — reassign</span>
-            {% else %}
-              <span style="background:var(--amber-soft);color:var(--amber-deep);padding:2px 10px;border-radius:999px;font-size:0.75rem;font-weight:700">⏳ Awaiting response</span>
-            {% endif %}
-          </div>
-          {% endif %}
-        </div>
-        <div class="form-group">
-          <label>Hours Worked <span style="font-weight:400;color:var(--softer)">(for payroll)</span></label>
-          <input type="number" name="hours_worked" step="0.25" placeholder="e.g. 2.5" value="{{ booking.hours_worked or '' }}" />
-        </div>
-        <div class="form-group">
-          <label>🔑 Entry / Access Notes <span style="font-weight:400;color:var(--softer)">(the cleaner sees this)</span></label>
+          <label>🔑 Notes for the cleaner <span style="font-weight:400;color:var(--softer)">— gate code, key, pets</span></label>
           <textarea name="access_notes" placeholder="Gate code, where the key is, parking, alarm code, pets...">{{ booking.access_notes or '' }}</textarea>
         </div>
         <div class="form-group">
-          <label>Internal Notes <span style="font-weight:400;color:var(--softer)">(private to you)</span></label>
-          <textarea name="internal_notes" placeholder="Notes for your team only...">{{ booking.internal_notes or '' }}</textarea>
+          <label>Private notes <span style="font-weight:400;color:var(--softer)">— only you see these</span></label>
+          <textarea name="internal_notes" placeholder="Anything for your own records">{{ booking.internal_notes or '' }}</textarea>
         </div>
-        <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer;background:var(--ground);border:1px solid var(--line);border-radius:8px;padding:11px 12px;margin-bottom:14px">
+        {# The marker says the tickbox was on the form, so an unticked box means
+           "ask them" -- and a form without the box leaves the setting alone. #}
+        <input type="hidden" name="skip_review_shown" value="1" />
+        <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer;font-size:0.84rem;color:var(--muted);margin-bottom:14px">
           <input type="checkbox" name="skip_review" style="width:auto;margin-top:3px" {{ 'checked' if booking.skip_review }} />
-          <span style="font-size:0.86rem;color:var(--muted)">
-            <strong style="color:var(--info)">Don't ask this customer for a review</strong><br>
-            Skips the rating &amp; review-request emails when this job is completed — for customers you'd rather not prompt yet.
-          </span>
+          <span>Don't ask this customer for a review when the job is done</span>
         </label>
-        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">Save Changes</button>
-      </form>
-
-      {% if booking.crew %}
-      <form method="POST" action="{{ url_for('bookings.notify_pay', booking_id=booking.id) }}" style="margin-top:12px">
-        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">📲 Text the crew their updated pay</button>
-      </form>
-      {% elif booking.assigned_cleaner and not booking.open_for_claim %}
-      <form method="POST" action="{{ url_for('bookings.notify_pay', booking_id=booking.id) }}" style="margin-top:12px">
-        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">📲 Text {{ booking.assigned_cleaner.split()[0] }} their updated pay</button>
-      </form>
-      {% endif %}
-
-      <form method="POST" action="{{ url_for('bookings.delete', booking_id=booking.id) }}"
-            onsubmit="return confirm('Delete this booking permanently?')"
-            style="margin-top:12px">
-        <button type="submit" class="btn btn-danger" style="width:100%;justify-content:center">Delete Booking</button>
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">Save</button>
       </form>
     </div>
+  </div>
+  </div>
 
+  <!-- RIGHT: The money and who does it -->
+  <div data-reorder-col="right">
     {# Sit outside the other forms so their buttons can post on their own #}
     <form method="POST" id="reRateForm" action="{{ url_for('bookings.re_rate', booking_id=booking.id) }}"></form>
     <form method="POST" id="adCostForm" action="{{ url_for('bookings.log_ad_cost', booking_id=booking.id) }}"></form>
 
     <!-- Crew — big houses that need more than one cleaner -->
-    <div class="card" data-card-key="crew-pay" style="margin-top:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">👥 Who's Paid For This Job</h2>
+    <div class="card" data-card-key="who" style="margin-bottom:18px">
+    <h2 style="font-size:1rem;font-weight:700;margin:0 0 12px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Who's doing it
+      {% if booking.needs_cleaner %}<span style="font-size:0.72rem;letter-spacing:0;text-transform:none;background:var(--warn-soft);color:var(--warn);padding:2px 9px;border-radius:999px;margin-left:6px">Nobody yet</span>{% endif %}</h2>
+    {# One card, one way to put somebody on a job. It used to open with a
+       "Pay each cleaner" box and a Save pay button before anyone was on it,
+       then ask "She gets paid" again in the assign form underneath -- the same
+       money asked twice, above the question it depends on. Nobody on the job:
+       the card is the assign form. Somebody on it: the card is them and their
+       pay, with "add another" and the pay workings folded away. #}
+    {% set assign_form %}
+      {% if not settled %}
+      <form method="POST" action="{{ url_for('bookings.assign', booking_id=booking.id) }}"
+            {% if booking.crew %}style="padding:0 13px 14px"{% endif %}>
+        <div class="form-group" style="margin-bottom:10px">
+          <label for="assignTo" style="font-size:0.84rem">{{ 'Add another cleaner' if booking.crew else 'Assign to' }}</label>
+          <select id="assignTo" name="assign_to" style="width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:8px">
+            <option value="">— Pick a cleaner —</option>
+            {% for s in staff %}
+              {% if not booking.crew_row_for(s) %}<option value="{{ s.id }}">{{ s.name }}</option>{% endif %}
+            {% endfor %}
+            <option value="team">— Offer it to the whole team —</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:10px">
+          <label for="assignPay" style="font-size:0.84rem">She gets paid</label>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="color:var(--softer)">$</span>
+            <input id="assignPay" type="number" step="0.01" min="0" name="add_pay"
+                   placeholder="{{ '%.2f' % booking.default_crew_pay(staff[0]) if staff else '' }}"
+                   style="width:120px;margin:0" />
+            <span style="font-size:0.85rem;color:var(--softer)">flat for the job</span>
+          </div>
+          <p style="font-size:0.78rem;color:var(--softer);margin-top:5px">
+            {% if booking.labor_budget is not none %}
+              Leave it blank for <strong>${{ '%.2f' % (booking.labor_budget / (booking.crew_size or 1)) }}</strong> — your chart's figure for this job.
+              Type over it when the job is harder than the chart assumes.
+            {% else %}
+              Leave it blank and this job pays its usual share. Put the hours in under
+              <em>Pay details</em> to price it by the hour instead.
+            {% endif %}
+          </p>
+        </div>
+        {# How many people this job needs is an ASSIGNMENT decision with a pay
+           consequence, not an arithmetic detail -- it decides how many spots the
+           team offer advertises and how the pot divides. It spent one release
+           folded into "How this pay is worked out", where nobody could find it,
+           and because the form below used to hide itself once the spots were
+           full, a one-cleaner job had no visible way to become a two-cleaner
+           job at all. #}
+        <div class="form-group" style="margin-bottom:10px">
+          <label for="crewSize" style="font-size:0.84rem">Cleaners needed</label>
+          <select id="crewSize" name="crew_size" style="width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:8px">
+            {% for n in range(1, 7) %}
+            <option value="{{ n }}" {{ 'selected' if (booking.crew_size or 1) == n }}>{{ n }} paid cleaner{{ 's' if n != 1 }}</option>
+            {% endfor %}
+          </select>
+          <p style="font-size:0.78rem;color:var(--softer);margin-top:5px">
+            Don't count yourself if you're working this one. Two cleaners splits the pay in
+            half each and tells the team there are two spots going.
+          </p>
+        </div>
+        {# The tickbox only means anything for a named cleaner. Offering the job
+           to everyone sends its own message -- date, service, size, area, pay and
+           a claim link, deliberately no address -- and whoever claims it gets the
+           full work order at that moment. Leaving the box on screen for the team
+           choice implied a decision that was never read. #}
+        <label id="woBox" style="display:flex;align-items:flex-start;gap:9px;font-size:0.84rem;margin-bottom:11px">
+          <input type="checkbox" name="send_checklist" value="1" checked style="width:16px;height:16px;margin-top:2px" />
+          <span>Send the work order now — address, entry notes, her pay and the
+            <strong>{{ booking.service_label }}</strong> checklist.
+            <span style="color:var(--softer)">Untick to put her on the job quietly and send it later.</span></span>
+        </label>
+        <p id="teamNote" style="display:none;font-size:0.82rem;line-height:1.5;color:var(--muted);
+                  background:var(--ground);border-radius:8px;padding:10px 12px;margin:0 0 11px">
+          The team sees the date, service, size, area and pay — <strong>not the address</strong>.
+          Whoever claims it gets the full work order automatically.
+        </p>
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">Assign &amp; send</button>
+      </form>
+      {% endif %}
+    {% endset %}
+    {% if not booking.crew %}{{ assign_form }}{% endif %}
       <form method="POST" action="{{ url_for('bookings.save_crew', booking_id=booking.id) }}">
+
+        {% if booking.crew or booking.is_crew_job %}
+        {# On an hours-based job the pot is the hours × the rate, not a slice of
+           the price. Showing the price-based pot here told her the crew was
+           splitting $245 when the hours said something quite different. #}
+        {% if not booking.is_crew_job %}
+        {% elif booking.crew_pay_each or booking.labor_budget is not none %}
+        {% set size = booking.crew_size or 1 %}
+        {% set each = booking.crew_pay_each if booking.crew_pay_each else (booking.labor_budget / size) %}
+        {% set total = each * size %}
+        <div style="background:var(--ink);color:#fff;border-radius:12px;padding:14px 16px;margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-weight:700">{{ size }} cleaner{{ '' if size == 1 else 's' }} ×</span>
+            <span style="font-weight:700;font-size:1.35rem;color:var(--amber)">${{ '%.2f' % each }} each</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:0.88rem;color:rgba(255,255,255,0.7);padding:6px 0 2px">
+            <span>{{ 'Pay you set' if booking.crew_pay_each else 'From the hours (%g × $%.0f/hr)' % (booking.payable_hours, booking.rate_applied) }}</span>
+            <span>${{ '%.2f' % total }} total</span>
+          </div>
+          <p style="font-size:0.74rem;color:rgba(255,255,255,0.45);margin-top:7px">
+            ${{ '%.2f' % each }} is the figure in the job offer and on payroll.
+            {# "You keep" lived here too, and it is the same subtraction the live
+               tile on the Manage Booking card performs. Two tiles on one screen
+               both labelled "You keep" is the thing worth removing, even now
+               they agree; this one keeps the per-cleaner split, which is what
+               only it knows. #}
+            What's left is on the price card above.
+          </p>
+        </div>
+        {% else %}
+        {% set pot = booking.commissionable_price %}
+        {% set left = pot - booking.crew_allocated %}
+        <div style="background:var(--ink);color:#fff;border-radius:12px;padding:14px 16px;margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;font-size:0.88rem;color:rgba(255,255,255,0.7);padding:2px 0">
+            <span>Pot to divide</span><span>${{ '%.2f' % pot }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:0.88rem;color:rgba(255,255,255,0.7);padding:2px 0">
+            <span>Paying {{ 'the crew' if booking.crew|length > 1 else 'the cleaner' }}</span><span>${{ '%.2f' % booking.crew_allocated }}</span>
+          </div>
+          <div style="border-top:1px solid rgba(255,255,255,0.18);margin:8px 0"></div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-weight:700">{{ 'Left in the pot' if left >= 0 else '⚠️ Over the pot by' }}</span>
+            <span style="font-weight:700;font-size:1.2rem;color:{{ 'var(--amber)' if left >= 0 else 'var(--warn-soft)' }}">${{ '%.2f' % (left if left >= 0 else -left) }}</span>
+          </div>
+        </div>
+        {% endif %}
+
+        {% for c in booking.crew %}
+        <div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid var(--info-soft)">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:0.92rem">{{ c.staff.name if c.staff else 'Unknown' }}
+              {% if booking.assigned_cleaner and c.staff and c.staff.name == booking.assigned_cleaner %}<span style="font-size:0.68rem;color:var(--info);background:var(--info-soft);padding:1px 7px;border-radius:999px;font-weight:700">LEAD</span>{% endif %}
+            </div>
+            <div style="font-size:0.75rem;color:var(--softer)">
+              {% if c.paid_at %}✅ Paid {{ c.paid_at.strftime('%b %-d') }}{% elif c.claimed_at %}Claimed {{ c.claimed_at.strftime('%b %-d') }}{% else %}Assigned by you{% endif %}
+              {% if booking.hours_each() %} · {{ '%g' % booking.hours_each() }} hrs est{% endif %}
+            </div>
+            {# What the clock says, for a cleaner paid by the hour. The figure
+               is shown and offered; it is never applied on its own. Money that
+               changes itself between one look at a page and the next is how an
+               owner stops trusting the numbers. #}
+            {% if c.staff and c.staff.pay_type == 'hourly' %}
+            {% set worked = c.staff.hours_on(booking) %}
+            {% set due = c.staff.hourly_pay_for(booking) %}
+            <div class="clocked">
+              {% if worked is none %}
+                <span class="no">Not clocked in yet</span>
+              {% else %}
+                <span class="yes">🕒 {{ '%.2f'|format(worked) }} h actual</span>
+                <span class="calc">× ${{ '%.2f'|format(c.staff.pay_rate or 0) }} = <b>${{ '%.2f'|format(due or 0) }}</b></span>
+                {% if not c.paid_at and due is not none and (due - (c.pay_amount or 0))|abs > 0.005 %}
+                <button type="submit" class="useclock"
+                        formaction="{{ url_for('bookings.use_clocked_pay', booking_id=booking.id, crew_id=c.id) }}">
+                  Use this
+                </button>
+                {% endif %}
+              {% endif %}
+            </div>
+            {% endif %}
+          </div>
+          <div style="display:flex;align-items:center;gap:3px">
+            <span style="color:var(--softer)">$</span>
+            <input type="number" step="0.01" min="0" name="pay_{{ c.id }}" value="{{ '%.2f' % (c.pay_amount or 0) }}"
+                   {{ 'disabled' if c.paid_at }} style="width:84px;padding:6px 8px;margin:0" />
+          </div>
+          {% if not c.paid_at %}
+          <button type="submit" formaction="{{ url_for('bookings.remove_crew', booking_id=booking.id, crew_id=c.id) }}"
+                  onclick="return confirm('Remove {{ (c.staff.name if c.staff else 'this cleaner')|js }} from this job? Their spot re-opens.')"
+                  title="Remove from crew"
+                  style="background:none;border:1px solid var(--warn-soft);color:var(--warn);border-radius:7px;padding:5px 9px;cursor:pointer;font-weight:700">✕</button>
+          {% endif %}
+        </div>
+        {% endfor %}
+        {% endif %}
+
+
+        {% if booking.crew %}
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button type="submit" class="btn {{ 'btn-outline' if booking.spots_left > 0 else 'btn-gold' }}" style="flex:1;justify-content:center">Save pay</button>
+          {% if booking.crew|length > 1 %}
+          <button type="submit" name="even_split" value="1" class="btn btn-outline" style="justify-content:center"
+                  title="Reset every unpaid share to an even split">Split evenly</button>
+          {% endif %}
+        </div>
+        {% endif %}
+        <details style="margin:14px 0">
+          <summary style="cursor:pointer;font-size:0.82rem;color:var(--softer);font-weight:600">Pay details — hours, rate, pay per cleaner</summary>
         {# The pot. Person-hours x the hourly rate — deliberately nothing to do
            with what the customer was charged, so a discount can't cut their pay. #}
         <div class="form-group">
@@ -512,7 +738,7 @@
           {% endif %}
           <p style="font-size:0.78rem;color:var(--softer);margin-top:5px">
             {% if booking.labor_budget is none %}
-              No estimate yet, so this job still pays the old 50%. Put the person-hours in and press <strong>Save pay</strong> at the bottom of this card to switch it over.
+              No estimate yet, so this job still pays the old 50%. Put the person-hours in and save to switch it over.
             {% else %}
               Two cleaners split this and each finish in half the time — same ${{ '%.0f' % booking.rate_applied }}/hour either way. Change the hours if this job is harder than the chart assumes.
             {% endif %}
@@ -569,7 +795,6 @@
           {% else %}✅ Labor is {{ lp }}% of this job's price — healthy.{% endif %}
         </div>
         {% endif %}
-
         {# One company hourly rate cannot be right for a move-out and for a
            discounted biweekly at the same time. Saying the pay outright makes
            the hours a planning estimate and stops the floor warning arguing
@@ -596,156 +821,20 @@
           </p>
         </div>
 
-        <div class="form-group">
-          <label>How many cleaners are you paying?</label>
-          <select name="crew_size">
-            {% for n in range(1, 7) %}
-            <option value="{{ n }}" {{ 'selected' if (booking.crew_size or 1) == n }}>{{ n }} paid cleaner{{ 's' if n != 1 }}</option>
-            {% endfor %}
-          </select>
-          <p style="font-size:0.8rem;color:var(--softer);margin-top:6px">
-            Don't count yourself if you're working this one. Working a big house with one cleaner? That's <strong>1 paid cleaner</strong> — add her below with the amount you want and send it straight to her.
-          </p>
-        </div>
-
-        {% if booking.crew or booking.is_crew_job %}
-        {# On an hours-based job the pot is the hours × the rate, not a slice of
-           the price. Showing the price-based pot here told her the crew was
-           splitting $245 when the hours said something quite different. #}
-        {% if booking.crew_pay_each or booking.labor_budget is not none %}
-        {% set size = booking.crew_size or 1 %}
-        {% set each = booking.crew_pay_each if booking.crew_pay_each else (booking.labor_budget / size) %}
-        {% set total = each * size %}
-        <div style="background:var(--ink);color:#fff;border-radius:12px;padding:14px 16px;margin-bottom:14px">
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <span style="font-weight:700">{{ size }} cleaner{{ '' if size == 1 else 's' }} ×</span>
-            <span style="font-weight:700;font-size:1.35rem;color:var(--amber)">${{ '%.2f' % each }} each</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;font-size:0.88rem;color:rgba(255,255,255,0.7);padding:6px 0 2px">
-            <span>{{ 'Pay you set' if booking.crew_pay_each else 'From the hours (%g × $%.0f/hr)' % (booking.payable_hours, booking.rate_applied) }}</span>
-            <span>${{ '%.2f' % total }} total</span>
-          </div>
-          <p style="font-size:0.74rem;color:rgba(255,255,255,0.45);margin-top:7px">
-            ${{ '%.2f' % each }} is the figure in the job offer and on payroll. Of the
-            ${{ '%.2f' % booking.commissionable_price }} after the lead fee.
-            {# "You keep" lived here too, and it is the same subtraction the live
-               tile on the Manage Booking card performs. Two tiles on one screen
-               both labelled "You keep" is the thing worth removing, even now
-               they agree; this one keeps the per-cleaner split, which is what
-               only it knows. #}
-            What's left is on the price card above.
-          </p>
-        </div>
-        {% else %}
-        {% set pot = booking.commissionable_price %}
-        {% set left = pot - booking.crew_allocated %}
-        <div style="background:var(--ink);color:#fff;border-radius:12px;padding:14px 16px;margin-bottom:14px">
-          <div style="display:flex;justify-content:space-between;font-size:0.88rem;color:rgba(255,255,255,0.7);padding:2px 0">
-            <span>Pot to divide (job minus lead fee)</span><span>${{ '%.2f' % pot }}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;font-size:0.88rem;color:rgba(255,255,255,0.7);padding:2px 0">
-            <span>Paying {{ 'the crew' if booking.crew|length > 1 else 'the cleaner' }}</span><span>${{ '%.2f' % booking.crew_allocated }}</span>
-          </div>
-          <div style="border-top:1px solid rgba(255,255,255,0.18);margin:8px 0"></div>
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <span style="font-weight:700">{{ 'Left in the pot' if left >= 0 else '⚠️ Over the pot by' }}</span>
-            <span style="font-weight:700;font-size:1.2rem;color:{{ 'var(--amber)' if left >= 0 else 'var(--warn-soft)' }}">${{ '%.2f' % (left if left >= 0 else -left) }}</span>
-          </div>
-        </div>
+        {% if not booking.crew %}
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">Save pay details</button>
         {% endif %}
-
-        {% for c in booking.crew %}
-        <div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid var(--info-soft)">
-          <div style="flex:1;min-width:0">
-            <div style="font-weight:700;font-size:0.92rem">{{ c.staff.name if c.staff else 'Unknown' }}
-              {% if booking.assigned_cleaner and c.staff and c.staff.name == booking.assigned_cleaner %}<span style="font-size:0.68rem;color:var(--info);background:var(--info-soft);padding:1px 7px;border-radius:999px;font-weight:700">LEAD</span>{% endif %}
-            </div>
-            <div style="font-size:0.75rem;color:var(--softer)">
-              {% if c.paid_at %}✅ Paid {{ c.paid_at.strftime('%b %-d') }}{% elif c.claimed_at %}Claimed {{ c.claimed_at.strftime('%b %-d') }}{% else %}Assigned by you{% endif %}
-              {% if booking.hours_each() %} · {{ '%g' % booking.hours_each() }} hrs est{% endif %}
-            </div>
-            {# What the clock says, for a cleaner paid by the hour. The figure
-               is shown and offered; it is never applied on its own. Money that
-               changes itself between one look at a page and the next is how an
-               owner stops trusting the numbers. #}
-            {% if c.staff and c.staff.pay_type == 'hourly' %}
-            {% set worked = c.staff.hours_on(booking) %}
-            {% set due = c.staff.hourly_pay_for(booking) %}
-            <div class="clocked">
-              {% if worked is none %}
-                <span class="no">Not clocked in yet</span>
-              {% else %}
-                <span class="yes">🕒 {{ '%.2f'|format(worked) }} h actual</span>
-                <span class="calc">× ${{ '%.2f'|format(c.staff.pay_rate or 0) }} = <b>${{ '%.2f'|format(due or 0) }}</b></span>
-                {% if not c.paid_at and due is not none and (due - (c.pay_amount or 0))|abs > 0.005 %}
-                <button type="submit" class="useclock"
-                        formaction="{{ url_for('bookings.use_clocked_pay', booking_id=booking.id, crew_id=c.id) }}">
-                  Use this
-                </button>
-                {% endif %}
-              {% endif %}
-            </div>
-            {% endif %}
-          </div>
-          <div style="display:flex;align-items:center;gap:3px">
-            <span style="color:var(--softer)">$</span>
-            <input type="number" step="0.01" min="0" name="pay_{{ c.id }}" value="{{ '%.2f' % (c.pay_amount or 0) }}"
-                   {{ 'disabled' if c.paid_at }} style="width:84px;padding:6px 8px;margin:0" />
-          </div>
-          {% if not c.paid_at %}
-          <button type="submit" formaction="{{ url_for('bookings.remove_crew', booking_id=booking.id, crew_id=c.id) }}"
-                  onclick="return confirm('Remove {{ c.staff.name if c.staff else 'this cleaner' }} from this job? Their spot re-opens.')"
-                  title="Remove from crew"
-                  style="background:none;border:1px solid var(--warn-soft);color:var(--warn);border-radius:7px;padding:5px 9px;cursor:pointer;font-weight:700">✕</button>
-          {% endif %}
-        </div>
-        {% endfor %}
-        {% endif %}
-
-        {# Always available — this is how a job gets given to someone directly,
-           whether it needs one cleaner or a whole crew. #}
-        {% if booking.spots_left > 0 %}
-        <div style="background:var(--ground);border:1px solid var(--line);border-radius:10px;padding:12px 13px;margin-top:14px">
-          <label style="display:block;font-weight:700;font-size:0.85rem;margin-bottom:7px">
-            ➕ Give this job to a specific cleaner
-            <span style="display:block;font-weight:400;color:var(--softer);font-size:0.79rem;margin-top:3px">Skips the job board — no claim link, she just gets the work.</span>
-          </label>
-          <select name="add_staff_id" style="margin-bottom:8px">
-            <option value="">— Pick a cleaner —</option>
-            {% for s in staff %}
-              {% if not booking.crew_row_for(s) %}<option value="{{ s.id }}">{{ s.name }}</option>{% endif %}
-            {% endfor %}
-          </select>
-          <div style="display:flex;align-items:center;gap:7px">
-            <span style="font-size:0.85rem;color:var(--muted);white-space:nowrap">Pay her $</span>
-            <input type="number" step="0.01" min="0" name="add_pay"
-                   placeholder="{{ '%.2f' % (booking.commissionable_price / (booking.crew_size or 1)) }}"
-                   style="width:100px;padding:7px 9px;margin:0" />
-            <span style="font-size:0.78rem;color:var(--softer)">blank = auto</span>
-          </div>
-          <p style="font-size:0.78rem;color:var(--muted);margin-top:7px">
-            {% if booking.labor_budget is not none %}
-              Suggested from the hours above: <strong>${{ '%.2f' % booking.default_crew_pay(staff[0]) if staff else '—' }}</strong> per cleaner. Type over it if this one's different.
-            {% else %}
-              This job pays out <strong>${{ '%.2f' % booking.commissionable_price }}</strong>{% if booking.lead_fee %} (${{ '%.2f' % booking.price }} minus the ${{ '%.2f' % booking.lead_fee }} lead fee){% endif %} — whatever you don't give her, you keep.
-            {% endif %}
-          </p>
-          <button type="submit" name="send_now" value="1" class="btn btn-gold"
-                  style="width:100%;justify-content:center;margin-top:10px">
-            📲 Add &amp; send the job to her now
-          </button>
-          <p style="font-size:0.76rem;color:var(--softer);margin-top:6px">She gets a text + email with the address, entry notes, her pay, and the checklist link.</p>
-        </div>
-        {% endif %}
-
-        <div style="display:flex;gap:8px;margin-top:12px">
-          <button type="submit" class="btn {{ 'btn-outline' if booking.spots_left > 0 else 'btn-gold' }}" style="flex:1;justify-content:center">Save pay</button>
-          {% if booking.crew|length > 1 %}
-          <button type="submit" name="even_split" value="1" class="btn btn-outline" style="justify-content:center"
-                  title="Reset every unpaid share to an even split">Split evenly</button>
-          {% endif %}
-        </div>
+        </details>
       </form>
+
+        {# "Text them their updated pay" sat here as well as "Re-send the job"
+           below, and the re-send already carries the pay. One button. #}
+      {% if booking.crew %}
+      <details style="margin-top:14px;border:1px solid var(--line);border-radius:10px;background:var(--ground)">
+        <summary style="cursor:pointer;padding:10px 13px;font-size:0.85rem;font-weight:700;color:var(--muted)">+ Add another cleaner</summary>
+        {{ assign_form }}
+      </details>
+      {% endif %}
 
       {% if booking.crew %}
       <form method="POST" action="{{ url_for('bookings.send_crew', booking_id=booking.id) }}" style="margin-top:10px">
@@ -753,36 +842,365 @@
           📲 Re-send the job to {{ booking.crew_label }}
         </button>
       </form>
+      {% elif booking.assigned_cleaner %}
+      {# The cleaner dropdown that wrote a bare name onto the job is gone -- it
+         was the second picker on the page and the one payroll can't trust. A
+         job it already filled still needs a way to change hands: take the name
+         off here, then assign properly above. #}
+      <div style="background:var(--ground);border:1px solid var(--line);border-radius:9px;padding:11px 13px;margin-top:12px;font-size:0.86rem">
+        <strong>{{ booking.assigned_cleaner }}</strong> is on this job.
+        {% if booking.cleaner_response == 'declined' %}<span style="color:var(--warn);font-weight:700">❌ Declined</span>{% endif %}
+        <form method="POST" action="{{ url_for('bookings.detail', booking_id=booking.id) }}" style="display:inline"
+              onsubmit="return confirm('Take {{ booking.assigned_cleaner|js }} off this job?')">
+          <input type="hidden" name="assigned_cleaner" value="" />
+          <button type="submit" class="btn btn-outline" style="padding:3px 11px;font-size:0.78rem;margin-left:6px">Take off this job</button>
+        </form>
+      </div>
+      {# A job assigned before this card kept a crew row carries a cleaner's NAME
+         and nothing else. Folding the Work Order card into the tickbox above
+         would have left those jobs with no way to send a checklist at all,
+         because the re-send button needs a crew row to aim at. #}
+      <form method="POST" action="{{ url_for('workorders.send_workorder', booking_id=booking.id) }}" style="margin-top:10px">
+        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">
+          📲 Send the {{ booking.service_label }} checklist to {{ booking.assigned_cleaner }}
+        </button>
+      </form>
+      {% endif %}
+
+      {# What the cleaner has actually ticked off, kept beside the person who
+         was sent it rather than in a card of its own further down. #}
+      {% if booking.job_checklists %}
+      <div style="margin-top:12px">
+      {% for jc in booking.job_checklists|sort(attribute='sent_at', reverse=True) %}
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line-soft);font-size:0.85rem">
+      <span style="color:var(--muted)">{{ jc.template_name }} — sent {{ jc.sent_at.strftime('%b %d') }}</span>
+      <div style="display:flex;align-items:center;gap:10px">
+      <span style="color:{{ 'var(--good)' if jc.completion_percent == 100 else 'var(--softer)' }};font-weight:700">{{ jc.completion_percent }}%</span>
+      <a href="{{ url_for('workorders.view_checklist', token=jc.token) }}" target="_blank" style="color:var(--muted);font-weight:600">View →</a>
+      </div>
+      </div>
+      {% endfor %}
+      </div>
       {% endif %}
     </div>
 
-    <!-- Offer to the team (first to claim wins) -->
-    <div class="card" data-card-key="offer-team" style="margin-top:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">📣 Offer to the Team</h2>
-      {% if booking.open_for_claim %}
-      <div style="background:var(--info-soft);border:1px solid var(--info-soft);color:var(--info);border-radius:9px;padding:11px 14px;font-weight:600;font-size:0.9rem">
-        ⏳ Open on the board — waiting for
-        {% if booking.is_crew_job %}{{ booking.spots_left }} more cleaner{{ 's' if booking.spots_left != 1 }} to claim a spot{% else %}someone to claim it{% endif %}.
-        {% if booking.broadcast_at %}Offered {{ booking.broadcast_at.strftime('%b %-d, %-I:%M %p') }}.{% endif %}
+
+  <div class="card" data-card-key="money">
+    <h2 style="font-size:1rem;font-weight:700;margin:0 0 4px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">The money</h2>
+    {# ── Money ──────────────────────────────────────────────────────────────
+       What the customer owes and the ways to collect it, and nothing else.
+       Status, notes, date and time used to share this card's form with the
+       price, the lead fee and a second cleaner picker, under one "Save
+       Changes" -- so the date was editable in three places and the cleaner in
+       two. Status and notes are on The booking card now, the date is in "Change
+       the job", and who does it is only on Who's doing it. What is left here is
+       in order of use: the figures, how to take the money, and -- folded away
+       -- the owner's own numbers and the rarer payment tools. #}
+      <div style="padding-top:8px">
+
+      {# The figures, once, whatever state the job is in. #}
+      <div class="detail-row"><span class="dl">Customer pays</span><span class="dv">${{ '%.2f' % (booking.price or 0) }}
+        <a href="#" onclick="var d=document.getElementById('numbersBox');d.open=true;d.scrollIntoView({behavior:'smooth',block:'center'});this.blur();return false"
+           style="font-size:0.78rem;color:var(--amber-deep);font-weight:600;margin-left:6px">✎ change</a></span></div>
+      {# The deposit this booking actually paid. This row printed a flat $50.00
+         whatever had happened — including on bookings that paid a different
+         deposit, and on bookings that had paid none at all. #}
+      {% if booking.deposit_paid %}
+      <div class="detail-row"><span class="dl">Deposit paid</span><span class="dv">
+        ${{ '%.2f' % (booking.deposit_amount_paid or deposit_amount) }}
+        {% if booking.deposit_method and booking.deposit_method != 'card' %}<span style="color:var(--softer);font-weight:400;text-transform:capitalize">({{ booking.deposit_method }})</span>{% endif %}
+        <span style="color:var(--good)">✓</span>
+      </span></div>
+      {% endif %}
+      <div class="detail-row"><span class="dl">Received</span><span class="dv">${{ '%.2f' % collected }}</span></div>
+      <div class="detail-row" style="margin-bottom:14px"><span class="dl">Still due</span>
+        <span class="dv" style="font-size:1.2rem;color:{{ 'var(--amber-deep)' if due > 0 else 'var(--ink)' }}">${{ '%.2f' % due }}</span></div>
+
+      {# "Paid" is now a question about money, not a flag: the price can go up
+         after a job settles — a three-bed that turns out to be a four-bed — and
+         a booking that took $390 against a $482 price is not paid, however many
+         payment records it carries. #}
+      {% if settled %}
+      {# One paid banner, holding the amount, the date, and the way to correct
+         the date — the date decides which month this income lands in on the P&L. #}
+      <div style="background:var(--good-soft);color:var(--good);padding:12px 14px;border-radius:9px;margin-bottom:10px">
+        <div style="font-weight:700">
+          ✅ Paid in full ({{ booking.paid_method or 'card' }}) · ${{ '%.2f' % collected }}
+        </div>
+        <div style="font-size:0.82rem;margin-top:3px">
+          Received <strong>{{ booking.paid_at.strftime('%b %-d, %Y') if booking.paid_at else '—' }}</strong>
+          {%- if booking.paid_at %} — counts as {{ booking.paid_at.strftime('%B') }} income.{% endif %}
+        </div>
+        {% if booking.paid_at %}
+        <details style="margin-top:7px">
+          <summary style="cursor:pointer;font-size:0.78rem">✎ Wrong date? Fix it</summary>
+          <p style="font-size:0.76rem;margin:6px 0;color:var(--good)">
+            Use the day the money actually arrived. Your Profit &amp; Loss re-sorts itself the moment you save.
+          </p>
+          <form method="POST" action="{{ url_for('bookings.fix_payment_date', booking_id=booking.id) }}"
+                style="display:flex;gap:6px;align-items:center">
+            <input type="date" name="paid_on" required
+                   value="{{ booking.paid_at.strftime('%Y-%m-%d') }}"
+                   style="padding:7px 9px;border:1px solid var(--good-soft);border-radius:7px;font-size:0.82rem" />
+            <button type="submit" class="btn btn-outline" style="padding:6px 14px;font-size:0.8rem">Save date</button>
+          </form>
+        </details>
+        {% endif %}
+        {% include 'admin/_fix_collected.html' %}
+      </div>
+      {# Everything invoice-shaped lives in the unpaid branch below, which is
+         correct for chasing money and wrong for proving it was paid. Customers
+         need that proof for landlords, employers and insurers, so the receipt
+         belongs here, on the paid job itself. Opening it emails nobody. #}
+      {% if booking.pay_token %}
+      <a href="{{ url_for('invoices.view', token=booking.pay_token) }}" target="_blank"
+         class="btn btn-gold" style="width:100%;justify-content:center;margin-top:10px">🧾 Paid receipt — print or save as PDF</a>
+      <p style="text-align:center;font-size:0.76rem;color:var(--softer);margin:5px 0 0">
+        Opens her receipt. Nothing is sent to the customer.</p>
+      {% endif %}
+      {% else %}
+      {# Money has been taken and money is still owed. Usually the deposit; but
+         also a job settled in full and then re-scoped upwards, which used to
+         claim to be paid while the difference sat uncollectable. #}
+      {% if collected > 0 %}
+      <div style="background:var(--amber-soft);color:var(--amber-deep);padding:12px 14px;border-radius:9px;margin-bottom:10px">
+        <div style="font-weight:700">
+          ⚠️ Part paid — ${{ '%.2f' % collected }} of ${{ '%.2f' % (booking.price or 0) }} received
+        </div>
+        <div style="font-size:0.82rem;margin-top:3px">
+          {% if booking.paid_at %}
+            Paid {{ booking.paid_at.strftime('%b %-d, %Y') }}{% if booking.price and collected < booking.price %},
+            before the price changed{% endif %}. <strong>${{ '%.2f' % due }}</strong> is still owed.
+          {% else %}
+            <strong>${{ '%.2f' % due }}</strong> is still owed.
+          {% endif %}
+        </div>
+        {% include 'admin/_fix_collected.html' %}
       </div>
       {% endif %}
-      <p style="font-size:0.85rem;color:var(--muted);margin:8px 0 12px">
-        {% if booking.is_crew_job %}
-        Text every available cleaner — the first {{ booking.spots_left }} to claim take the open spot{{ 's' if booking.spots_left != 1 }}. Anyone already on the crew keeps their spot and won't be texted again.
-        {% else %}
-        Text every available cleaner — the first to claim it gets the job (blocks anyone whose day would clash).
-        {% endif %}
-      </p>
-      {% set no_spots = booking.crew and booking.spots_left <= 0 %}
-      <form method="POST" action="{{ url_for('bookings.broadcast', booking_id=booking.id) }}"
-            onsubmit="return confirm({{ ('Offer the ' ~ booking.spots_left ~ ' open spot(s) to the team?') | tojson if booking.is_crew_job else '\'Offer this job to the whole team? First to claim it gets it.\'' }})">
-        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center"
-                {{ 'disabled' if no_spots }}>
-          {% if no_spots %}✅ Already assigned to {{ booking.crew_label }}
-          {% else %}{{ '🔁 Re-offer to the team' if booking.open_for_claim else '📣 Offer to the team' }}{% endif %}
-        </button>
+
+      {# Gated on what is owed, not on the balance_collected flag. The flag
+         records that a balance was once collected, which stays true after a
+         price rise makes it no longer the whole balance — so a job needing $92
+         showed "Balance collected ✓" and offered no way to take the money. #}
+      {% if booking.is_held %}
+      {# She has been told in writing that nothing will be charged while she
+         decides on a date. A button that would do it anyway does not belong on
+         the page. #}
+      <div style="background:var(--amber-soft);color:var(--amber-deep);padding:11px 14px;border-radius:9px;font-size:0.88rem;font-weight:600;margin-top:10px">
+        ⏸️ On hold — nothing will be charged. Put it back on the calendar with a date first.
+      </div>
+      {% elif booking.stripe_payment_method_id and due > 0 %}
+      <button onclick="chargeBalance({{ booking.id|int }}, {{ due|float }})"
+              id="charge-btn" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:10px">
+        {{ 'Charge $%.2f Now' % due }}
+      </button>
+      <p id="charge-msg" style="display:none;margin-top:8px;font-size:0.85rem;font-weight:600;border-radius:8px;padding:9px 12px"></p>
+      <p style="font-size:0.78rem;color:var(--softer);margin-top:6px">Their card is saved — it also charges by itself on the morning of the cleaning.</p>
+      {% endif %}
+
+      <!-- Take payment on-site -->
+      <a href="{{ pay_url }}" target="_blank" class="btn {{ 'btn-outline' if booking.stripe_payment_method_id else 'btn-gold' }}" style="width:100%;justify-content:center;margin-top:10px">💳 Take a card payment</a>
+
+      <!-- Mark as paid manually (cash / Zelle / etc.) -->
+      <form method="POST" action="{{ url_for('bookings.mark_paid_route', booking_id=booking.id) }}"
+            style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"
+            onsubmit="return confirm('Mark this booking as paid in full?')">
+        <select name="method" style="flex:1;min-width:110px;padding:9px 12px;border:1px solid var(--border);border-radius:8px">
+          <option value="cash">Cash</option>
+          <option value="zelle">Zelle</option>
+          <option value="venmo">Venmo</option>
+          <option value="other">Other</option>
+        </select>
+        {# Income counts on this date, so default it to the job's own day rather
+           than whenever she happens to be recording it. #}
+        <input type="date" name="paid_on" title="The day the money actually came in"
+               value="{{ booking.preferred_date or '' }}"
+               style="padding:9px 10px;border:1px solid var(--border);border-radius:8px;width:150px" />
+        <button type="submit" class="btn btn-outline" style="flex-shrink:0">✓ Mark paid</button>
+        {# Untick when the payment was already receipted, or on a booking where
+           another email to the customer would do more harm than good. #}
+        <label style="display:flex;align-items:center;gap:7px;width:100%;font-size:0.82rem;color:var(--muted);cursor:pointer;margin-top:2px">
+          <input type="checkbox" name="send_receipt" value="1" checked style="width:auto">
+          Email the customer a receipt
+        </label>
       </form>
+      {% endif %}
+
+      {# The rarer ways money moves: a QR code, the link to paste, a deposit
+         taken in cash, a deposit receipt. Every one still works; none of them
+         is what someone opening a new booking needs to read past. #}
+      <details style="margin-top:14px;border:1px solid var(--line);border-radius:10px;background:var(--ground)">
+        <summary style="cursor:pointer;padding:10px 13px;font-size:0.85rem;font-weight:700;color:var(--muted)">More ways to get paid</summary>
+        <div style="padding:0 13px 14px">
+        {% if not settled %}
+        <p style="font-size:0.8rem;color:var(--softer);margin:6px 0;text-align:center">Have the customer scan this with their phone:</p>
+        <div style="text-align:center">
+          <img src="https://api.qrserver.com/v1/create-qr-code/?size=170x170&data={{ pay_url | urlencode }}"
+               alt="Payment QR code" style="border:1px solid var(--border);border-radius:10px;padding:6px;background:#fff" width="170" height="170" loading="lazy" />
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <input type="text" readonly value="{{ pay_url }}" onclick="this.select()"
+                 style="flex:1;font-size:0.72rem;padding:8px 10px;border:1px solid var(--border);border-radius:8px;color:var(--muted);background:var(--surface)">
+          <button type="button" onclick="navigator.clipboard.writeText(this.previousElementSibling.value);this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)"
+                  class="btn btn-outline" style="padding:6px 12px;font-size:0.75rem;flex-shrink:0">Copy</button>
+        </div>
+        {% endif %}
+
+        {% if booking.deposit_paid and not booking.paid_at %}
+        {# For a customer asking for proof they paid the deposit. Deposits taken
+           before receipts existed were never receipted, so this is the only way
+           to give them one without writing the email by hand. #}
+        <form method="POST" action="{{ url_for('bookings.resend_deposit_receipt', booking_id=booking.id) }}"
+              style="margin-top:12px">
+          <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">
+            🧾 {{ 'Resend' if booking.deposit_notified_at else 'Send' }} deposit receipt
+          </button>
+        </form>
+        <p style="font-size:0.78rem;color:var(--softer);margin-top:6px">
+          {% if booking.deposit_notified_at %}
+            Receipted {{ booking.deposit_notified_at.strftime('%d %b %Y') }} — sends the same receipt again.
+          {% else %}
+            This deposit has never been receipted.
+          {% endif %}
+        </p>
+        {% elif not booking.deposit_paid and not settled %}
+        {# She took the deposit some other way — cash on the doorstep, Zelle,
+           Venmo — so there is no Stripe charge to confirm it. This records the
+           same $50 against the booking (crediting it, same as the card path)
+           and sends the customer the same deposit receipt, so a card on file
+           is never auto-charged for the deposit a second time. #}
+        <div style="font-size:0.8rem;font-weight:700;color:var(--muted);margin:14px 0 4px">Took a deposit in cash, Zelle or Venmo?</div>
+        <form method="POST" action="{{ url_for('bookings.mark_deposit_paid_route', booking_id=booking.id) }}"
+              style="display:flex;gap:8px;flex-wrap:wrap"
+              onsubmit="return confirm('Record this deposit as paid?')">
+          <select name="method" style="flex:1;min-width:100px;padding:9px 12px;border:1px solid var(--border);border-radius:8px">
+            <option value="cash">Cash</option>
+            <option value="zelle">Zelle</option>
+            <option value="venmo">Venmo</option>
+            <option value="check">Check</option>
+            <option value="other">Other</option>
+          </select>
+          <input type="number" step="0.01" min="0.01" name="amount" placeholder="${{ '%.2f' % deposit_amount }}"
+                 title="Leave blank to use the standard deposit"
+                 style="width:110px;padding:9px 10px;border:1px solid var(--border);border-radius:8px" />
+          <input type="date" name="paid_on" title="The day the money actually came in"
+                 value="{{ booking.preferred_date or '' }}"
+                 style="padding:9px 10px;border:1px solid var(--border);border-radius:8px;width:150px" />
+          <button type="submit" class="btn btn-outline" style="flex-shrink:0">✓ Record deposit</button>
+          <label style="display:flex;align-items:center;gap:7px;width:100%;font-size:0.82rem;color:var(--muted);cursor:pointer;margin-top:2px">
+            <input type="checkbox" name="send_receipt" value="1" checked style="width:auto">
+            Email the customer a deposit receipt
+          </label>
+        </form>
+        {% endif %}
+        {% if not booking.stripe_payment_method_id and not settled and not booking.is_held %}
+        <p style="font-size:0.78rem;color:var(--softer);margin-top:12px">No card saved for this customer, so nothing charges by itself — take the card above or mark it paid.</p>
+        {% endif %}
+        </div>
+      </details>
+
+      {# The owner's own numbers: the price, the lead fee built into it, what the
+         cleaner is owed and what is left. Folded, because whoever is answering
+         the phone needs none of it -- and it is the one place the price is
+         edited. "✎ change" beside the price opens it. #}
+      <details id="numbersBox" style="margin-top:10px;border:1px solid var(--line);border-radius:10px;background:var(--ground)">
+        <summary style="cursor:pointer;padding:10px 13px;font-size:0.85rem;font-weight:700;color:var(--muted)">Change the price · your numbers</summary>
+        <form method="POST" id="jobEditForm" action="{{ url_for('bookings.detail', booking_id=booking.id) }}" style="padding:0 13px 14px">
+          <div class="form-group">
+            <label>Price ($) <span style="font-weight:400;color:var(--softer)">— what the customer pays</span></label>
+            <input type="number" id="f-price" name="price" step="0.01" placeholder="e.g. 150" value="{{ booking.price or '' }}" />
+          </div>
+          {# The lead fee is retired: nothing new carries one. A job booked
+             while it existed keeps its figure, and its box, so the price on
+             it still adds up. #}
+          {% if booking.lead_fee %}
+          <div class="form-group">
+            <label>📣 Lead fee ($) <span style="font-weight:400;color:var(--softer)">— from when bookings carried one; inside the price, never paid to the cleaner</span></label>
+            <input type="number" id="f-leadfee" name="lead_fee" step="0.01" placeholder="0" value="{{ booking.lead_fee or '' }}" />
+          </div>
+          {% endif %}
+          {# LIVE breakdown. This tile and the one on the pay card below are the
+             same sum and must never disagree: both end at what she actually
+             keeps, after the cleaner is paid. Cleaner pay is committed_labor —
+             the figure the offer promises — and it does not move as she edits
+             the price, which is the point. #}
+          <div style="background:var(--ink);color:#fff;border-radius:12px;padding:14px 16px;margin-bottom:14px"
+               data-labor="{{ '%.2f' % booking.committed_labor if booking.committed_labor is not none else '' }}">
+            <div style="display:flex;justify-content:space-between;font-size:0.88rem;color:rgba(255,255,255,0.7);padding:2px 0">
+              <span>Customer pays</span><span id="rt-total">$0.00</span>
+            </div>
+            {% if booking.lead_fee %}
+            <div style="display:flex;justify-content:space-between;font-size:0.88rem;color:rgba(255,255,255,0.7);padding:2px 0">
+              <span>Lead fee (yours)</span><span id="rt-fee">$0.00</span>
+            </div>
+            {% endif %}
+            <div style="display:flex;justify-content:space-between;font-size:0.88rem;color:rgba(255,255,255,0.7);padding:2px 0">
+              <span>Cleaner pay</span><span id="rt-labor">—</span>
+            </div>
+            <div style="border-top:1px solid rgba(255,255,255,0.18);margin:8px 0"></div>
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span style="font-weight:700">{{ 'You keep' if booking.committed_labor is not none else 'Before cleaner pay' }}</span>
+              <span id="rt-base" style="font-weight:700;font-size:1.2rem;color:var(--amber)">$0.00</span>
+            </div>
+            <p style="font-size:0.72rem;color:rgba(255,255,255,0.45);margin-top:5px">
+              {% if booking.committed_labor is not none %}
+                Cleaner pay is set by the hours on the pay card, not by this price. Discount the job and their pay doesn't move.
+              {% else %}
+                No cleaner pay set yet, so this is only what's left before paying anyone. This job still pays the old 50% — add the hours on the pay card to switch it to ${{ '%.0f' % labor_rate }}/hour.
+              {% endif %}
+            </p>
+          </div>
+          <div class="form-group">
+            <label>Hours worked <span style="font-weight:400;color:var(--softer)">— for payroll; the cleaner's clock-in fills this</span></label>
+            <input type="number" name="hours_worked" step="0.25" placeholder="e.g. 2.5" value="{{ booking.hours_worked or '' }}" />
+          </div>
+          <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">Save</button>
+          {% if booking.deposit_paid or booking.paid_at %}
+          <p style="font-size:0.78rem;color:var(--warn);margin-top:6px">They've already paid — to change the price and tell them, use <em>Correct price &amp; notify</em> below.</p>
+          {% endif %}
+        </form>
+
+        <div style="padding:0 13px 14px">
+        {# The lead fee is pricing — a slice of the customer's price set aside
+           to cover ads. The money paid to Google is a separate real expense.
+           This writes one from the other so the same figure isn't typed twice. #}
+        {% if booking.lead_fee and not ad_expense %}
+        <div style="background:var(--info-soft);border:1px solid var(--info-soft);border-radius:9px;padding:11px 13px;margin-bottom:12px">
+          <div style="font-size:0.85rem;color:var(--info);font-weight:700;margin-bottom:3px">
+            💡 Did you actually pay ${{ '%.2f' % booking.lead_fee }} for this lead?
+          </div>
+          <p style="font-size:0.78rem;color:var(--info);margin:0 0 8px">
+            Logging what you really paid puts it in your Expenses and Profit &amp; Loss — no need to type it again over there.
+          </p>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <select name="category" form="adCostForm" style="flex:1;min-width:140px;padding:7px 9px;font-size:0.82rem;margin:0">
+              {% for key, label in ad_categories %}
+              <option value="{{ key }}">{{ label.replace('Advertising — ', '') }}</option>
+              {% endfor %}
+            </select>
+            <span style="font-size:0.85rem;color:var(--info)">$</span>
+            <input type="number" step="0.01" min="0" name="amount" form="adCostForm"
+                   value="{{ '%.2f' % booking.lead_fee }}" style="width:88px;padding:7px 9px;margin:0" />
+            <button type="submit" form="adCostForm" class="btn btn-outline" style="padding:6px 13px;font-size:0.8rem">Log it</button>
+          </div>
+        </div>
+        {% elif ad_expense %}
+        <p style="font-size:0.8rem;color:var(--good);margin:0 0 12px">
+          ✅ ${{ '%.2f' % ad_expense.amount }} of ad cost logged for this job on {{ ad_expense.date }} —
+          <a href="{{ url_for('money.expenses') }}" style="color:var(--good);font-weight:600">see it in Expenses</a>.
+        </p>
+        {% endif %}
+
+
+        <a href="{{ url_for('bookings.correct_price', booking_id=booking.id) }}"
+           class="btn btn-outline" style="width:100%;justify-content:center">💸 Correct price &amp; notify customer</a>
+        <a href="{{ url_for('bookings.dispute_evidence', booking_id=booking.id) }}"
+           class="btn btn-outline" style="width:100%;justify-content:center;margin-top:10px">🛡️ Chargeback evidence pack</a>
+        </div>
+      </details>
     </div>
+  </div>
 
     {# ── Send to customer ─────────────────────────────────────────────────
        Eight ways to message a customer were spread across two cards: the
@@ -792,8 +1210,8 @@
        messages, same forms, one card — you pick what to send, and only that
        one's controls are on screen. Receipts for money already taken stay on
        the money card, where the figure they receipt is. #}
-    <div class="card" data-card-key="send-customer" style="margin-top:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">✉️ Send to customer</h2>
+    <div class="card" data-card-key="talk" style="margin-top:18px">
+    <h2 style="font-size:1rem;font-weight:700;margin:0 0 4px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Talk to the customer</h2>
 
     {# Whether they have answered is a fact about the job, so it stays in
        plain sight rather than behind the chooser below. #}
@@ -814,14 +1232,21 @@
         ⚠️ No email or phone on this booking, so nothing can be delivered. An invoice
         can still be raised here and its link shared by hand.</p>
       {% endif %}
+      {# Order matters: a select with nothing marked selected opens on its first
+         option, and the script below then hides every panel but that one. The
+         Yes/No request used to be first, so the booking confirmation — the only
+         send that can carry the deposit request — opened hidden, behind a
+         dropdown there was no reason to open. It leads now, and says so. #}
       <div class="form-group" style="margin:12px 0 14px">
         <label for="sendKind" style="font-size:0.82rem">What do you want to send?</label>
         <select id="sendKind" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px">
+          {% if not settled %}
+          <option value="confirmation" selected>The booking confirmation — and the deposit, if you want it</option>
+          {% endif %}
           {% if booking.status in ['pending', 'confirmed'] and booking.confirm_response not in ['yes', 'no'] %}
           <option value="confirm-request">Ask them to confirm — with a Yes / No button</option>
           {% endif %}
           {% if not settled %}
-          <option value="confirmation">The booking confirmation</option>
           <option value="payment-link">A payment request</option>
           <option value="invoice">{{ 'The invoice — resend ' ~ booking.invoice_number if booking.invoice_number else 'An invoice' }}</option>
           {% endif %}
@@ -888,7 +1313,7 @@
           <div style="display:flex;gap:7px">
             <button type="submit" name="to" value="me" class="btn btn-outline" style="flex:1;justify-content:center">✉️ Test to me</button>
             <button type="submit" name="to" value="customer" class="btn btn-gold" style="flex:1;justify-content:center"
-                    onclick="return confirm('Ask {{ booking.name }} to confirm this booking?');"
+                    onclick="return confirm('Ask {{ booking.name|js }} to confirm this booking?');"
                     {% if not booking.email and not booking.phone %}disabled{% endif %}>Send to {{ booking.name.split()[0] }}</button>
           </div>
         </form>
@@ -914,7 +1339,9 @@
               style="display:flex;gap:7px;flex-wrap:wrap;align-items:center">
           <select name="pay_kind" style="flex:1;min-width:150px;padding:8px 10px;border:1px solid var(--good-soft);border-radius:8px;margin:0">
             <option value="none" selected>Confirmation only</option>
-            <option value="deposit">+ ask for the deposit</option>
+            {# Name the figure. "the deposit" gave her no way to check from here
+               that the amount in Settings is still the one she means to ask for. #}
+            <option value="deposit">+ ask for the ${{ '%.0f' % deposit_amount }} deposit</option>
             <option value="full">+ ask for the full amount</option>
           </select>
           <button type="submit" class="btn btn-gold" style="flex-shrink:0">Send</button>
@@ -968,12 +1395,29 @@
           Opens a page where you write the message yourself.</p>
       </div>
     </div>
+  <div class="card" data-card-key="extras" style="margin-top:18px">
+    <h2 style="font-size:1rem;font-weight:700;margin:0 0 4px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Less often</h2>
 
+    {% if booking.repeat_of or booking.repeats %}
+      <details open style="border-top:1px solid var(--line);padding-top:6px;margin-top:6px">
+        <summary style="cursor:pointer;font-size:0.9rem;font-weight:650;color:var(--ink);padding:7px 0">🔁 On-demand repeats</summary>
+      {% if booking.repeat_of %}
+      <p style="margin:0 0 6px;font-size:0.9rem">Repeat of
+        <a href="{{ url_for('bookings.detail', booking_id=booking.repeat_of.id) }}">#{{ booking.repeat_of.id }}</a>
+        ({{ booking.repeat_of.preferred_date or 'no date' }}) — an on-demand client, no fixed schedule.</p>
+      {% endif %}
+      {% for r in booking.repeats %}
+      <p style="margin:0 0 6px;font-size:0.9rem">Repeated as
+        <a href="{{ url_for('bookings.detail', booking_id=r.id) }}">#{{ r.id }}</a>
+        on {{ r.preferred_date or '—' }} <span class="status status-{{ r.status }}">{{ r.status }}</span></p>
+      {% endfor %}
+      </details>
+    {% endif %}
 
     {% if plan_suggestion %}
     <!-- Recurring cleaning after a one-off job -->
-    <div class="card" data-card-key="recurring-cleaning" style="margin-top:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">🔁 Recurring Cleaning</h2>
+      <details style="border-top:1px solid var(--line);padding-top:6px;margin-top:6px">
+        <summary style="cursor:pointer;font-size:0.9rem;font-weight:650;color:var(--ink);padding:7px 0">🔁 Recurring Cleaning</summary>
       <p style="font-size:0.85rem;color:var(--muted);margin:0 0 14px">
         Is this the first clean before a regular schedule? Set the recurring visits up here.
         They get their own service and price — this job stays exactly as it is.
@@ -1017,13 +1461,13 @@
         </div>
         <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">📅 Set up recurring cleaning</button>
       </form>
-    </div>
+      </details>
     {% endif %}
 
     {% if booking.frequency not in ['one_time', None] %}
     <!-- Recurring plan -->
-    <div class="card" data-card-key="recurring-plan" style="margin-top:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">🔁 Recurring Plan</h2>
+      <details style="border-top:1px solid var(--line);padding-top:6px;margin-top:6px">
+        <summary style="cursor:pointer;font-size:0.9rem;font-weight:650;color:var(--ink);padding:7px 0">🔁 Recurring Plan</summary>
       {% if booking.recurring_group and booking.recurring_active %}
       <div style="background:var(--good-soft);border:1px solid var(--good-soft);color:var(--good);border-radius:9px;padding:11px 14px;font-weight:600;font-size:0.9rem">
         ✅ Recurring plan active — {{ recurring_upcoming|default(0) }} upcoming visit{{ 's' if (recurring_upcoming|default(0)) != 1 }} on the calendar.
@@ -1091,35 +1535,9 @@
         <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">📅 Schedule recurring visits</button>
       </form>
       {% endif %}
-    </div>
+      </details>
     {% endif %}
 
-    <!-- Work Order Card -->
-    <div class="card" data-card-key="work-order" style="margin-top:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Work Order / Checklist</h2>
-      {# The picker here offered exactly one option — "Default checklist" — because
-         nothing ever populated a template list. A select that cannot select
-         anything is a control that does nothing, so the checklist it was always
-         going to send is now just named in the button's own line. #}
-      <form method="POST" action="{{ url_for('workorders.send_workorder', booking_id=booking.id) }}">
-        <button type="submit" class="btn btn-dark" style="width:100%;justify-content:center">
-          Send the {{ booking.service_label }} checklist to the cleaner
-        </button>
-      </form>
-      {% if booking.job_checklists %}
-      <div style="margin-top:12px">
-        {% for jc in booking.job_checklists|sort(attribute='sent_at', reverse=True) %}
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line-soft);font-size:0.85rem">
-          <span style="color:var(--muted)">{{ jc.template_name }} — sent {{ jc.sent_at.strftime('%b %d') }}</span>
-          <div style="display:flex;align-items:center;gap:10px">
-            <span style="color:{{ 'var(--good)' if jc.completion_percent == 100 else 'var(--softer)' }};font-weight:700">{{ jc.completion_percent }}%</span>
-            <a href="{{ url_for('workorders.view_checklist', token=jc.token) }}" target="_blank" style="color:var(--muted);font-weight:600">View →</a>
-          </div>
-        </div>
-        {% endfor %}
-      </div>
-      {% endif %}
-    </div>
 
     <!-- Job Photos Card (before / after proof) -->
     {% set ns = namespace(photo_jc=None) %}
@@ -1128,13 +1546,8 @@
     {% endfor %}
     {% set photo_jc = ns.photo_jc %}
     {% if photo_jc %}
-    <div class="card" data-card-key="job-photos" style="margin-top:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">
-        Job Photos
-        {% if photo_jc.photos_submitted_at %}
-        <span style="background:var(--good-soft);color:var(--good);padding:2px 10px;border-radius:999px;font-size:0.7rem;margin-left:6px">Submitted {{ photo_jc.photos_submitted_at.strftime('%b %d') }}</span>
-        {% endif %}
-      </h2>
+      <details style="border-top:1px solid var(--line);padding-top:6px;margin-top:6px">
+        <summary style="cursor:pointer;font-size:0.9rem;font-weight:650;color:var(--ink);padding:7px 0">Job Photos {% if photo_jc.photos_submitted_at %} Submitted {{ photo_jc.photos_submitted_at.strftime('%b %d') }} {% endif %}</summary>
       <p style="font-size:0.82rem;color:var(--softer);margin-bottom:14px">Before &amp; after proof from {{ booking.assigned_cleaner or 'the cleaner' }}. Review before releasing payment.</p>
 
       {% if photo_jc.get_before_photos() %}
@@ -1158,7 +1571,7 @@
         {% endfor %}
       </div>
       {% endif %}
-    </div>
+      </details>
     {% endif %}
 
     <!-- On hold / bring it back -->
@@ -1167,8 +1580,8 @@
        cron charges her card and sends a cleaner to an empty house, or cancel it
        and sever her deposit from the work. #}
     {% if booking.is_held %}
-    <div class="card" data-card-key="on-hold" style="margin-top:18px;border:1px solid var(--amber-line);background:var(--amber-soft)">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--amber-deep);text-transform:uppercase;letter-spacing:0.12em">⏸️ On hold</h2>
+      <details style="border-top:1px solid var(--line);padding-top:6px;margin-top:6px">
+        <summary style="cursor:pointer;font-size:0.9rem;font-weight:650;color:var(--ink);padding:7px 0">⏸️ On hold</summary>
       <p style="font-size:0.86rem;color:var(--amber-deep);margin:0 0 4px">
         Paused {{ booking.held_at.strftime('%b %-d, %Y') if booking.held_at else '' }} —
         <strong>{{ booking.days_on_hold }} day{{ '' if booking.days_on_hold == 1 else 's' }}</strong> waiting for a date.
@@ -1195,10 +1608,10 @@
         </label>
         <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">▶️ Put it back on for this date</button>
       </form>
-    </div>
+      </details>
     {% elif booking.status not in ('completed', 'cancelled') %}
-    <div class="card" data-card-key="put-on-hold" style="margin-top:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">⏸️ Put this on hold</h2>
+      <details style="border-top:1px solid var(--line);padding-top:6px;margin-top:6px">
+        <summary style="cursor:pointer;font-size:0.9rem;font-weight:650;color:var(--ink);padding:7px 0">⏸️ Put this on hold</summary>
       <p style="font-size:0.82rem;color:var(--muted);margin:0 0 10px">
         For a customer who needs to move the clean but hasn't picked a day. It comes
         off the schedule, her card is never charged, her deposit stays on the job, and
@@ -1212,233 +1625,18 @@
                style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;margin-bottom:9px" />
         <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">⏸️ Hold it until she's ready</button>
       </form>
-    </div>
+      </details>
     {% endif %}
 
-    {# ── Money ──────────────────────────────────────────────────────────────
-       Payment and Balance Collection used to be two cards, one under the other,
-       both answering "what is owed" and printing the same four figures twice —
-       total, deposit, received, due — while the buttons that move the money were
-       split between them by no rule anyone could name. One card, one set of
-       figures, then the things you can do about them. #}
-    <div class="card" data-card-key="payment" style="margin-top:18px">
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">💳 Money</h2>
+    {# At the bottom of the rarely-used card rather than under the money,
+       where it sat one tap from Save. #}
+    <form method="POST" action="{{ url_for('bookings.delete', booking_id=booking.id) }}"
+          onsubmit="return confirm('Delete this booking permanently?')"
+          style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
+      <button type="submit" class="btn btn-danger" style="width:100%;justify-content:center">Delete Booking</button>
+    </form>
 
-      {# The figures, once, whatever state the job is in. #}
-      <div class="detail-row"><span class="dl">Total price</span><span class="dv">${{ '%.2f' % (booking.price or 0) }}</span></div>
-      {# The deposit this booking actually paid. This row printed a flat $50.00
-         whatever had happened — including on bookings that paid a different
-         deposit, and on bookings that had paid none at all. #}
-      {% if booking.deposit_paid %}
-      <div class="detail-row"><span class="dl">Deposit paid</span><span class="dv">
-        ${{ '%.2f' % (booking.deposit_amount_paid or deposit_amount) }}
-        {% if booking.deposit_method and booking.deposit_method != 'card' %}<span style="color:var(--softer);font-weight:400;text-transform:capitalize">({{ booking.deposit_method }})</span>{% endif %}
-        <span style="color:var(--good)">✓</span>
-      </span></div>
-      {% endif %}
-      <div class="detail-row"><span class="dl">Received in total</span><span class="dv">${{ '%.2f' % collected }}</span></div>
-      <div class="detail-row" style="margin-bottom:14px"><span class="dl">Still due</span>
-        <span class="dv" style="font-size:1.2rem;color:{{ 'var(--amber-deep)' if due > 0 else 'var(--ink)' }}">${{ '%.2f' % due }}</span></div>
-
-      {# "Paid" is now a question about money, not a flag: the price can go up
-         after a job settles — a three-bed that turns out to be a four-bed — and
-         a booking that took $390 against a $482 price is not paid, however many
-         payment records it carries. #}
-      {% if settled %}
-      {# One paid banner, holding the amount, the date, and the way to correct
-         the date — the date decides which month this income lands in on the P&L. #}
-      <div style="background:var(--good-soft);color:var(--good);padding:12px 14px;border-radius:9px;margin-bottom:10px">
-        <div style="font-weight:700">
-          ✅ Paid in full ({{ booking.paid_method or 'card' }}) · ${{ '%.2f' % collected }}
-        </div>
-        <div style="font-size:0.82rem;margin-top:3px">
-          Received <strong>{{ booking.paid_at.strftime('%b %-d, %Y') if booking.paid_at else '—' }}</strong>
-          {%- if booking.paid_at %} — counts as {{ booking.paid_at.strftime('%B') }} income.{% endif %}
-        </div>
-        {% if booking.paid_at %}
-        <details style="margin-top:7px">
-          <summary style="cursor:pointer;font-size:0.78rem">✎ Wrong date? Fix it</summary>
-          <p style="font-size:0.76rem;margin:6px 0;color:var(--good)">
-            Use the day the money actually arrived. Your Profit &amp; Loss re-sorts itself the moment you save.
-          </p>
-          <form method="POST" action="{{ url_for('bookings.fix_payment_date', booking_id=booking.id) }}"
-                style="display:flex;gap:6px;align-items:center">
-            <input type="date" name="paid_on" required
-                   value="{{ booking.paid_at.strftime('%Y-%m-%d') }}"
-                   style="padding:7px 9px;border:1px solid var(--good-soft);border-radius:7px;font-size:0.82rem" />
-            <button type="submit" class="btn btn-outline" style="padding:6px 14px;font-size:0.8rem">Save date</button>
-          </form>
-        </details>
-        {% endif %}
-        {% include 'admin/_fix_collected.html' %}
-      </div>
-      {# Everything invoice-shaped lives in the unpaid branch below, which is
-         correct for chasing money and wrong for proving it was paid. Customers
-         need that proof for landlords, employers and insurers, so the receipt
-         belongs here, on the paid job itself. Opening it emails nobody. #}
-      {% if booking.pay_token %}
-      <a href="{{ url_for('invoices.view', token=booking.pay_token) }}" target="_blank"
-         class="btn btn-gold" style="width:100%;justify-content:center;margin-top:10px">🧾 Paid receipt — print or save as PDF</a>
-      <p style="text-align:center;font-size:0.76rem;color:var(--softer);margin:5px 0 0">
-        Opens her receipt. Nothing is sent to the customer.</p>
-      {% endif %}
-      {% else %}
-      {# Money has been taken and money is still owed. Usually the deposit; but
-         also a job settled in full and then re-scoped upwards, which used to
-         claim to be paid while the difference sat uncollectable. #}
-      {% if collected > 0 %}
-      <div style="background:var(--amber-soft);color:var(--amber-deep);padding:12px 14px;border-radius:9px;margin-bottom:10px">
-        <div style="font-weight:700">
-          ⚠️ Part paid — ${{ '%.2f' % collected }} of ${{ '%.2f' % (booking.price or 0) }} received
-        </div>
-        <div style="font-size:0.82rem;margin-top:3px">
-          {% if booking.paid_at %}
-            Paid {{ booking.paid_at.strftime('%b %-d, %Y') }}{% if booking.price and collected < booking.price %},
-            before the price changed{% endif %}. <strong>${{ '%.2f' % due }}</strong> is still owed.
-          {% else %}
-            <strong>${{ '%.2f' % due }}</strong> is still owed.
-          {% endif %}
-        </div>
-        {% include 'admin/_fix_collected.html' %}
-      </div>
-      {% endif %}
-      <!-- Take payment on-site -->
-      <a href="{{ pay_url }}" target="_blank" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:10px">💳 Take Payment (open card page)</a>
-
-      <p style="font-size:0.8rem;color:var(--softer);margin:12px 0 6px;text-align:center">Or have the customer scan this with their phone:</p>
-      <div style="text-align:center">
-        <img src="https://api.qrserver.com/v1/create-qr-code/?size=170x170&data={{ pay_url | urlencode }}"
-             alt="Payment QR code" style="border:1px solid var(--border);border-radius:10px;padding:6px;background:#fff" width="170" height="170" />
-      </div>
-
-      <div style="display:flex;gap:8px;margin-top:12px">
-        <input type="text" readonly value="{{ pay_url }}" onclick="this.select()"
-               style="flex:1;font-size:0.72rem;padding:8px 10px;border:1px solid var(--border);border-radius:8px;color:var(--muted);background:var(--ground)">
-        <button type="button" onclick="navigator.clipboard.writeText(this.previousElementSibling.value);this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)"
-                class="btn btn-outline" style="padding:6px 12px;font-size:0.75rem;flex-shrink:0">Copy</button>
-      </div>
-
-
-
-
-
-      <!-- Mark as paid manually (cash / Zelle / etc.) -->
-      <form method="POST" action="{{ url_for('bookings.mark_paid_route', booking_id=booking.id) }}"
-            style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"
-            onsubmit="return confirm('Mark this booking as paid in full?')">
-        <select name="method" style="flex:1;min-width:110px;padding:9px 12px;border:1px solid var(--border);border-radius:8px">
-          <option value="cash">Cash</option>
-          <option value="zelle">Zelle</option>
-          <option value="venmo">Venmo</option>
-          <option value="other">Other</option>
-        </select>
-        {# Income counts on this date, so default it to the job's own day rather
-           than whenever she happens to be recording it. #}
-        <input type="date" name="paid_on" title="The day the money actually came in"
-               value="{{ booking.preferred_date or '' }}"
-               style="padding:9px 10px;border:1px solid var(--border);border-radius:8px;width:150px" />
-        <button type="submit" class="btn btn-outline" style="flex-shrink:0">✓ Mark paid</button>
-        {# Untick when the payment was already receipted, or on a booking where
-           another email to the customer would do more harm than good. #}
-        <label style="display:flex;align-items:center;gap:7px;width:100%;font-size:0.82rem;color:var(--muted);cursor:pointer;margin-top:2px">
-          <input type="checkbox" name="send_receipt" value="1" checked style="width:auto">
-          Email the customer a receipt
-        </label>
-      </form>
-      {% endif %}
-
-      {# Both of these used to be written twice, once per payment branch, and
-         they read the same in either — so they sat in two places to be kept in
-         step by hand. They apply to a job whatever it has paid. #}
-      <a href="{{ url_for('bookings.dispute_evidence', booking_id=booking.id) }}"
-         class="btn btn-outline" style="width:100%;justify-content:center;margin-top:10px">🛡️ Chargeback evidence pack</a>
-      <a href="{{ url_for('bookings.correct_price', booking_id=booking.id) }}"
-         class="btn btn-outline" style="width:100%;justify-content:center;margin-top:10px">💸 Correct price &amp; notify customer</a>
-
-      {# Was its own "Balance Collection" card. The figures it opened with are
-         the four at the top of this card, so only the controls came across. #}
-      <div style="border-top:1px solid var(--line);margin:16px 0 12px;padding-top:12px">
-        <div style="font-size:0.78rem;font-weight:700;color:var(--softer);text-transform:uppercase;letter-spacing:0.1em">
-          The balance <span style="font-weight:400;text-transform:none;letter-spacing:0">(saved-card auto-charge)</span>
-        </div>
-      </div>
-
-      {% if booking.deposit_paid and not booking.paid_at %}
-      {# For a customer asking for proof they paid the deposit. Deposits taken
-         before receipts existed were never receipted, so this is the only way
-         to give them one without writing the email by hand. #}
-      <form method="POST" action="{{ url_for('bookings.resend_deposit_receipt', booking_id=booking.id) }}"
-            style="margin-top:10px">
-        <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">
-          🧾 {{ 'Resend' if booking.deposit_notified_at else 'Send' }} deposit receipt
-        </button>
-      </form>
-      <p style="font-size:0.78rem;color:var(--softer);margin-top:6px">
-        {% if booking.deposit_notified_at %}
-          Receipted {{ booking.deposit_notified_at.strftime('%d %b %Y') }} — sends the same receipt again.
-        {% else %}
-          This deposit has never been receipted.
-        {% endif %}
-      </p>
-      {% elif not booking.deposit_paid %}
-      {# She took the deposit some other way — cash on the doorstep, Zelle,
-         Venmo — so there is no Stripe charge to confirm it. This records the
-         same $50 against the booking (crediting it, same as the card path)
-         and sends the customer the same deposit receipt, so a card on file
-         is never auto-charged for the deposit a second time. #}
-      <form method="POST" action="{{ url_for('bookings.mark_deposit_paid_route', booking_id=booking.id) }}"
-            style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"
-            onsubmit="return confirm('Record this deposit as paid?')">
-        <select name="method" style="flex:1;min-width:100px;padding:9px 12px;border:1px solid var(--border);border-radius:8px">
-          <option value="cash">Cash</option>
-          <option value="zelle">Zelle</option>
-          <option value="venmo">Venmo</option>
-          <option value="check">Check</option>
-          <option value="other">Other</option>
-        </select>
-        <input type="number" step="0.01" min="0.01" name="amount" placeholder="${{ '%.2f' % deposit_amount }}"
-               title="Leave blank to use the standard deposit"
-               style="width:110px;padding:9px 10px;border:1px solid var(--border);border-radius:8px" />
-        <input type="date" name="paid_on" title="The day the money actually came in"
-               value="{{ booking.preferred_date or '' }}"
-               style="padding:9px 10px;border:1px solid var(--border);border-radius:8px;width:150px" />
-        <button type="submit" class="btn btn-outline" style="flex-shrink:0">✓ Record deposit</button>
-        <label style="display:flex;align-items:center;gap:7px;width:100%;font-size:0.82rem;color:var(--muted);cursor:pointer;margin-top:2px">
-          <input type="checkbox" name="send_receipt" value="1" checked style="width:auto">
-          Email the customer a deposit receipt
-        </label>
-      </form>
-      {% endif %}
-
-      {# Gated on what is owed, not on the balance_collected flag. The flag
-         records that a balance was once collected, which stays true after a
-         price rise makes it no longer the whole balance — so a job needing $92
-         showed "Balance collected ✓" and offered no way to take the money. #}
-      {% if booking.is_held %}
-      {# She has been told in writing that nothing will be charged while she
-         decides on a date. A button that would do it anyway does not belong on
-         the page. #}
-      <div style="background:var(--amber-soft);color:var(--amber-deep);padding:11px 14px;border-radius:9px;font-size:0.88rem;font-weight:600;margin-top:10px">
-        ⏸️ On hold — nothing will be charged. Put it back on the calendar with a date first.
-      </div>
-      {% elif due <= 0 %}
-      <div style="background:var(--good-soft);color:var(--good);padding:11px 14px;border-radius:9px;font-weight:700;font-size:0.9rem;margin-top:10px">
-        Balance collected ✓
-      </div>
-      {% elif booking.stripe_payment_method_id %}
-      <button onclick="chargeBalance({{ booking.id }}, {{ due }})"
-              id="charge-btn" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:10px"
-              {{ 'disabled' if due <= 0 }}>
-        {{ 'Nothing to charge' if due <= 0 else 'Charge $%.2f Now' % due }}
-      </button>
-      <p id="charge-msg" style="display:none;margin-top:8px;font-size:0.85rem;font-weight:600;border-radius:8px;padding:9px 12px"></p>
-      <p style="font-size:0.78rem;color:var(--softer);margin-top:6px">Card saved — also auto-charges on the morning of the cleaning.</p>
-      {% else %}
-      <div style="background:var(--amber-soft);color:var(--amber-deep);padding:11px 14px;border-radius:9px;font-size:0.88rem;font-weight:600;margin-top:10px">
-        No card on file — collect balance manually or by cash.
-      </div>
-      {% endif %}
-    </div>
+  </div>
   </div>
 
 </div>
@@ -1489,33 +1687,55 @@
   if (!sel) return;
   const panels = document.querySelectorAll('.send-panel');
   function show() {
-    panels.forEach(p => { p.style.display = p.dataset.kind === sel.value ? '' : 'none'; });
+    // A chosen kind with no panel behind it hid every send on the card and left
+    // her nothing to press. Show them all rather than none in that case — the
+    // same thing the page does with no JavaScript at all.
+    const matched = [...panels].some(p => p.dataset.kind === sel.value);
+    panels.forEach(p => {
+      p.style.display = (!matched || p.dataset.kind === sel.value) ? '' : 'none';
+    });
   }
   sel.addEventListener('change', show);
   show();
+})();
+
+// The work-order tickbox belongs to a named cleaner. For "the whole team" it
+// is never read, so it is replaced by what actually happens instead.
+(function () {
+  const sel = document.getElementById('assignTo');
+  const box = document.getElementById('woBox');
+  const note = document.getElementById('teamNote');
+  if (!sel || !box || !note) return;
+  function sync() {
+    const team = sel.value === 'team';
+    box.style.display = team ? 'none' : '';
+    note.style.display = team ? '' : 'none';
+  }
+  sel.addEventListener('change', sync);
+  sync();
 })();
 
 // Live pay breakdown as you edit the total / lead fee. Ends at what she keeps
 // after the cleaner is paid, so it agrees with the tile on the pay card.
 (function () {
   const price = document.getElementById('f-price');
-  const fee = document.getElementById('f-leadfee');
+  const fee = document.getElementById('f-leadfee');   // only on an old job that has one
   const base = document.getElementById('rt-base');
-  if (!price || !fee || !base) return;
+  if (!price || !base) return;
   // Blank when no pay is committed yet: then the tile is labelled
   // "Before cleaner pay" and there is nothing to subtract.
   const raw = base.closest('[data-labor]')?.dataset.labor;
   const LABOR = raw === '' || raw == null ? null : Number(raw);
   const money = v => '$' + (Number(v) || 0).toFixed(2);
   function recalc() {
-    const p = Number(price.value) || 0, f = Number(fee.value) || 0;
+    const p = Number(price.value) || 0, f = fee ? (Number(fee.value) || 0) : 0;
     document.getElementById('rt-total').textContent = money(p);
-    document.getElementById('rt-fee').textContent = money(f);
+    if (fee) document.getElementById('rt-fee').textContent = money(f);
     document.getElementById('rt-labor').textContent = LABOR === null ? '—' : money(LABOR);
     base.textContent = money(Math.max(0, p - f - (LABOR || 0)));
   }
   price.addEventListener('input', recalc);
-  fee.addEventListener('input', recalc);
+  if (fee) fee.addEventListener('input', recalc);
   recalc();
 })();
 

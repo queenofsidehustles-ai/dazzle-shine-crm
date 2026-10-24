@@ -12,7 +12,8 @@ import commercial_pricing as cpricing
 commercial_bp = Blueprint('commercial', __name__, url_prefix='/commercial')
 
 FREQUENCIES = ['nightly', 'weekly', 'biweekly', 'monthly', 'custom']
-CATEGORIES = ['property_manager', 'apartment', 'daycare', 'medical_office',
+CATEGORIES = ['property_manager', 'apartment', 'daycare', 'medical_office', 'restaurant',
+              'gym', 'church',
               'office', 'realtor', 'airbnb', 'other']
 
 
@@ -35,7 +36,7 @@ def _agent_from():
     a = (request.form.get('agent') or '').strip()
     if a:
         return a
-    if session.get('role') == 'team':
+    if session.get('role') in ('team', 'sales'):
         return session.get('user_name')
     return None
 
@@ -100,6 +101,7 @@ def quote_json():
         frequency=request.args.get('frequency') or 'weekly',
         extras=request.args.getlist('extras'),
         drive_mins=request.args.get('drive_minutes'),
+        hours=request.args.get('hours'),
     ))
 
 
@@ -160,9 +162,18 @@ def convert(prospect_id):
             notes=(request.form.get('notes') or p.notes or '').strip(),
             source='find_leads',
             prospect_id=p.id,
-            agent=_agent_from(),
+            # Whoever found and worked the lead, for their commission -- the
+            # owner converting it is not who earned it.
+            agent=_agent_from() or p.agent,
         )
+        # Won on the call list too, with nothing left due -- or somebody rings
+        # a new customer to ask whether they are interested.
+        import prospecting
+        prospecting.quote_moved(p.id, 'won', 'won', None, None,
+                                'Became a commercial account 🎉')
         p.status = 'won'
+        p.contact_name = p.contact_name or a.contact_name or None
+        p.email = p.email or a.email or None
         db.session.add(a)
         db.session.commit()
         flash(f'🎉 {p.business_name} is now a commercial account!', 'success')
@@ -194,8 +205,196 @@ def detail(account_id):
         db.session.commit()
         flash('Account updated.', 'success')
         return redirect(url_for('commercial.detail', account_id=a.id))
-    vas = User.query.filter_by(role='team').order_by(User.name).all()
-    return render_template('admin/commercial_detail.html', **_tmpl_args(a=a, vas=vas))
+    vas = User.query.filter(User.role.in_(('team', 'sales'))).order_by(User.name).all()
+    from models import Booking
+    jobs = (Booking.query.filter_by(commercial_account_id=a.id)
+            .order_by(Booking.id.desc()).limit(20).all())
+    return render_template('admin/commercial_detail.html',
+                           **_tmpl_args(a=a, vas=vas, agreements=_agreements(a), jobs=jobs))
+
+
+def _agreements(a):
+    """[(agreement, its quote's frozen terms, signer, replaced by)] for an
+    account, newest first. The one nothing has replaced is in force."""
+    from models import CommercialAgreement, CommercialQuote, QuoteResponse
+    import quote_evidence
+    rows = (CommercialAgreement.query.filter_by(account_id=a.id)
+            .order_by(CommercialAgreement.effective_on.desc(), CommercialAgreement.id.desc()).all())
+    replaced = {r.amends_agreement_id: r for r in rows if r.amends_agreement_id}
+    out = []
+    for ag in rows:
+        q = CommercialQuote.query.get(ag.quote_id)
+        response = QuoteResponse.query.get(ag.response_id)
+        out.append((ag, quote_evidence.as_issued(q) if q else None,
+                    response.signer_name if response else None, replaced.get(ag.id)))
+    return out
+
+
+# What a commercial visit usually covers. Ticked boxes become the scope of work
+# the customer is sent and the cleaner works from -- the commercial stand-in for
+# bedrooms and bathrooms.
+SCOPE_ITEMS = [
+    'Empty trash & replace liners',
+    'Restrooms — clean, disinfect & restock',
+    'Dust & disinfect high-touch surfaces',
+    'Vacuum carpets',
+    'Sweep & mop hard floors',
+    'Break room / kitchen',
+    'Lobby & entry',
+    'Glass doors & interior windows',
+]
+SCOPE_DEFAULT = SCOPE_ITEMS[:5]
+# The residential labels carry the recurring discount ("Weekly (15% off)"); a
+# commercial price is quoted per visit and has none.
+JOB_FREQUENCIES = {'one_time': 'One time', 'weekly': 'Weekly',
+                   'biweekly': 'Every 2 weeks', 'monthly': 'Monthly'}
+# Account frequency -> the nearest job frequency the schedule can repeat.
+_JOB_FREQ_FOR = {'weekly': 'weekly', 'biweekly': 'biweekly', 'monthly': 'monthly'}
+
+
+def _scope_text(items, extra):
+    lines = [f'• {i}' for i in items if i]
+    if extra:
+        lines.append(extra)
+    return '\n'.join(lines) or None
+
+
+@commercial_bp.route('/<int:account_id>/book', methods=['GET', 'POST'])
+@owner_required
+@requires_plan('commercial')
+def book(account_id):
+    """Book a job for a commercial account -- scheduled, confirmed and paid
+    exactly like a residential booking, priced per visit and described by its
+    scope of work instead of bedrooms and bathrooms."""
+    import entitlements
+    import invoicing
+    from models import Booking
+    from blueprints.bookings import _link_client, _notify_customer, _send_invoice
+    from notifications import looks_like_email
+    a = CommercialAccount.query.get_or_404(account_id)
+    if request.method == 'POST':
+        back = redirect(url_for('commercial.book', account_id=a.id))
+        ok, why = entitlements.check_limit('jobs_per_month')
+        if not ok:
+            flash(why, 'error')
+            return back
+        email = (request.form.get('email') or '').strip().lower()
+        if email and not looks_like_email(email):
+            flash(f'“{email}” doesn\'t look like a complete email address.', 'error')
+            return back
+        price = _money(request.form.get('price'))
+        if price <= 0:
+            flash('Enter the price for this visit.', 'error')
+            return back
+        try:
+            hours = float(request.form.get('estimated_hours') or 0) or None
+        except ValueError:
+            hours = None
+        frequency = request.form.get('frequency', 'one_time')
+        if frequency not in JOB_FREQUENCIES:
+            frequency = 'one_time'
+        contact = (request.form.get('contact_name') or '').strip()
+        b = Booking(
+            service_type='commercial',
+            commercial_account_id=a.id,
+            name=a.business_name,
+            email=email or None,
+            phone=(request.form.get('phone') or '').strip(),
+            address=(request.form.get('address') or '').strip(),
+            city=(request.form.get('city') or '').strip(),
+            zip_code=(request.form.get('zip_code') or '').strip(),
+            sqft=_int(request.form.get('square_footage')),
+            frequency=frequency,
+            preferred_date=(request.form.get('preferred_date') or '').strip(),
+            preferred_time=(request.form.get('preferred_time') or '').strip(),
+            scope_of_work=_scope_text(request.form.getlist('scope'),
+                                      (request.form.get('scope_notes') or '').strip()),
+            access_notes=(request.form.get('access_notes') or '').strip() or None,
+            notes='\n'.join(x for x in (f'Contact: {contact}' if contact else '',
+                                        (request.form.get('notes') or '').strip()) if x) or None,
+            status=request.form.get('status', 'confirmed'),
+            price=round(price, 2),
+            estimated_hours=hours,
+            # The cleaner cost the commercial price is built from. The price
+            # is revenue and moves with the job; this does not.
+            labor_rate_applied=cpricing.cleaner_rate() if hours else None,
+            source='commercial',
+            agent=a.agent,
+        )
+        db.session.add(b)
+        db.session.commit()
+        _link_client(b)
+
+        pay = request.form.get('payment_option', 'none')
+        note = _notify_customer(b, confirmation=bool(request.form.get('notify_customer')),
+                                pay_kind=pay if pay in ('deposit', 'full') else 'none')
+        if pay == 'invoice_now':
+            terms = _int(request.form.get('net_days'))
+            invoicing.issue(b, net_days=invoicing.NET_DAYS_COMMERCIAL if terms is None else terms)
+            sent = _send_invoice(b)
+            note += (f' Sent invoice {b.invoice_number} 🧾.' if sent
+                     else f' Invoice {b.invoice_number} made, but it could not be emailed.')
+        flash(f'Job booked for {a.business_name} ✅ — assign a cleaner below.{note}', 'success')
+        return redirect(url_for('bookings.detail', booking_id=b.id))
+
+    jobs = (Booking.query.filter_by(commercial_account_id=a.id)
+            .order_by(Booking.id.desc()).limit(5).all())
+    agreed = _agreed_terms(a, first_job=not jobs)
+    return render_template('admin/commercial_book.html', **_tmpl_args(
+        a=a, scope_items=SCOPE_ITEMS,
+        scope_default=[] if agreed and agreed['scope'] else SCOPE_DEFAULT,
+        job_frequencies=JOB_FREQUENCIES,
+        default_frequency=_JOB_FREQ_FOR.get(a.frequency, 'one_time'),
+        default_price=(agreed['price'] if agreed and agreed['price'] else
+                       a.billing_amount if a.billing_type == 'per_visit' else None),
+        agreed=agreed,
+        net_days=invoicing.NET_DAYS_COMMERCIAL, deposit=_deposit(), jobs=jobs))
+
+
+def _agreed_terms(a, first_job=False):
+    """What the agreement in force says a visit is, to start the booking form
+    from: {price, first_visit, scope, sqft, effective_on}, or None.
+
+    The account keeps only a billing figure -- the monthly total, for a
+    proposal that had one -- while the signed terms keep the per-visit price,
+    the first-visit charge and the work itself. Booking from the account alone
+    meant retyping a contract, and getting it wrong."""
+    import json
+    try:
+        current = next(((ag, terms) for ag, terms, _, replaced in _agreements(a)
+                        if terms is not None and replaced is None), None)
+    except Exception:
+        return None
+    if not current:
+        return None
+    ag, terms = current
+    lines = [s.strip() for s in (terms.services or '').split(',') if s.strip()]
+    try:
+        priced = json.loads(terms.line_items) if terms.line_items else {}
+    except (TypeError, ValueError):
+        priced = {}
+    for area in priced.get('areas') or []:
+        for line in area.get('lines') or []:
+            label = (line.get('label') or line.get('item') or '').strip()
+            if label:
+                lines.append(f"{area.get('name')}: {label}" if area.get('name') else label)
+    if terms.scope_notes:
+        lines.append(terms.scope_notes.strip())
+    first = float(priced.get('first_visit_charge') or 0) if first_job else 0.0
+    price = float(terms.price_per_visit) if terms.price_per_visit else None
+    return {'price': round(price + first, 2) if price else None,
+            'first_visit': first if price else 0.0,
+            'scope': '\n'.join(lines),
+            'sqft': _int(terms.sqft),
+            'effective_on': ag.effective_on}
+
+
+def _deposit():
+    from pricing import get_deposit
+    try:
+        return float(get_deposit() or 0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 @commercial_bp.route('/<int:account_id>/mark-first-paid', methods=['POST'])
@@ -214,6 +413,17 @@ def mark_first_paid(account_id):
 @owner_required
 def delete(account_id):
     a = CommercialAccount.query.get_or_404(account_id)
+    from models import QuoteResponse
+    if QuoteResponse.query.filter_by(account_id=a.id, decision='accepted').first():
+        # The signed proposal names this account; deleting it would leave the
+        # agreement pointing at nothing. Paused keeps both.
+        flash('This account has a signed proposal on record, so it is kept. '
+              'Set it to Paused if the work has stopped.', 'error')
+        return redirect(url_for('commercial.detail', account_id=a.id))
+    from models import Booking
+    if Booking.query.filter_by(commercial_account_id=a.id).first():
+        flash('This account has jobs booked, so it is kept. Set it to Paused if the work has stopped.', 'error')
+        return redirect(url_for('commercial.detail', account_id=a.id))
     db.session.delete(a)
     db.session.commit()
     flash('Commercial account removed.', 'success')

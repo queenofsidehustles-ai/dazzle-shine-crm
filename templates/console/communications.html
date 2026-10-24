@@ -68,12 +68,12 @@
 <div class="ops-actions" style="margin-top:var(--s3)">
   {% if owner_due %}
   <form method="post" action="{{ url_for('console.send_trial_emails') }}"
-        onsubmit="return confirm('Send {{ owner_due|length }} owner email(s) now?')">
+        onsubmit="return confirm('Send {{ owner_due|length|js }} owner email(s) now?')">
     <button class="btn btn-sm" type="submit">Send owner emails now</button></form>
   {% endif %}
   {% if lead_due %}
   <form method="post" action="{{ url_for('console.communications_send_leads') }}"
-        onsubmit="return confirm('Send {{ lead_due|length }} lead email(s) now?')">
+        onsubmit="return confirm('Send {{ lead_due|length|js }} lead email(s) now?')">
     <button class="btn btn-sm" type="submit">Send lead emails now</button></form>
   {% endif %}
 </div>

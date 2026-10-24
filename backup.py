@@ -38,6 +38,7 @@ import glob
 import gzip
 import json
 import os
+import re
 import sys
 import tempfile
 
@@ -207,6 +208,7 @@ def create(out_dir=DEFAULT_DIR, database_url=None, quiet=False):
     fails outright on the first mismatch, which is a poor reason to have no
     backup. Whatever is actually in there is what gets copied.
     """
+    from sqlalchemy import text
     engine = _read_engine(database_url)
     os.makedirs(out_dir, exist_ok=True)
     stamp = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H-%M-%SZ')
@@ -250,8 +252,19 @@ def create(out_dir=DEFAULT_DIR, database_url=None, quiet=False):
                               for s in schemas if s != PUBLIC},
             'source': _safe_url(url),
             'release': _release(),
+            # Which migration each schema was on. A restore builds today's
+            # tables and skips the migrations, so a data change one of them
+            # makes (0036's $43 cleaner rate) is applied by the restore to the
+            # schemas a backup shows were taken before it. See restore().
+            'revisions': {s: _revision(engine, s) for s in schemas},
         }) + '\n')
+        evidence = {}
         with engine.connect() as conn:
+            # One snapshot for the whole dump, so the copy is of one moment --
+            # and the evidence digest below describes exactly the rows in it.
+            if conn.dialect.name == 'postgresql':
+                conn = conn.execution_options(isolation_level='REPEATABLE READ')
+                conn.execute(text('SET TRANSACTION READ ONLY'))
             for schema in schemas:
                 if schema != PUBLIC:
                     tenant_counts[schema] = {}
@@ -272,6 +285,9 @@ def create(out_dir=DEFAULT_DIR, database_url=None, quiet=False):
                     if n and not quiet:
                         pad = '      ' if schema != PUBLIC else '    '
                         print(f'{pad}{table.name:<28} {n:>7}')
+            evidence = _evidence_digests(conn, by_schema)
+            last = _previous_manifest(out_dir)
+            anchor, broken = _against_last_night(conn, evidence, last)
 
     size = os.path.getsize(path)
     tenant_rows = sum(sum(t.values()) for t in tenant_counts.values())
@@ -280,10 +296,23 @@ def create(out_dir=DEFAULT_DIR, database_url=None, quiet=False):
                 'tenant_counts': tenant_counts,
                 'tenant_rows': tenant_rows,
                 'total_rows': sum(counts.values()) + tenant_rows,
-                'taken_at': datetime.datetime.utcnow().isoformat()}
+                'taken_at': datetime.datetime.utcnow().isoformat(),
+                # Written down outside the database: each company's audit chain
+                # head and evidence hashes. certify.py compare checks a later
+                # database against it; verify() checks the restore against it.
+                'evidence': _written_evidence(evidence, broken, last),
+                # Companies whose evidence no longer matched the last backup:
+                # their entry above is that backup's, carried forward.
+                'evidence_carried': sorted(broken),
+                # Which schemas had an audit chain in the database read, so
+                # had evidence to write down. The restore cannot say: it is
+                # migrated to this code's head, chain or no chain at source.
+                'chained': sorted(s for s, tables in by_schema.items() if _chained(tables)),
+                'evidence_problems': [f'{s}: {d["error"]}' for s, d in evidence.items() if 'error' in d]
+                + anchor}
 
     previous = _previous_manifest(out_dir)
-    problems = _sanity_check(manifest, previous)
+    problems = _sanity_check(manifest, previous) + manifest['evidence_problems']
 
     # Written even when the checks fail, so the next run can see what happened
     # and so --list does not have to decompress every file to say anything.
@@ -305,9 +334,139 @@ class BackupFailed(Exception):
     pass
 
 
+def _chained(tables):
+    return any(t.name == 'contract_audit_event' and 'chain_seq' in {c.name for c in t.columns}
+               for t in tables)
+
+
+def _chain_lost(conn, schema, tables):
+    """The schema's migration revision if it holds contract evidence without
+    an audit chain although that revision is 0031 or later -- the chain was
+    removed, not never added. None otherwise, including a revision this code
+    does not know."""
+    if not any(t.name == 'contract_audit_event' for t in tables):
+        return None
+    from sqlalchemy import text
+    version_table = f'"{schema}".alembic_version'
+    if not conn.execute(text('SELECT to_regclass(:t)'), {'t': version_table}).scalar():
+        return None
+    version = conn.execute(text(f'SELECT version_num FROM {version_table}')).scalar()
+    if not version:
+        return None
+    import migrate
+    from alembic.script import ScriptDirectory
+    try:
+        past = {r.revision for r in ScriptDirectory.from_config(
+            migrate._config()).iterate_revisions(version, 'base')}
+    except Exception:
+        return None
+    return version if '0031_audit_chain' in past else None
+
+
+def _evidence_digests(conn, by_schema):
+    """{schema: evidence_check.digest(...)} for every schema holding the
+    contract evidence tables (Postgres only). A chain that does not recompute
+    is recorded as an error: that is the tampering this exists to catch, and
+    it fails the backup loudly rather than being written down as the truth.
+
+    A database from before migration 0031 has no chain anywhere and gets no
+    digests. One where some companies have it and one does not is a migration
+    that did not finish, and that company is an error, not a silent gap."""
+    if conn.dialect.name != 'postgresql':
+        return {}
+    import evidence_check
+    out = {}
+    any_chained = any(_chained(tables) for tables in by_schema.values())
+    for schema, tables in by_schema.items():
+        if not _chained(tables):
+            lost = _chain_lost(conn, schema, tables)
+            if lost:
+                # Past 0031 with no chain is not a database from before it,
+                # and must not be written down as one ('chained' is what the
+                # restore is held to).
+                out[schema] = {'error': f'its contract evidence has no audit chain, '
+                                        f'though it is at {lost}, after migration 0031'}
+            elif any_chained and schema != PUBLIC:
+                out[schema] = {'error': 'its contract evidence has no audit chain (migration 0031 did not reach it)'}
+            continue
+        bad = (evidence_check.audit_chain(conn, schema)['problems']
+               + evidence_check.reconcile(conn, schema)['tampered'])
+        if bad:
+            out[schema] = {'error': '; '.join(bad[:5])}
+            continue
+        out[schema] = evidence_check.digest(conn, schema)
+    return out
+
+
+def _written_evidence(evidence, broken, previous):
+    """What the manifest writes down as each company's evidence.
+
+    Tonight's digest, except for a company whose evidence did not match the
+    last backup's: that one keeps the last backup's digest. The manifest is
+    kept even when the run fails, and the next run reads the newest one, so
+    writing tonight's digest down would make a rewritten chain the baseline
+    and the second night would pass. Carried forward, it keeps failing until
+    somebody looks."""
+    out = {s: d for s, d in evidence.items() if 'error' not in d}
+    then = (previous or {}).get('evidence') or {}
+    for schema in broken:
+        if schema in then:
+            out[schema] = then[schema]
+    return out
+
+
+def _against_last_night(conn, evidence, previous):
+    """Problems with tonight's evidence against what the last backup wrote down
+    -- the check that makes the record outside the database worth having. A
+    chain rebuilt between two backups recomputes perfectly on its own; only
+    the head written down before shows it is not the chain that was there.
+
+    Skipped for demo companies, which are rebuilt from scratch on purpose,
+    and for companies no longer here (the count checks speak for those).
+
+    Returns (problems, the schemas they are about)."""
+    then = (previous or {}).get('evidence') or {}
+    if not then or conn.dialect.name != 'postgresql':
+        return [], set()
+    import evidence_check
+    from sqlalchemy import text
+    demo = set()
+    try:
+        demo = {r[0] for r in conn.execute(text(
+            'SELECT schema_name FROM public.organizations WHERE is_demo'))}
+    except Exception:
+        pass
+    problems, broken = [], set()
+    for schema, digest in sorted(then.items()):
+        if schema in demo or schema not in evidence or 'error' in evidence[schema]:
+            continue
+        found = evidence_check.compare(conn, schema, digest)['problems']
+        if found:
+            broken.add(schema)
+        problems += [f'{schema}: {p} since the last backup' for p in found]
+    return problems, broken
+
+
+_NAME = re.compile(r'^backup-(.+?Z)(?:-(\d+))?\.(?:json\.gz|manifest\.json)$')
+
+
+def _oldest_first(paths):
+    """Backups in the order they were taken.
+
+    A name is the time to the second, then -1, -2 for later runs inside that
+    second (create()). Plain name order gets those backwards: '-' sorts before
+    '.', so 'Z-1.manifest.json' comes before 'Z.manifest.json' and the later
+    run would be read as the earlier one."""
+    def key(path):
+        name = os.path.basename(path)
+        m = _NAME.match(name)
+        return (m.group(1), int(m.group(2) or 0)) if m else (name, 0)
+    return sorted(paths, key=key)
+
+
 def _previous_manifest(out_dir):
     """The manifest from the last successful run, or None on the first ever."""
-    files = sorted(glob.glob(os.path.join(out_dir, 'backup-*.manifest.json')))
+    files = _oldest_first(glob.glob(os.path.join(out_dir, 'backup-*.manifest.json')))
     if not files:
         return None
     try:
@@ -390,6 +549,56 @@ def _sanity_check(manifest, previous=None):
     return out
 
 
+def _revision(engine, schema):
+    """The migration a schema is on, or None if it has no record."""
+    from sqlalchemy import text
+    table = 'alembic_version' if schema == PUBLIC else f'"{schema}".alembic_version'
+    try:
+        with engine.connect() as conn:
+            return conn.execute(text(f'SELECT version_num FROM {table}')).scalar()
+    except Exception:
+        return None
+
+
+def _reached(revision, target):
+    """Whether a schema at `revision` had already run migration `target`.
+    No revision (a backup from before backups recorded one) has not; a
+    revision this code does not know is newer than it, so it has."""
+    if not revision:
+        return False
+    import migrate
+    from alembic.script import ScriptDirectory
+    try:
+        return target in {r.revision for r in ScriptDirectory.from_config(
+            migrate._config()).iterate_revisions(revision, 'base')}
+    except Exception:
+        return True
+
+
+def _keep_old_cleaner_rate(db, url, header, schemas, quiet=False):
+    """Apply migration 0036's rule to each restored schema the backup was
+    taken before it: a company in use that never saved a cleaner rate keeps
+    the $43 it was paying, rather than dropping to the new $25 default."""
+    import pricing
+    from sqlalchemy import text
+    revisions = header.get('revisions') or {}
+    for schema in schemas:
+        if _reached(revisions.get(schema), pricing.KEEP_OLD_RATE_REVISION):
+            continue
+        try:
+            with db.engine.begin() as conn:
+                if url.startswith('postgres'):
+                    conn.execute(text(f'SET LOCAL search_path TO "{schema}"'))
+                if pricing.keep_old_rate(conn) and not quiet:
+                    print(f'  ✅ {schema}: kept the ${pricing.OLD_LABOR_RATE_DEFAULT} cleaner rate '
+                          'it was paying when this backup was taken')
+        except Exception as e:
+            # A schema without these tables (the control plane) has no rate.
+            if 'pricing_setting' in str(e) or 'user' in str(e) or 'booking' in str(e):
+                continue
+            print(f'  ⚠️  {schema}: could not check its cleaner rate: {e}')
+
+
 def _release():
     try:
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -422,6 +631,8 @@ def restore(path, into_url, quiet=False):
         if not quiet:
             print(f'  writing  {_safe_url(url)}')
         db.create_all()
+        if url.startswith('postgres'):
+            _guard_evidence(db)
 
         # One table set per schema in the file. A company's schema is rebuilt
         # from today's models exactly as public is, so a company restores onto
@@ -454,6 +665,12 @@ def restore(path, into_url, quiet=False):
 
         dropped_tables, dropped_columns = set(), {}
         with db.engine.begin() as conn:
+            if url.startswith('postgres'):
+                # Contract evidence refuses DELETE (quote_evidence.KEPT_TABLES)
+                # unless the transaction says it is a restore -- this one, which
+                # puts every row straight back.
+                from sqlalchemy import text as _text
+                conn.execute(_text("SET LOCAL akye.restoring = 'on'"))
             # Children first, so nothing is left pointing at a deleted parent.
             for schema in order:
                 for table in reversed(order[schema]):
@@ -505,6 +722,7 @@ def restore(path, into_url, quiet=False):
             flush()
         for schema, tables in order.items():
             _fix_sequences(db, conn_url=url, tables=tables, schema=schema)
+        _keep_old_cleaner_rate(db, url, header, list(order), quiet=quiet)
         _stamp_schema()
     if not quiet:
         print(f'  ✅ restored {sum(counts.values()):,} rows'
@@ -565,7 +783,20 @@ def _build_schema(db, schema, url, quiet=False):
     with db.engine.begin() as conn:
         conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
     md.create_all(bind=db.engine)
+    _guard_evidence(db, schema)
     return list(md.sorted_tables)
+
+
+def _guard_evidence(db, schema=None):
+    """Migration 0029's trigger -- sent quotes' frozen terms and customers'
+    answers refuse UPDATE -- on tables create_all() just built, which no
+    migration will revisit. Never fails a restore."""
+    try:
+        import quote_evidence
+        with db.engine.begin() as conn:
+            quote_evidence.install_guards(conn, schema)
+    except Exception:
+        pass
 
 
 def _stamp_schema():
@@ -615,13 +846,18 @@ def _fix_sequences(db, conn_url='', tables=None, schema=PUBLIC):
                 ), {'t': f'{schema}.{table.name}', 'c': col.name})
 
 
-def verify(path, quiet=False, scratch_url=None):
+def verify(path, quiet=False, scratch_url=None, require_evidence=False):
     """Restore into a throwaway database and check it came back whole.
 
     This is the whole point of the file. Everything above it produces a
     plausible-looking artefact; this is the only part that finds out whether
     the artefact is any good, and it runs on every scheduled backup so the
     answer is never more than a day old.
+
+    require_evidence: the backup was made by this code, which always writes
+    the contract evidence down, so a sidecar without it is a failure rather
+    than an older backup to be let through (the nightly run). Off for
+    verifying a backup taken before evidence was recorded.
     """
     manifest = read_manifest(path)
     tenants = [s for s in (manifest.get('schemas') or []) if s != PUBLIC]
@@ -670,6 +906,14 @@ def verify(path, quiet=False, scratch_url=None):
     if problems:
         raise BackupFailed('restore did not match the backup: ' + '; '.join(problems))
 
+    # The contract evidence came back exactly as it was written down when the
+    # backup was taken (the sidecar manifest's digests), its audit chains
+    # still recompute, and every guard is back on: a restore that brought
+    # the rows back but left them editable, or changed one, is not a restore.
+    evidence_problems = _verify_evidence(path, scratch_url, tenants, require_evidence)
+    if evidence_problems:
+        raise BackupFailed('restored evidence does not match: ' + '; '.join(evidence_problems[:10]))
+
     # RECOVERY-03: structurally correct is not the same as traffic-ready. A
     # backup taken during a closed tenant's 30-day retention window can
     # legitimately contain its schema; restoring it must not silently make
@@ -694,6 +938,60 @@ def verify(path, quiet=False, scratch_url=None):
     return True, manifest
 
 
+def _verify_evidence(path, scratch_url, tenants, require=False):
+    """Problems with the restored contract evidence, against the digests the
+    sidecar manifest wrote down at backup time. Postgres scratch only."""
+    if not scratch_url.startswith('postgres'):
+        return []
+    sidecar = path.replace('.json.gz', '.manifest.json')
+    written, source_chained = {}, None
+    if os.path.exists(sidecar):
+        with open(sidecar) as fh:
+            meta = json.load(fh)
+        written = meta.get('evidence') or {}
+        source_chained = meta.get('chained')
+    import evidence_check
+    from sqlalchemy import text
+    problems = []
+    engine = _read_engine(scratch_url)
+    try:
+        with engine.connect() as conn, conn.begin():
+            evidence_check.read_only(conn)
+            # Which schemas held an audit chain, so had evidence to write
+            # down -- every company on Akye, public on a single business. A
+            # database from before 0031 has none, and nothing is required.
+            # The manifest says, from the database the backup read; the
+            # restore cannot, being migrated to head whatever the source was
+            # (a single business still on 0021 failed every night on that).
+            # Older manifests do not say, so the restore is asked.
+            if source_chained is not None:
+                chained = set(source_chained)
+            else:
+                chained = set(conn.execute(text(
+                    "SELECT table_schema FROM information_schema.columns "
+                    "WHERE table_name = 'contract_audit_event' AND column_name = 'chain_seq'")).scalars())
+            if require and chained and not written:
+                # Without this a manifest with nothing written down passed:
+                # every check below is skipped when there is nothing to hold
+                # the restore to, and a green run proved nothing about evidence.
+                return ['the backup wrote down no contract evidence at all']
+            for schema in [PUBLIC] + list(tenants):
+                if schema in written:
+                    problems += [f'{schema}: {p}' for p in
+                                 evidence_check.compare(conn, schema, written[schema])['problems']]
+                    problems += [f'{schema}: {p}' for p in
+                                 evidence_check.reconcile(conn, schema)['tampered']]
+                elif (written or require) and (schema != PUBLIC or schema in chained):
+                    problems.append(f'{schema}: the backup wrote down no evidence for it')
+                if schema != PUBLIC:
+                    report = evidence_check.schema_report(conn, schema)
+                    problems += [f'{schema}: {p}' for p in report['problems']
+                                 if p.startswith(('guard', 'index'))]
+    finally:
+        engine.dispose()
+    return problems
+
+
 # ---------------------------------------------------------------------------
 
 def prune(out_dir=DEFAULT_DIR, keep_days=DEFAULT_KEEP_DAYS, quiet=False):
@@ -701,7 +999,7 @@ def prune(out_dir=DEFAULT_DIR, keep_days=DEFAULT_KEEP_DAYS, quiet=False):
 
     A retention rule that can empty the directory is a retention rule that will,
     the first time backups quietly stop running and the clock keeps going."""
-    files = sorted(glob.glob(os.path.join(out_dir, 'backup-*.json.gz')))
+    files = _oldest_first(glob.glob(os.path.join(out_dir, 'backup-*.json.gz')))
     if len(files) <= 1:
         return []
     cutoff = datetime.datetime.utcnow() - datetime.timedelta(days=keep_days)
@@ -723,7 +1021,7 @@ def prune(out_dir=DEFAULT_DIR, keep_days=DEFAULT_KEEP_DAYS, quiet=False):
 
 
 def listing(out_dir=DEFAULT_DIR):
-    files = sorted(glob.glob(os.path.join(out_dir, 'backup-*.json.gz')))
+    files = _oldest_first(glob.glob(os.path.join(out_dir, 'backup-*.json.gz')))
     if not files:
         print(f'No backups in {out_dir}.')
         return
@@ -801,7 +1099,7 @@ def main():
 
     if args.verify:
         try:
-            verify(path)
+            verify(path, require_evidence=True)
         except BackupFailed as e:
             print(f'  ❌ {e}')
             return 1

@@ -2,7 +2,6 @@
 {% block title %}{{ partner.name }}{% endblock %}
 {% block body %}
 {% include "console/_ops_style.html" %}
-{% include "console/_funnel_tabs.html" %}
 <p style="margin:0 0 var(--s3)"><a href="{{ url_for('console.affiliates_view') }}">&larr; All partners</a></p>
 <h2 style="margin:0 0 var(--s1)">{{ partner.name }} <span class="ops-badge {{ 'ops-ok' if partner.status == 'active' else ('ops-stale' if partner.status in ('pending', 'paused') else 'ops-closed') }}">{{ partner.status }}</span></h2>
 <p class="ops-dim" style="margin:0 0 var(--s4)">{{ partner.email }} · <code>{{ link }}</code> · {{ partner.commission_bps / 100 }}% for {{ partner.commission_months }} months, held {{ partner.hold_days }} days{% if partner.last_login_at %} · last signed in {{ partner.last_login_at.strftime('%d %b %Y') }}{% endif %}{% if partner.notes %}<br>{{ partner.notes }}{% endif %}</p>
@@ -46,7 +45,7 @@
     {% if payable_cents and payable_cents >= min_payout_cents %}
       {% if can_stripe %}
       <form method="post" action="{{ url_for('console.affiliate_action', affiliate_id=partner.id, action='stripe') }}"
-            onsubmit="return confirm('Send {{ money(payable_cents) }} to {{ partner.name }} from the Akye Stripe balance? This moves real money.')">
+            onsubmit="return confirm('Send {{ money(payable_cents)|js }} to {{ partner.name|js }} from the Akye Stripe balance? This moves real money.')">
         <button class="btn btn-sm" type="submit">Pay {{ money(payable_cents) }} by Stripe transfer</button>
       </form>
       {% else %}<span class="ops-dim">Cannot pay by Stripe yet: {{ why_not }}</span>{% endif %}
@@ -80,7 +79,9 @@
 </div>
 {% endif %}
 
-{% if payable_cents and payable_cents < min_payout_cents %}
+{% if payable_cents < 0 %}
+<p class="ops-dim" style="margin:0 0 var(--s5)">{{ money(-payable_cents) }} is owed back: a refunded payment was already paid out. It comes off their next payout; nothing is sent until they have earned it back.</p>
+{% elif payable_cents and payable_cents < min_payout_cents %}
 <p class="ops-dim" style="margin:0 0 var(--s5)">{{ money(payable_cents) }} is ready, under the {{ money(min_payout_cents) }} minimum, so it rolls over to the next payout.</p>
 {% endif %}
 

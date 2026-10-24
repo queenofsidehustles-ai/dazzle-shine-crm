@@ -40,7 +40,7 @@ NAME = assistant.NAME
 
 API_URL = 'https://api.anthropic.com/v1/messages'
 API_VERSION = '2023-06-01'
-MODEL = os.environ.get('SETUP_ASSISTANT_MODEL', 'claude-haiku-5-5')
+MODEL = os.environ.get('SETUP_ASSISTANT_MODEL', 'claude-haiku-4-5')
 
 # Messages per company per month. Setup takes twenty or thirty; the cap is
 # there so one confused afternoon cannot spend somebody else's credits.
@@ -109,61 +109,183 @@ def configured():
 # model. They are the same every time, they cost nothing, and they are the
 # lines a person reads most.
 
+# Short on purpose. Every one of these used to lead with why the step
+# mattered before asking anything, which is backwards for a conversation: ask,
+# and explain only if somebody hesitates. The old six ran to 217 words before
+# the owner had answered a single question.
 STEP_PROMPTS = {
-    'business': ('Let\'s start with the basics. What phone number and email '
-                 'should your customers see? (Your business name too, if it '
-                 'isn\'t right yet.)'),
-    'pricing': ('Now your prices. What do you charge for a standard clean of a '
-                '2-bedroom, 2-bathroom home? I\'ll build the rest of your price '
-                'list from that one number, and you can tweak any of it later.'),
-    'booking_page': ('Good news: you already have a booking page where customers '
-                     'pick a service, see your price and book themselves. The '
-                     'next step is putting the link somewhere they\'ll see it, '
-                     'like your Facebook or Instagram bio.'),
-    'team': ('Who\'s cleaning for you? Give me a name and cell number for your '
-             'first cleaner. If you\'re still cleaning yourself, add yourself.'),
-    'client': ('Now add one real customer you already clean for: their name, '
-               'phone, and address.'),
-    'job': ('Last step: book a job for that customer and assign your cleaner. '
-            'That\'s the moment Akye starts working for you. The cleaner gets a '
-            'text with the address, the pay and the checklist.'),
+    'business': lambda has_data: (
+        'Quick check — fix anything that’s off, then Save.' if has_data else
+        'Fill in the details your customers see, then Save.'),
+    'pricing': 'What do you charge for a standard clean of a 2-bed, 2-bath?',
+    'terms': 'Your customer terms are ready. Have a look and accept them.',
+    'balance': 'When a job’s finished, should the rest come off the card on file?',
+    'payments': ('That’s the four essentials done — you can take bookings right '
+                 'now. The one thing left, whenever you’re ready: connect '
+                 'payments so customers can pay by card. Your bank details stay '
+                 'with you.'),
+    'booking_page': 'Want to put your booking page where customers can find it?',
+    'team': 'Add a cleaner? Yourself counts, if you’re still cleaning.',
+    'client': 'Add a customer you already clean for?',
+    'job': 'Book a job and send it to a cleaner — that’s the whole loop.',
 }
 
 STEP_LINKS = {
+    'business': ('Open my details', '/settings/business'),
+    'timezone': ('Set my timezone', '/settings/business'),
+    'terms': ('Read my terms', '/settings/business'),
+    'payments': ('Connect payments', '/settings/connections'),
+    'balance': ('Choose how balances are paid', '/settings/automations'),
     'booking_page': ('Open my booking page', '/settings/booking-page'),
     'job': ('Book a job', '/bookings/new'),
 }
 
-DONE_PROMPT = ('That\'s every setup step done. One more thing worth doing: '
-               'connect payments so customers can pay by card. You\'ll do that '
-               'yourself on the Connections page, so your bank details stay '
-               'with you.')
-DONE_LINK = ('Connect payments', '/settings/connections')
+# Payments used to live here, as "one more thing worth doing" after setup
+# was declared finished -- which read as optional, and is the one thing
+# standing between a booking and being paid for it. It is a required step
+# now, so by the time this is said it is already done.
+DONE_PROMPT = 'That\'s you set up. Anything else is yours to add when you have it.'
+DONE_LINK = ('Open my calendar', '/bookings/calendar')
+
+
+# Steps the owner chose to skip in the chat. Only the chat's order uses
+# this: the getting-started list still shows every unfinished step, so
+# skipping is "not now", never "pretend it is done".
+SKIPPED_KEY = 'setup_chat_skipped'
+
+
+def skipped():
+    return [k for k in _setting(SKIPPED_KEY).split(',') if k]
+
+
+def skip(step_key):
+    from extensions import db
+    from models import BusinessSetting
+    keys = skipped()
+    if step_key and step_key not in keys:
+        keys.append(step_key)
+    BusinessSetting.set(SKIPPED_KEY, ','.join(keys))
+    db.session.commit()
 
 
 def _next_step():
+    """The first unfinished step the owner has not skipped.
+
+    Once every unfinished step has been skipped, the skips are forgotten and
+    it starts again from the first unfinished one -- a chat that has run out
+    of things to say while setup is still incomplete is a dead end.
+    """
     import onboarding
-    return onboarding.progress().get('next')
+    steps = [s for s in onboarding.progress()['steps'] if not s['done']]
+    if not steps:
+        return None
+    gone = set(skipped())
+    for st in steps:
+        if st['key'] not in gone:
+            return st
+    try:
+        from extensions import db
+        from models import BusinessSetting
+        BusinessSetting.set(SKIPPED_KEY, '')
+        db.session.commit()
+    except Exception:
+        pass
+    return steps[0]
+
+
+def next_message(done_line=''):
+    """The chat's next turn: what to say, its buttons, and which step it is about.
+
+    Every step that is not finished gets a "Skip for now" button, so nobody is
+    stuck on a step they cannot or will not do today.
+    """
+    step = _next_step()
+    if step is None:
+        return ((done_line + ' ' + DONE_PROMPT).strip(),
+                [_link_card(*DONE_LINK)], 'done')
+    cards = []
+    # The card comes with the question, already filled in, built here rather
+    # than by the model. Three reasons: it is instant, it costs nothing, and
+    # the model cannot get a phone number slightly wrong on the way through.
+    try:
+        builder = _STEP_CARDS.get(step['key'])
+        if builder:
+            built = builder()
+            if isinstance(built, list):
+                cards.extend(c for c in built if c)
+            else:
+                _lines, card = built
+                if card:
+                    cards.append(card)
+    except Exception:
+        assistant._record(f'setup card for {step["key"]} could not be built')
+    # Chosen after the cards, because for some steps the question is not the
+    # same when there is nothing on screen to point at.
+    text = STEP_PROMPTS.get(step['key'], step.get('why') or '')
+    if callable(text):
+        # The business prompt reads differently with boxes already filled in
+        # than with blank ones to complete.
+        text = text(any(c.get('prefilled') for c in cards))
+    # The payments step is the seam right after the four required ones. Its own
+    # wording already says "that's the essentials done", so a generic "That step
+    # is done." in front of it is both redundant and quietly wrong -- the owner
+    # did not just finish an optional step, they finished setup. Drop the prefix
+    # here only; later optional steps (booking page, team...) still get it.
+    if step.get('key') == 'payments':
+        done_line = ''
+    # A choice card asks its own question, in the card. Saying it again in a
+    # bubble above is the same words twice.
+    if any(c.get('kind') == 'choice' for c in cards):
+        text = ''
+    link = STEP_LINKS.get(step['key'])
+    if link and not cards:
+        cards.append(_link_card(*link))
+    # "Step 2 of 4": counted over the REQUIRED steps only, the same four the
+    # progress meter counts, so the card and the meter never disagree. The
+    # optional extras that come after (payments, booking page, team...) get no
+    # number -- they are not step five of four, they are what's left to do once
+    # setup is already finished.
+    try:
+        import onboarding
+        required = [s for s in onboarding.progress()['steps'] if s.get('required')]
+        total = len(required)
+        no = next((i + 1 for i, s in enumerate(required)
+                   if s['key'] == step['key']), None)
+        if no:
+            for c in cards:
+                if c.get('kind') in ('form', 'confirm', 'choice'):
+                    c['step_no'], c['step_total'] = no, total
+    except Exception:
+        pass
+    cards.append({'kind': 'skip', 'label': 'Skip for now', 'step': step['key']})
+    return (done_line + ' ' + text).strip(), cards, step['key']
+
+
+# Which step arrives with its own card. Everything not here is a question
+# the model answers, or a page the owner has to go to.
+_STEP_CARDS = {
+    'business': lambda: prefilled_business_card(),
+    'pricing': lambda: price_card(),
+    'terms': lambda: terms_card(),
+    'balance': lambda: balance_cards(),
+}
 
 
 def nudge():
     """What to say next, and a button if the step lives on another page."""
-    step = _next_step()
-    if step is None:
-        return DONE_PROMPT, _link_card(*DONE_LINK)
-    text = STEP_PROMPTS.get(step['key'], step.get('why') or '')
-    link = STEP_LINKS.get(step['key'])
-    return text, (_link_card(*link) if link else None)
+    text, cards, _key = next_message()
+    links = [c for c in cards if c.get('kind') == 'link']
+    return text, (links[0] if links else None)
 
 
 def greeting():
-    text, link = nudge()
     opener = (f'Hi, I\'m {NAME}. I\'ll get you set up in a few minutes, one '
               f'question at a time. You can type your answers, ask me anything '
               f'about how Akye works, or skip a step.')
     if _next_step() is None:
         opener = f'Hi, I\'m {NAME}. You\'re all set up.'
-    return f'{opener}\n\n{text}', link
+    text, cards, key = next_message()
+    return f'{opener}\n\n{text}', cards, key
 
 
 def _link_card(label, href):
@@ -260,7 +382,19 @@ def _offer(action, payload, title, lines, label):
             'lines': lines, 'label': label}
 
 
-def tool_offer_business(**kw):
+def _known():
+    """What we already hold about this business, without asking anybody."""
+    from models import BusinessSetting
+    return {f: (BusinessSetting.get(f) or '').strip() for f in BUSINESS_FIELDS}
+
+
+def _validate_business(kw):
+    """Clean and check business fields. Returns (payload, lines, problems).
+
+    The same rules whether the model offered the card or the owner typed into
+    an editable one: a bad phone or half an email is refused before anything
+    is written, so the form cannot slip a wrong value past on the way in.
+    """
     payload, lines, problems = {}, [], []
     for f in BUSINESS_FIELDS:
         v = _clean(kw.get(f))
@@ -280,6 +414,138 @@ def tool_offer_business(**kw):
             v = v.upper()[:2] if len(v) <= 3 else v
         payload[f] = v
         lines.append(f'{FIELD_LABELS[f]}: {v}')
+    return payload, lines, problems
+
+
+def _form_field(name, value='', *, label=None, kind='text', placeholder='',
+                optional=False, prefix=''):
+    """One editable box on a form card."""
+    return {'name': name,
+            'label': label or FIELD_LABELS.get(name, name.replace('_', ' ').title()),
+            'value': '' if value is None else str(value),
+            'type': kind, 'placeholder': placeholder,
+            'optional': bool(optional), 'prefix': prefix}
+
+
+def _form_card(step, title, fields, label, note='', lines=None):
+    """An editable card. Unlike a confirm card it carries no token: the owner
+    may change the boxes, so what is written is what was typed, checked again
+    on the server by save_form() -- never replayed from a fixed payload."""
+    return {'kind': 'form', 'step': step, 'title': title, 'note': note,
+            'fields': [f for f in fields if f], 'label': label,
+            'lines': lines or []}
+
+
+def prefilled_business_card():
+    """The first card, editable, built before a word is typed. (lines, card).
+
+    Signup gave a name, an email and a ZIP; the ZIP gave the timezone; Google
+    often gives the phone and address for a business old enough to be listed.
+    All of it goes on the card as boxes the owner can confirm or correct in
+    place -- usually one tap on Save, sometimes a phone typed in.
+
+    A business too new to be listed gets the same card with the boxes empty,
+    never a dead end that asks nothing and offers nowhere to answer.
+    """
+    import business_lookup
+    import zip_zones
+    from models import BusinessSetting
+    have = _known()
+    name = have.get('business_name') or ''
+    found = business_lookup.find(name, have.get('zip_code'))
+
+    def val(f):
+        return have.get(f) or found.get(f) or ''
+
+    # A short read-only summary above the boxes: the name, and the timezone
+    # the ZIP worked out (not a box, because the ZIP decides it, not a guess).
+    lines = []
+    if name:
+        lines.append(f'{FIELD_LABELS["business_name"]}: {name}')
+    zone = (BusinessSetting.get('timezone') or '').strip()
+    if zone:
+        lines.append(f'Timezone: {zip_zones.label(zone)}')
+
+    fields = [
+        _form_field('business_name', name),
+        _form_field('phone', val('phone'), kind='tel', placeholder='(555) 123-4567'),
+        _form_field('address', val('address'), placeholder='Street address'),
+        _form_field('city', val('city')),
+        _form_field('state', val('state'), placeholder='FL'),
+        _form_field('website', val('website'), optional=True, placeholder='optional'),
+    ]
+    card = _form_card('business', 'Your details', fields, 'Save & continue',
+                      note='The details your customers see.', lines=lines)
+    card['prefilled'] = any(f['value'] for f in fields)
+    return lines, card
+
+
+def price_card():
+    """The 2-bed / 2-bath price, editable, with the rest worked out from it.
+    (lines, card).
+
+    The matrix ships with working numbers, so the box is never blank -- it is
+    somebody else's price, already being quoted to real customers, waiting to
+    be confirmed or corrected. One tap if it is close; type over it if not.
+    """
+    import pricing
+    try:
+        anchor = float(pricing.get_std_price(2, 2) or 0)
+    except Exception:
+        anchor = 0.0
+    if not anchor:
+        anchor = float(pricing.PRICE_MATRIX_DEFAULTS.get((2, 2), 225))
+    lines = [f'2-bed, 2-bath standard clean: ${anchor:.0f}',
+             'Every other size is worked out from this one.']
+    fields = [_form_field('two_bed_two_bath', f'{anchor:.0f}', kind='number',
+                          label='2-bed, 2-bath standard clean', prefix='$')]
+    card = _form_card('pricing', 'Your prices', fields, 'Save prices',
+                      note='Set this one price — every other size follows from it.',
+                      lines=lines)
+    card['prefilled'] = True
+    return lines, card
+
+
+def terms_card():
+    """The terms, as four lines rather than thirteen hundred words."""
+    lines = ['Payment is due when the job is done',
+             'Cancellations: 24 hours’ notice',
+             'Somebody must be able to let the cleaner in',
+             'Not happy? Tell us within 24 hours and we put it right']
+    card = _offer('setup_accept_terms', {'accepted': '1'},
+                  'Your customer terms', lines, 'Accept these')
+    # Most owners accept the sensible draft in one tap. The few who want to
+    # change a line need somewhere to go that is not the chat box -- a quiet
+    # link under the button, to the terms editor on the business page.
+    card['secondary'] = {'label': 'Prefer to change them? Edit your terms',
+                         'href': '/settings/business'}
+    return lines, card
+
+
+def balance_cards():
+    """One card: the question, and its two answers side by side.
+
+    This used to be two cards, each titled "How balances get paid" with one
+    button, under a chat bubble asking the question. Owners read that as two
+    separate steps -- both said "Step 4 of 4" -- when it is one question with
+    a yes and a no. Each answer still carries its own token, so whichever is
+    tapped saves exactly what it said.
+    """
+    options = []
+    for mode, label, line in (
+            ('auto', 'Yes — charge the card',
+             'The rest comes off the card on file when the job is done'),
+            ('ask', 'No — I’ll decide each time',
+             'The balance shows as owed, and waits for you')):
+        offered = _offer('setup_set_balance_mode', {'mode': mode},
+                         'How balances get paid', [line], label)
+        options.append({'token': offered['token'], 'label': label, 'line': line})
+    return [{'kind': 'choice', 'title': STEP_PROMPTS['balance'],
+             'options': options}]
+
+
+def tool_offer_business(**kw):
+    payload, lines, problems = _validate_business(kw)
     if problems:
         return ('Not offered. Ask them to check: ' + '; '.join(problems) + '.'), None
     if not payload:
@@ -288,6 +554,77 @@ def tool_offer_business(**kw):
                   lines, 'Save details')
     return ('A card is on screen with these details and a Save button. '
             'Nothing is saved until they press it.'), card
+
+
+# The timezones a US cleaning business is actually in. A free-text zone name
+# from a model is a silent wrong answer waiting to happen -- ZoneInfo accepts
+# plenty of names nobody means -- so the card can only offer one of these.
+TIMEZONES = {
+    'eastern': ('America/New_York', 'Eastern'),
+    'central': ('America/Chicago', 'Central'),
+    'mountain': ('America/Denver', 'Mountain'),
+    'arizona': ('America/Phoenix', 'Arizona (no daylight saving)'),
+    'pacific': ('America/Los_Angeles', 'Pacific'),
+    'alaska': ('America/Anchorage', 'Alaska'),
+    'hawaii': ('Pacific/Honolulu', 'Hawaii'),
+    'atlantic': ('America/Puerto_Rico', 'Atlantic (Puerto Rico, Virgin Islands)'),
+    'puerto rico': ('America/Puerto_Rico', 'Atlantic (Puerto Rico, Virgin Islands)'),
+    'virgin islands': ('America/Puerto_Rico', 'Atlantic (Puerto Rico, Virgin Islands)'),
+    'chamorro': ('Pacific/Guam', 'Chamorro (Guam)'),
+    'guam': ('Pacific/Guam', 'Chamorro (Guam)'),
+}
+
+
+def tool_offer_timezone(zone=''):
+    """Show a card setting the timezone everything is scheduled against."""
+    want = (zone or '').strip().lower()
+    # A zone's own name first: 'Pacific/Honolulu' starts with 'pacific' and
+    # would otherwise be offered Los Angeles.
+    found = next(((name, label) for name, label in TIMEZONES.values()
+                  if want == name.lower()), None)
+    for key, (name, label) in TIMEZONES.items():
+        if not found and (want == key or want.startswith(key)):
+            found = (name, label)
+    if not found:
+        return ('Not offered: ask which of these they are in — Eastern, Central, '
+                'Mountain, Arizona, Pacific, Alaska, Hawaii, Atlantic (Puerto Rico, '
+                'Virgin Islands) or Chamorro (Guam).'), None
+    name, label = found
+    card = _offer('setup_set_timezone', {'timezone': name},
+                  'Set your timezone', [f'Timezone: {label} ({name})'],
+                  'Set timezone')
+    return ('A card is on screen with that timezone and a button. Nothing '
+            'changes until they press it.'), card
+
+
+BALANCE_CHOICES = {
+    'auto': ('auto', 'Charge the card on file when the job is done'),
+    'ask': ('ask', 'Leave it owed, and you decide each time'),
+    'never': ('never', 'Never charge here — collected some other way'),
+}
+
+
+def tool_offer_balance_mode(choice=''):
+    """Show a card recording how balances get collected."""
+    want = (choice or '').strip().lower()
+    key = None
+    for k in BALANCE_CHOICES:
+        if want == k or want.startswith(k):
+            key = k
+            break
+    if key is None:
+        if want in ('automatic', 'automatically', 'card', 'charge'):
+            key = 'auto'
+        elif want in ('manual', 'me', 'myself', 'decide'):
+            key = 'ask'
+    if key is None:
+        return ('Not offered: ask whether the balance should come off the card '
+                'automatically, wait for them to say so, or never be taken here.'), None
+    mode, label = BALANCE_CHOICES[key]
+    card = _offer('setup_set_balance_mode', {'mode': mode},
+                  'How balances get paid', [label], 'Save this choice')
+    return ('A card is on screen with that choice and a button. Nothing '
+            'changes until they press it.'), card
 
 
 def tool_offer_prices(two_bed_two_bath_price=''):
@@ -404,6 +741,20 @@ TOOLS = {
         tool_offer_prices, 'Show a card that sets their whole standard price list '
         'from what they charge for a 2 bed / 2 bath standard clean.',
         {'two_bed_two_bath_price': _S}),
+    'offer_timezone': (
+        tool_offer_timezone, 'Show a card setting the business timezone, once '
+        'the owner has said where they are. Everything is scheduled against it.',
+        {'zone': {'type': 'string',
+                  'description': 'Eastern, Central, Mountain, Arizona, '
+                                 'Pacific, Alaska, Hawaii, Atlantic (Puerto Rico, '
+                                 'Virgin Islands) or Chamorro (Guam).'}}),
+    'offer_balance_mode': (
+        tool_offer_balance_mode, 'Show a card recording how the rest of a job\'s '
+        'price is collected once it is finished.',
+        {'choice': {'type': 'string',
+                    'description': "'auto' to charge the card on file, 'ask' to "
+                                   "leave it for the owner to decide, 'never' if "
+                                   "they collect it another way."}}),
     'offer_add_cleaner': (
         tool_offer_cleaner, 'Show an Add card for one cleaner the owner named.',
         {'name': _S, 'phone': _S, 'email': _S}),
@@ -650,6 +1001,25 @@ def ask(message, history=None, opening=''):
 # Each one checks again. The card was right when it was offered; the world
 # can move before the button is pressed.
 
+def _timezone_from_zip():
+    """Set the timezone from the ZIP, if we have one and no timezone yet.
+
+    Derived wherever a ZIP turns up, rather than asked. A company that joined
+    before the ZIP field existed gets its timezone the moment it tells us
+    where it is, without ever being asked a question whose right answer we
+    could work out.
+    """
+    from extensions import db
+    from models import BusinessSetting
+    import zip_zones
+    if (BusinessSetting.get('timezone') or '').strip():
+        return
+    zone = zip_zones.zone_for_zip(BusinessSetting.get('zip_code'))
+    if zone:
+        BusinessSetting.set('timezone', zone)
+        db.session.commit()
+
+
 def save_business(payload):
     import demo_guard
     from extensions import db
@@ -665,6 +1035,7 @@ def save_business(payload):
     if not saved:
         return False, 'There was nothing to save.'
     db.session.commit()
+    _timezone_from_zip()
     try:
         import legacy_brands
         legacy_brands.restore_if_original()
@@ -693,6 +1064,37 @@ def set_prices(payload):
     BusinessSetting.set('pricing_reviewed', '1')
     db.session.commit()
     return True, 'Prices saved. You can fine-tune any size on the Prices page.'
+
+
+def save_form(step, fields):
+    """Write an editable setup card. The form is only an input; every value is
+    checked again here, the same rules the model's offer card goes through, so
+    nothing is trusted just because it arrived from a box on the page."""
+    import demo_guard
+    if demo_guard.active():
+        return False, demo_guard.IDENTITY_DETAIL
+    fields = fields or {}
+    if step == 'business':
+        payload, _lines, problems = _validate_business(fields)
+        if problems:
+            return False, 'Please check: ' + '; '.join(problems) + '.'
+        if not payload:
+            return False, 'Add at least one detail before saving.'
+        return save_business(payload)
+    if step == 'pricing':
+        try:
+            anchor = float(re.sub(r'[^\d.]', '', str(fields.get('two_bed_two_bath'))) or 0)
+        except ValueError:
+            anchor = 0
+        if not 40 <= anchor <= 2000:
+            return False, ('That price looks off for a 2-bed, 2-bath standard '
+                           'clean. Try a number between $40 and $2,000.')
+        import pricing
+        matrix = pricing.suggest_matrix(anchor)
+        matrix[(2, 2)] = round(anchor, 2)
+        payload = {f'{b}_{ba}': v for (b, ba), v in matrix.items()}
+        return set_prices(payload)
+    return False, 'That is not something to save here.'
 
 
 def add_cleaner(payload):
@@ -734,8 +1136,62 @@ def add_customer(payload):
 
 # Its own list, apart from Nana's ACTIONS: a setup card cannot be confirmed
 # through the general assistant, and a Nana proposal cannot be confirmed here.
+def set_timezone(payload):
+    """Write the timezone. Only ever one of TIMEZONES, checked again here."""
+    from extensions import db
+    from models import BusinessSetting
+    name = (payload.get('timezone') or '').strip()
+    if name not in {z for z, _l in TIMEZONES.values()}:
+        return False, 'That is not a timezone I can set.'
+    BusinessSetting.set('timezone', name)
+    db.session.commit()
+    label = next(l for z, l in TIMEZONES.values() if z == name)
+    return True, (f'Timezone set to {label}. Reminders, the day\'s plan and '
+                  f'your end-of-day numbers all follow it from now on.')
+
+
+def set_balance_mode(payload):
+    """Record how balances are collected. A choice, not a default."""
+    import automations
+    from extensions import db
+    mode = (payload.get('mode') or '').strip()
+    if mode not in {m for m, _l in BALANCE_CHOICES.values()}:
+        return False, 'That is not a choice I can save.'
+    automations.set_balance_mode(mode)
+    db.session.commit()
+    return True, {
+        'auto': 'Saved. When a job is finished the rest comes off the card on '
+                'file — you can change it any time under Automations.',
+        'ask': 'Saved. Balances will show as owed and wait for you, rather than '
+               'being charged automatically.',
+        'never': 'Saved. Nothing will be charged here; balances are yours to '
+                 'collect however you do it.',
+    }[mode]
+
+
+def accept_terms(payload):
+    """Record that the owner has read and accepted the customer terms.
+
+    The terms themselves already exist and are already in force -- a generic
+    draft stands in until a business writes its own, which means a company
+    that never finishes setup is trading under terms nobody has read. This is
+    the reading happening, not the terms being created.
+    """
+    from extensions import db
+    from models import BusinessSetting
+    if str(payload.get('accepted') or '') != '1':
+        return False, 'Nothing to accept there.'
+    BusinessSetting.set('terms_reviewed', '1')
+    db.session.commit()
+    return True, ('Terms accepted. Customers agree to them at the moment they '
+                  'book, and you can change the wording any time in Settings.')
+
+
 ACTIONS = {
     'setup_save_business': save_business,
+    'setup_accept_terms': accept_terms,
+    'setup_set_timezone': set_timezone,
+    'setup_set_balance_mode': set_balance_mode,
     'setup_set_prices': set_prices,
     'setup_add_cleaner': add_cleaner,
     'setup_add_customer': add_customer,

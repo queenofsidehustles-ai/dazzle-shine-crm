@@ -2,8 +2,7 @@
 #
 # Anyone entering the demo through akyehq.com/demo is its owner and can change
 # its jobs, customers and money; its dates are also worked out from the day it
-# was built. So it is put back to its seed every hour (see DEMO.md on
-# akye-stable).
+# was built. So it is put back to its seed every hour (see DEMO.md).
 #
 # The rebuild runs inside the Akye app, not here: this only asks for it. The
 # app starts demo_company.py as a process of its own -- the code that is
@@ -13,8 +12,8 @@
 #
 #   REMINDER_API_KEY   the same value the Akye app has in Railway.
 #
-# Scheduled workflows only run from the default branch, which is why this file
-# lives on main while the code it calls lives on akye-stable.
+# Scheduled workflows only run from the default branch, main (Akye's working
+# branch); the endpoint it calls is the deployed release, akye-stable.
 #
 # www, not the bare akyehq.com: the apex is not the app, and answers a POST
 # with 405 Method Not Allowed (every run failed on that at first).

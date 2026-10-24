@@ -35,7 +35,7 @@
 
 <h2 class="pt-h">Money</h2>
 <div class="pt-tiles">
-  <div class="pt-card pt-tile good"><span class="l">Ready to pay</span><span class="v">{{ money(payable_cents) }}</span><span class="n">past the {{ partner.hold_days }}-day hold{% if payable_cents and payable_cents < min_payout_cents %} · paid once it reaches {{ money(min_payout_cents) }}{% endif %}</span></div>
+  <div class="pt-card pt-tile good"><span class="l">Ready to pay</span><span class="v">{{ money(payable_cents) }}</span><span class="n">past the {{ partner.hold_days }}-day hold{% if payable_cents < 0 %} · a refunded payment was already paid to you, so it comes off first{% elif payable_cents and payable_cents < min_payout_cents %} · paid once it reaches {{ money(min_payout_cents) }}{% endif %}</span></div>
   <div class="pt-card pt-tile"><span class="l">On hold</span><span class="v">{{ money(pending_cents) }}</span><span class="n">{% if next_payable_at %}next frees up {{ when(next_payable_at) }}{% else %}nothing waiting{% endif %}</span></div>
   <div class="pt-card pt-tile"><span class="l">Paid to you</span><span class="v">{{ money(paid_cents) }}</span><span class="n">{% if sending_cents %}{{ money(sending_cents) }} on its way{% else %}{{ payouts|length }} payment{{ '' if payouts|length == 1 else 's' }}{% endif %}</span></div>
   <div class="pt-card pt-tile"><span class="l">Earned in total</span><span class="v">{{ money(lifetime_cents) }}</span><span class="n">{{ rate_pct|round(0)|int }}% for {{ partner.commission_months }} months</span></div>

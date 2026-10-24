@@ -9,7 +9,8 @@ import tenant_data_lifecycle as lifecycle
 def test_unconfigured_private_media_has_no_provider_delete(monkeypatch):
     monkeypatch.setattr(private_media, 'is_ready', lambda: False)
     result = lifecycle._delete_private_media('alpha')
-    assert result == {'provider': 'cloudinary', 'configured': False, 'deleted': 0}
+    assert result == {'provider': 'cloudinary', 'configured': False, 'deleted': 0,
+                      'videos_deleted': 0}
 
 
 def test_cloudinary_delete_uses_only_exact_tenant_prefix_and_follows_cursor(monkeypatch):
@@ -23,7 +24,18 @@ def test_cloudinary_delete_uses_only_exact_tenant_prefix_and_follows_cursor(monk
             return {'deleted': {'a': 'deleted', 'b': 'deleted'}, 'next_cursor': 'page-2'}
         return {'deleted': {'c': 'deleted'}}
 
-    api = SimpleNamespace(delete_resources_by_prefix=delete_resources_by_prefix)
+    # This test is about the image prefix sweep and its cursor. The recordings
+    # are looked up from the tenant's own rows, which needs a database this unit
+    # test deliberately does not have -- see test_purge_interview_video.py, which
+    # exercises that half against real schemas.
+    monkeypatch.setattr(lifecycle, '_interview_video_ids', lambda slug: [])
+
+    def delete_resources(ids, **kwargs):
+        calls.append(('ids', dict(kwargs)))
+        return {'deleted': {}}
+
+    api = SimpleNamespace(delete_resources_by_prefix=delete_resources_by_prefix,
+                          delete_resources=delete_resources)
     cloudinary = SimpleNamespace(api=api)
     monkeypatch.setitem(sys.modules, 'cloudinary', cloudinary)
     monkeypatch.setitem(sys.modules, 'cloudinary.api', api)
@@ -33,6 +45,7 @@ def test_cloudinary_delete_uses_only_exact_tenant_prefix_and_follows_cursor(monk
     assert result['configured'] is True
     assert result['deleted'] == 3
     assert [c[0] for c in calls] == ['akye-private/alpha/', 'akye-private/alpha/']
+    assert result['videos_deleted'] == 0
     assert calls[0][1]['type'] == 'authenticated'
     assert calls[0][1]['resource_type'] == 'image'
     assert calls[1][1]['next_cursor'] == 'page-2'

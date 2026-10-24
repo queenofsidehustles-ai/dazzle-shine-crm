@@ -122,7 +122,7 @@
 
             // No card on file — collect one.
             if (!mounted) {
-              stripe = Stripe('{{ tip.pk }}');
+              stripe = Stripe('{{ tip.pk|js }}');
               card = stripe.elements().create('card');
               document.getElementById('tip-card').style.display = 'block';
               card.mount('#tip-card-element');

@@ -1,0 +1,77 @@
+name: Release Akye
+
+# What `python3 release.py --akye --go` does by hand, started from the console's
+# Release page. It checks the four required checks on the exact commit, runs
+# every suite on Python 3.12, writes RELEASE, tags, and fast-forwards
+# akye-stable. Railway deploys that branch.
+#
+# It only ever releases what the page showed: expected_sha is compared to main,
+# and expected_stable to akye-stable, before anything runs, so a merge or a
+# rollback after the page was drawn stops it.
+#
+# Pushes made with the default token do not start other workflows. Set the
+# RELEASE_PUSH_TOKEN secret (a token that can push to main and akye-stable) if
+# the release commit should get its own check runs.
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Full commit id of main that was reviewed
+        required: true
+      expected_stable:
+        description: Full commit id akye-stable was at when it was reviewed
+        required: true
+
+concurrency:
+  group: akye-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  checks: read
+
+jobs:
+  release:
+    name: Release akye-stable
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: akye_full_suite
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d akye_full_suite"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_POSTGRES_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/akye_full_suite
+      PGURL: postgresql+psycopg2://postgres:postgres@localhost:5432/akye_full_suite
+      PGOPTIONS: "-c log_min_messages=fatal -c log_min_error_statement=panic"
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+      EXPECTED_STABLE: ${{ inputs.expected_stable }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PUSH_TOKEN || github.token }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Identify the release commit
+        run: |
+          git config user.name "Akye release"
+          git config user.email "release@akyehq.com"
+      - name: Release
+        run: python release.py --akye --go --expect "$EXPECTED_SHA" --expect-stable "$EXPECTED_STABLE"

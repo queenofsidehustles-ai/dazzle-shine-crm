@@ -8,7 +8,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = '0033_photo_optional_wording'
-down_revision = '0020_booking_cc'
+down_revision = '0032_guards_follow_schema'
 branch_labels = None
 depends_on = None
 

@@ -147,21 +147,19 @@ terminal stuck at a prompt that says `bquote>`. If that happens, press
 6. Railway will start building. Let it.
 7. When it appears, click on the service (the box with the repo name).
 8. Go to the **Settings** tab.
-9. Find **Source**. Set the branch to **`feature/tenancy`**.
+9. Find **Source**. Set the branch to **`akye-stable`**.
 
-   ⚠️ Not `main`, and not `stable`. This surprises people, so here is why:
+   ⚠️ Not `main`, and not `stable`. Here is why:
 
-   - `stable` is what **your cleaning company** runs. Never point anything new
-     at it.
-   - `main` is currently identical to `stable` — the old single-business CRM.
-     All the multi-company work, the booking page and the new design are on
-     `feature/tenancy`.
-   - If you pointed this at `main`, it would build and start fine, `/version`
-     in Step 5 would pass, DNS in Step 6 would work, and you would not find
-     out anything was wrong until `/signup` gave you a 404 in Step 8.
+   - `akye-stable` is the release channel: it moves only when
+     `release.py --akye --go` promotes `main` after every check passes.
+   - `main` is the working branch. Every merged pull request lands there
+     before anybody has released it; a service on it would take each one.
+   - `stable` is the retired single-business CRM's channel. Never point
+     anything new at it.
 
-   Once the product is proven online we will tidy the branch names. Until
-   then, watching the branch the work is actually on is the honest setting.
+   (This step once said `feature/tenancy`, the branch the multi-company work
+   started on. It is long behind; see RELEASING.md for the branches now.)
 10. Still in Settings, find **Networking**. We come back here in Step 6.
 
 Now give it a database:
@@ -308,7 +306,7 @@ is the proof.
 
 1. Stripe → **Developers** → **Webhooks** → **+ Add endpoint**.
 2. Endpoint URL: `https://akyehq.com/api/stripe/webhook`
-3. Under **Select events**, tick exactly these seven:
+3. Under **Select events**, tick exactly these eight:
    - `checkout.session.completed`
    - `customer.subscription.created`
    - `customer.subscription.updated`
@@ -316,6 +314,7 @@ is the proof.
    - `invoice.paid`
    - `invoice.payment_succeeded`
    - `invoice.payment_failed`
+   - `charge.refunded` (reverses a partner's commission on a fully refunded invoice)
 4. Click **Add endpoint**.
 5. On the page that appears, find **Signing secret** and click to reveal it. It
    starts `whsec_`. Copy it.
@@ -627,6 +626,93 @@ Your own Akye subscription billing is untouched: it uses
 
 **✅ Done when:** Dazzle & Shine shows Stripe as *Saved*, and its booking page
 takes a payment.
+
+---
+
+## Step 14 — Move the hourly charging clock off GitHub
+
+**Why.** The hourly job that charges outstanding balances is scheduled as a
+GitHub Actions workflow. GitHub drops scheduled runs under load and promises no
+delivery: on 7 October 2026 it was set to run hourly and ran about four times.
+A balance still gets charged the same day, because the next run picks it up, so
+nothing is lost today — but a clock that silently runs a sixth as often as it
+says is not a clock to put real money on.
+
+### Read this before you click anything
+
+**This is a new service, not a setting on the Akye service.** Railway cron runs
+the service's *own start command* on the schedule, and the service has to exit
+when it is finished. The Akye service runs gunicorn, which never exits. Putting
+a cron schedule on it would mean "run the website on a timetable": the first run
+would never finish, every later run would be skipped, and you would be gambling
+the site on it. The clock gets its own service, sharing the repo and the
+database.
+
+**Do these in order.** Steps 1–2 make overlap safe and must come first. Steps
+3–8 add a second clock, which is harmless once step 1 is live. Step 10 removes
+the old clock. Never remove the old clock first, or there is a window with no
+clock at all.
+
+1. **Merge and deploy the double-charge guard** (`fix/charge-balances-no-double-run`,
+   PR #61). Two clocks running at once would otherwise charge the same card
+   twice — see `_one_charge_run_at_a_time` in `blueprints/api.py`.
+2. **Check it is actually live** before going on: `https://www.akyehq.com/version`
+   should report a `build` matching the merge. A guard that is merged but not
+   deployed is not a guard.
+3. **Railway → the Akye project → `+ New` → `GitHub Repo` → `dazzle-shine-crm`.**
+   This creates a second service in the same project.
+4. **That new service → Settings → Source → Branch: `akye-stable`.** The same
+   branch the Akye service serves, so the clock and the app are never different
+   code.
+5. **Settings → Deploy → Custom Start Command:**
+
+   ```
+   python scheduler.py --cadence hourly
+   ```
+
+   There is no separate command box for a cron job — the start command *is* what
+   the schedule runs. `--cadence hourly` resolves to exactly one job,
+   `charge-balances`; the eight daily jobs are untouched.
+6. **Settings → Deploy → Cron Schedule:** `5 * * * *`
+
+   Railway's minimum gap is 5 minutes, so hourly is well within it. Schedules
+   are UTC, which does not matter here: each business's charge timing comes from
+   its own time zone (`scheduling.local_now`), not the server's.
+7. **Settings → Networking: add no domain.** It serves nothing. If Railway has
+   generated one, remove it.
+8. **Variables.** Add three:
+
+   | Variable | Value |
+   |---|---|
+   | `DATABASE_URL` | A reference to the same Postgres service the Akye service uses — pick it from Railway's variable picker rather than pasting the string. |
+   | `BASE_DOMAIN` | `akyehq.com` |
+   | `REMINDER_API_KEY` | The same value the Akye service has. A different one makes every call come back 403, which looks exactly like nothing running. |
+
+   Nothing else. The scheduler reads only these, and falls back from
+   `AKYE_DATABASE_URL` to `DATABASE_URL` on its own.
+9. **Watch one run.** Deploy, then open the service's logs. A good run prints
+   `N companies × 1 job` and a line per company. A company that has not chosen
+   automatic collection prints `turned off by this business` — correct, not a
+   fault. The script exits non-zero if any company failed, so a red cron
+   execution in Railway means a real failure rather than a dropped run.
+10. **Let both clocks run for a day, then remove the old one.** They cannot
+    collide: whichever arrives second is told another run is in progress and
+    does nothing, so seeing that occasionally in the logs is the guard working.
+    When you are satisfied, delete `- cron: '5 * * * *'` and the comment above
+    it from `.github/workflows/automations.yml`, keeping `- cron: '0 22 * * *'`
+    — the daily jobs are reminders and digests, where a missed run costs nothing
+    the next day does not fix.
+
+    That workflow only runs from the default branch, so the change has to land
+    there. See **The third branch choice** in `RELEASING.md`.
+
+**✅ Done when:** Railway shows an hourly cron execution succeeding on its own
+service, the Akye service is still serving the website normally, and
+`.github/workflows/automations.yml` on the default branch has one `cron:` line
+left.
+
+**Cost:** a cron service bills only while it runs. The hourly job takes about
+ten seconds for twelve companies, so this is a few minutes of compute a day.
 
 ---
 

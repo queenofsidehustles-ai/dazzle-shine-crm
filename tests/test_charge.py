@@ -15,7 +15,7 @@ from extensions import db
 from models import Booking
 app = create_app()
 import blueprints.bookings as bk
-bk._send_booking_confirmation = lambda b: None
+bk._send_booking_confirmation = lambda b: (True, 'stub')
 
 # Capture what Stripe would be asked to charge — nothing real is called.
 CHARGES = []

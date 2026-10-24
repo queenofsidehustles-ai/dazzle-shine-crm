@@ -270,6 +270,18 @@ print("OK")
 check('HANDLED: False' in out, 'nothing is changed for a company that does not exist')
 check('no company for' in out, 'and it says so rather than failing silently')
 
+print('\n10b. An invoice from a customer that is not an Akye company is not an error')
+out = run(STUB + '''
+import billing
+ok, detail = billing.apply_event({
+    "type": "invoice.payment_succeeded",
+    "data": {"object": {"id": "in_x", "customer": "cus_other", "lines": {"data": [{"metadata": {}}]}}}})
+print("HANDLED:", ok)
+print("NOT OURS:", detail.startswith(billing.NOT_OURS))
+print("OK")
+''', 'foreign invoice')
+check('NOT OURS: True' in out, 'a slugless invoice from an unmapped customer is set aside, not logged')
+
 print('\n11. What a company pays cannot be edited from inside its own CRM')
 # The subscription lives in the control plane, not in the company's schema, so
 # nothing the business can reach through its own software can change it.

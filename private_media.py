@@ -207,5 +207,98 @@ def fetch_image(ref: str, *, tenant_slug: str, kind: str | None = None,
     return response.content, content_type
 
 
+def upload_params(*, tenant_slug: str, kind: str,
+                  resource_type: str = "video") -> dict[str, Any]:
+    """Signed parameters for an upload the browser makes directly.
+
+    A video is recorded in the applicant's browser and is far too large to post
+    through this server, so it goes straight to Cloudinary. That used to mean an
+    unsigned preset, with the browser naming its own folder -- which is why every
+    recording landed in a flat `interviews/` with no tenant in the path, and why
+    any client could have named any other path it liked.
+
+    Signing fixes both. The folder and the delivery type are inside the
+    signature, so a client that edits them is rejected by Cloudinary rather than
+    by us noticing later.
+    """
+    import time
+    import integrations
+    _configure()
+    import cloudinary.utils
+    folder = f"akye-private/{tenant_slug}/{kind}"
+    params = {"folder": folder, "type": "authenticated",
+              "timestamp": int(time.time())}
+    signature = cloudinary.utils.api_sign_request(
+        params, integrations.cloudinary_api_secret())
+    return {
+        "url": f"https://api.cloudinary.com/v1_1/"
+               f"{integrations.cloudinary_cloud_name()}/{resource_type}/upload",
+        "api_key": integrations.cloudinary_api_key(),
+        "folder": folder,
+        "type": "authenticated",
+        "timestamp": params["timestamp"],
+        "signature": signature,
+    }
+
+
+def ref_from_upload(result: dict[str, Any], *, tenant_slug: str, kind: str,
+                    scope_id: int | str | None = None) -> str | None:
+    """Turn Cloudinary's own upload reply into a signed reference, or None.
+
+    The reply is relayed by the browser, so it is not trusted. The public_id has
+    to sit inside this tenant's folder before a reference is minted for it --
+    otherwise a client could hand back somebody else's asset and have this
+    server sign delivery for it.
+    """
+    public_id = str(result.get("public_id") or "")
+    expected_folder = f"akye-private/{tenant_slug}/{kind}/"
+    if not public_id.startswith(expected_folder):
+        return None
+    version = result.get("version")
+    fmt = result.get("format")
+    resource_type = result.get("resource_type")
+    if not all((version, fmt, resource_type)):
+        return None
+    payload = {
+        "v": 1, "tenant": tenant_slug, "kind": kind,
+        "scope": None if scope_id is None else str(scope_id),
+        "public_id": public_id, "version": str(version),
+        "format": str(fmt), "resource_type": str(resource_type),
+    }
+    return _encode(payload)
+
+
+def signed_url(ref: str, *, tenant_slug: str, kind: str | None = None,
+               scope_id: int | str | None = None) -> str | None:
+    """A signed delivery URL for an authenticated asset, or None.
+
+    Video is served by redirecting the browser here rather than by this server
+    fetching the bytes as it does for a photo: a recording is tens of megabytes
+    and needs range requests, and proxying it would put the whole file through
+    a worker for every scrub of the timeline.
+    """
+    payload = parse_ref(ref, tenant_slug=tenant_slug, kind=kind, scope_id=scope_id)
+    if not payload:
+        return None
+    # A provider that is not configured should cost this one video, not the
+    # whole review page. Without this, a missing cloud name raises while the
+    # URL is assembled and the owner gets a 500 instead of an applicant.
+    try:
+        _configure()
+        import cloudinary.utils
+        url, _options = cloudinary.utils.cloudinary_url(
+            payload["public_id"],
+            resource_type=payload["resource_type"],
+            type="authenticated",
+            version=payload["version"],
+            format=payload["format"],
+            secure=True,
+            sign_url=True,
+        )
+    except Exception:
+        return None
+    return url or None
+
+
 def is_private_ref(value: str | None) -> bool:
     return isinstance(value, str) and value.startswith(_PREFIX)

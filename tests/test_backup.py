@@ -240,10 +240,23 @@ run(PRELUDE + seed(n_clients=2, n_staff=1, n_bookings=2) + f'''
     import backup, glob, gzip, json, os
     from datetime import datetime, timedelta
     d = r'{T}/b'
-    for i in range(3):
-        backup.create(out_dir=d, quiet=True)
-    files = sorted(glob.glob(os.path.join(d, 'backup-*.json.gz')))
+    # All three inside one second, as a fast machine takes them: named
+    # Z, Z-1, Z-2. Order by name and the "two oldest" are the two newest.
+    import datetime as _dt
+    class _OneSecond(_dt.datetime):
+        @classmethod
+        def utcnow(cls):
+            return _dt.datetime(2026, 10, 22, 13, 11, 40)
+    real = backup.datetime.datetime
+    backup.datetime.datetime = _OneSecond
+    try:
+        for i in range(3):
+            backup.create(out_dir=d, quiet=True)
+    finally:
+        backup.datetime.datetime = real
+    files = backup._oldest_first(glob.glob(os.path.join(d, 'backup-*.json.gz')))
     assert len(files) == 3, files
+    assert [f.rsplit('40Z', 1)[1] for f in files] == ['.json.gz', '-1.json.gz', '-2.json.gz'], files
 
     # Age the two oldest past the window.
     old = (datetime.utcnow() - timedelta(days=90)).isoformat()
@@ -262,7 +275,7 @@ run(PRELUDE + seed(n_clients=2, n_staff=1, n_bookings=2) + f'''
     removed = backup.prune(d, keep_days=30, quiet=True)
     left = sorted(glob.glob(os.path.join(d, 'backup-*.json.gz')))
     assert len(removed) == 2, removed
-    assert len(left) == 1, left
+    assert len(left) == 1 and left[0].endswith('Z-2.json.gz'), left   # the newest stays
     assert not glob.glob(os.path.join(d, 'backup-*.manifest.json'))[1:], 'sidecars pruned too'
 
     # Everything is old now. The last one must still survive.
@@ -272,6 +285,26 @@ run(PRELUDE + seed(n_clients=2, n_staff=1, n_bookings=2) + f'''
 ''')
 print('  ✅ backups past the retention window are deleted, with their manifests')
 print('  ✅ the last remaining backup is never deleted, whatever the window says')
+
+print('\n7b. Two runs inside the same second: the later one is the last run')
+# The name is the time to the second; a second run inside it is "-1". Plain
+# name order puts "…Z-1." before "…Z." ('-' sorts before '.'), so "the last
+# backup" was the earlier of the two -- and the night after compared itself
+# against the wrong one.
+run(PRELUDE + f'''
+    import backup, json, os
+    d = r'{T}/same-second'
+    os.makedirs(d)
+    for name, which in (('backup-2026-10-22T13-11-40Z', 'first'),
+                        ('backup-2026-10-22T13-11-40Z-1', 'second'),
+                        ('backup-2026-10-22T13-11-39Z-2', 'a second earlier')):
+        open(os.path.join(d, name + '.json.gz'), 'wb').close()
+        with open(os.path.join(d, name + '.manifest.json'), 'w') as fh:
+            json.dump({{'which': which}}, fh)
+    assert backup._previous_manifest(d)['which'] == 'second', backup._previous_manifest(d)
+    print('OK')
+''')
+print('  ✅ the run that took the "-1" name is read as the last one, not the one before it')
 
 print('\n8. Restoring into a database that already has data replaces it cleanly')
 T = tempfile.mkdtemp()

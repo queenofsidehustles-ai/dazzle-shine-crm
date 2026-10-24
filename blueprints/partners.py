@@ -110,9 +110,22 @@ def _send_link(email):
         raw = affiliates.issue_login(engine, partner['id'])
         if not raw:
             return                       # asked for too many already
-        deliver_link(partner, url_for('partners.confirm', token=raw, _external=True))
+        deliver_link(partner, _trusted_url('partners.confirm', token=raw))
     except Exception as e:
         print(f'  ⚠️  partner sign-in link not sent: {type(e).__name__}: {e}')
+
+
+def _trusted_url(endpoint, **values):
+    """An absolute link built from the product's own host, never the request's.
+
+    The Host header is whatever the caller sent. A sign-in link emailed under an
+    attacker's host hands them the token the moment a mail scanner or the
+    partner opens it."""
+    path = url_for(endpoint, **values)
+    host = product.canonical_host() or product.domain()
+    if not host:
+        return url_for(endpoint, _external=True, **values)   # single-business deployment
+    return f'{product.scheme_for(host)}://{host}{path}'
 
 
 def deliver_link(partner, url):

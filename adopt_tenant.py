@@ -55,7 +55,11 @@ from sqlalchemy import create_engine, text
 def _engine(url, label):
     if not url:
         raise SystemExit(f'{label} is not set.')
-    return create_engine(url.replace('postgres://', 'postgresql://', 1))
+    # The same rewriting the app does. SQLAlchemy 2.1 reads a bare
+    # postgresql:// as the psycopg 3 driver, which is not installed; Railway
+    # hands out exactly that form.
+    import backup
+    return create_engine(backup.normalise(url))
 
 
 def _tables(conn, schema):

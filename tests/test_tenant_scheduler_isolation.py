@@ -81,10 +81,11 @@ def test_only_never_falls_back_to_another_tenant(monkeypatch):
         scheduler.run(['reminders'], only='missing', quiet=True)
 
 
-def test_automation_workflow_uses_triggering_revision_not_hardcoded_branch():
+def test_automation_workflow_runs_the_released_revision():
     workflow = Path('.github/workflows/automations.yml').read_text()
 
-    assert 'ref: akye-stable' not in workflow
-    assert 'actions/checkout@v4' in workflow
+    # The schedule fires from main, the working branch; production runs akye-stable.
+    assert 'ref: akye-stable' in workflow
+    assert 'actions/checkout@' in workflow
     assert 'git rev-parse HEAD' in workflow
     assert 'Scheduler source:' in workflow

@@ -98,6 +98,24 @@ def canonical_base():
 DEFAULT_SUPPORT = 'support@akyehq.com'
 
 
+DEFAULT_META_PIXEL_ID = '1087100530584907'   # "Akye Pixel", Akye business portfolio
+
+
+def meta_pixel_id():
+    """The Meta (Facebook) Pixel that Akye's ads learn from.
+
+    Only on the product itself -- a single-business deployment (no
+    BASE_DOMAIN) gets nothing. META_PIXEL_ID overrides the default, and
+    META_PIXEL_ID=off turns it off without a code change. It is loaded on
+    two screens only: the signup form, and the owner's first screen after
+    signing up (which records CompleteRegistration once). Never on a page a
+    company's own customers or cleaners see."""
+    if not domain():
+        return ''
+    value = (os.environ.get('META_PIXEL_ID') or DEFAULT_META_PIXEL_ID).strip()
+    return '' if value.lower() in ('off', 'none', '0', 'false') else value
+
+
 def support_email():
     """Where a customer writes when something is wrong.
 
@@ -159,6 +177,19 @@ def resend_api_key():
     """
     return (os.environ.get('PRODUCT_RESEND_API_KEY')
             or os.environ.get('RESEND_API_KEY') or '').strip()
+
+
+def meta_capi_token():
+    """The access token for sending conversions to that dataset."""
+    return (os.environ.get('META_CAPI_TOKEN') or '').strip()
+
+
+def meta_test_event_code():
+    """Set this and events go to Events Manager's Test Events instead of
+    counting for real. The way to prove the wiring works without polluting
+    the dataset that the ad algorithm is learning from -- and the way to
+    discover, before spending money, that the token was pasted wrong."""
+    return (os.environ.get('META_CAPI_TEST_CODE') or '').strip()
 
 
 def mail_status():

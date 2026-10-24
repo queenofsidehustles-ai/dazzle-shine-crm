@@ -165,7 +165,8 @@
         <span class="job-pay">${{ '%.2f'|format(b.pay_for(s)) }}<small>{{ t('YOU EARN') }}</small></span>
       </div>
       <div class="job-client">{{ b.name }}</div>
-      <div class="job-svc">{{ b.service_label }} · {{ b.bedrooms or '?' }} bd / {{ b.bathrooms or '?' }} ba</div>
+      <div class="job-svc">{{ b.service_label }} · {% if b.is_commercial %}{{ b.size_line() or 'Commercial' }}{% else %}{{ b.bedrooms or '?' }} bd / {{ b.bathrooms or '?' }} ba{% endif %}</div>
+      {% if b.scope_of_work %}<div class="job-svc" style="white-space:pre-line">{{ b.scope_of_work }}</div>{% endif %}
       {% if b.is_crew_job %}
       {% set mates = b.crew_names | reject('equalto', s.name) | list %}
       <div class="job-mates">👥 {{ t('With') }} {{ mates | join(', ') if mates else t('a teammate (still being assigned)') }}</div>

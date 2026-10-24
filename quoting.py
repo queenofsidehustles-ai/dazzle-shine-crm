@@ -98,6 +98,8 @@ def booking_checklist(booking):
                 return expanded([str(i) for i in items if str(i).strip()])
         except ValueError:
             pass          # corrupt somehow — better the service list than none
+    if getattr(booking, 'is_commercial', False) and booking.scope_items():
+        return booking.scope_items()
     return service_checklist(booking.service_type)
 
 
@@ -654,6 +656,11 @@ def accept_quote(lead, preferred_date, preferred_time='', address='', city='',
     # through the Google Ads lead they may have come in on.
     lead.status = 'converted'
     lead.drip_step = 9
+    # A lead from the call list that booked is won there too, or somebody
+    # rings a customer who has just booked to ask whether they are interested.
+    import prospecting
+    prospecting.quote_moved(getattr(lead, 'prospect_id', None), 'won', 'won',
+                            None, None, 'Accepted the residential quote and booked 🎉')
     db.session.commit()
     _stop_lsa_followup(lead)
     return booking

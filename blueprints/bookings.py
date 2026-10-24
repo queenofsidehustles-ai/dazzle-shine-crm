@@ -1,6 +1,6 @@
 import calendar as cal_module
 from datetime import date, timedelta, datetime
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, has_request_context
 from auth import login_required
 from models import Booking, BookingCrew, Client, Staff
 from extensions import db
@@ -79,21 +79,49 @@ def price_preview():
         except Exception:
             cleaning = 0.0
 
-    fee_raw = request.args.get('lead_fee', '').strip().replace('$', '')
-    try:
-        fee = float(fee_raw) if fee_raw != '' else 0.0   # blank = no lead fee (optional)
-    except ValueError:
-        fee = 0.0
+    fee = _lead_fee_for(request.args.get('lead_fee', ''), request.args.get('source', ''))
 
     return jsonify({'cleaning': round(cleaning or 0, 2), 'lead_fee': round(fee, 2),
                     'total': round((cleaning or 0) + fee, 2)})
+
+
+# Where a phone booking came from -- recorded, because every hand-made booking
+# used to be tagged 'website' and the lead-source report believed it.
+BOOKING_SOURCES = (('google', 'Google'), ('facebook', 'Facebook / Instagram'),
+                   ('referral', 'A friend sent them'), ('repeat', 'Booked with us before'),
+                   ('other', 'Other'))
+
+
+def _lead_fee_for(typed, source=''):
+    """The lead fee for a hand-made booking: none. The owner retired it -- an
+    ad cost folded invisibly into the customer's price was one more thing on
+    the form and nothing she used. A figure still posted by something older is
+    honoured, so a caller that sends one is not silently overruled."""
+    typed = (typed or '').strip().replace('$', '')
+    if typed != '':
+        try:
+            return float(typed)
+        except ValueError:
+            return 0.0
+    return 0.0
+
+
+def _ask_deposit_on_phone_bookings():
+    """The Pricing switch that decides whether a phone booking's confirmation
+    carries a deposit link. One decision for the business, made once, instead
+    of three radio buttons in front of whoever is on the call."""
+    try:
+        from models import PricingSetting
+        return str(PricingSetting.get('phone_booking_deposit', 0)) in ('1', '1.0')
+    except Exception:
+        return False
 
 
 @bookings_bp.route('/new', methods=['GET', 'POST'])
 @login_required
 def new():
     """Create a booking by hand — for customers who book by phone/text/in person."""
-    from pricing import calculate_job, SERVICE_LABELS, EXTRAS, get_lead_fee
+    from pricing import calculate_job, SERVICE_LABELS, EXTRAS
     if request.method == 'POST':
         # The plan's monthly job ceiling. Checked before anything is built, so a
         # refused job leaves no half-written client or booking behind — and it is
@@ -157,13 +185,9 @@ def new():
         # and that is the number the discount report is asking about.
         discount_amount = round(quote.get('discount_amount') or 0, 2)
 
-        # Lead fee — optional ad cost. Blank means none (added to the customer
-        # total when present, always excluded from contractor pay).
-        fee_raw = request.form.get('lead_fee', '').strip().replace('$', '')
-        try:
-            lead_fee = float(fee_raw) if fee_raw != '' else 0.0
-        except ValueError:
-            lead_fee = 0.0
+        # No lead fee on a new booking (see _lead_fee_for).
+        source = (request.form.get('source') or '').strip().lower()[:50]
+        lead_fee = _lead_fee_for(request.form.get('lead_fee', ''), source)
         price = round((cleaning or 0) + lead_fee, 2)   # what the customer pays
 
         # Person-hours of work in this job — what the cleaner's pay is built
@@ -198,12 +222,18 @@ def new():
             address=request.form.get('address', '').strip(),
             city=request.form.get('city', '').strip(),
             zip_code=request.form.get('zip_code', '').strip(),
-            notes=(request.form.get('notes', '').strip() or None),
+            # What she types on the phone is hers, so it lands in the field the
+            # booking page shows as private. `notes` is what a customer wrote on
+            # the website form, and showed as "Customer Notes".
+            internal_notes=((request.form.get('internal_notes') or request.form.get('notes') or '').strip() or None),
             access_notes=(request.form.get('access_notes', '').strip() or None),
             status=request.form.get('status', 'confirmed'),
             price=price,
             lead_fee=lead_fee,
             discount_amount=discount_amount,
+            # Typed in by hand, so never 'website' -- the column's default,
+            # which every phone booking used to inherit.
+            source=source or 'manual',
         )
         db.session.add(b)
         db.session.commit()
@@ -213,12 +243,16 @@ def new():
         # matter how much work went through the CRM.
         _link_client(b)
 
-        extra = _notify_customer(
-            b,
-            confirmation=bool(request.form.get('notify_customer')),
-            pay_kind=request.form.get('payment_option', 'none'),
-        )
-        flash(f'Booking created ✅ — now assign a cleaner below to text + email them the job.{extra}', 'success')
+        # The form no longer asks what to collect up front: Pricing decides,
+        # once, whether a phone booking's confirmation carries a deposit link.
+        # A posted payment_option still wins, for anything that sends one.
+        confirm = bool(request.form.get('notify_customer'))
+        pay_kind = request.form.get('payment_option')
+        if pay_kind is None:
+            pay_kind = ('deposit' if confirm and _ask_deposit_on_phone_bookings()
+                        and _pricing_deposit() > 0 else 'none')
+        extra = _notify_customer(b, confirmation=confirm, pay_kind=pay_kind)
+        flash(f'Booking created ✅{extra}', 'success')
         return redirect(url_for('bookings.detail', booking_id=b.id))
 
     from pricing import FREQUENCY_LABELS as _FREQ
@@ -236,8 +270,9 @@ def new():
             last = max(client.bookings, key=lambda b: b.created_at or datetime.min)
     return render_template('admin/booking_new.html',
                            service_labels=SERVICE_LABELS, extras=EXTRAS, frequency_labels=_FREQ,
-                           default_lead_fee=get_lead_fee(), client=client, last=last,
-                           deposit=_pricing_deposit())
+                           client=client, last=last,
+                           deposit=_pricing_deposit(), sources=BOOKING_SOURCES,
+                           ask_deposit=_ask_deposit_on_phone_bookings())
 
 
 def _pricing_deposit():
@@ -380,14 +415,22 @@ def detail(booking_id):
         # Parse it. This used to assign the raw form string straight onto a Float
         # column — SQLAlchemy coerced it on write, but anything doing arithmetic
         # with booking.price in the same request hit 'str' - 'int' and blew up.
-        price_raw = (request.form.get('price') or '').strip().replace('$', '').replace(',', '')
-        if price_raw:
-            try:
-                booking.price = round(float(price_raw), 2)
-            except ValueError:
-                flash('That price is not a number — leaving it as it was.', 'warning')
-        else:
-            booking.price = None
+        #
+        # This one route saves several small forms on the page -- status and
+        # notes, the price and the owner's numbers, taking a cleaner off -- and
+        # each sends only its own fields. So a field that is ABSENT is left
+        # alone; only one that is present and blank is a deliberate clear.
+        # Blanking whatever a form didn't carry is how saving a note would wipe
+        # the price.
+        if 'price' in request.form:
+            price_raw = (request.form.get('price') or '').strip().replace('$', '').replace(',', '')
+            if price_raw:
+                try:
+                    booking.price = round(float(price_raw), 2)
+                except ValueError:
+                    flash('That price is not a number — leaving it as it was.', 'warning')
+            else:
+                booking.price = None
         _fee = request.form.get('lead_fee', '').strip()
         if _fee != '':
             try:
@@ -398,13 +441,15 @@ def detail(booking_id):
         booking.preferred_time = request.form.get('preferred_time', booking.preferred_time)
         booking.internal_notes = request.form.get('internal_notes', booking.internal_notes)
         booking.access_notes = request.form.get('access_notes', booking.access_notes)
-        booking.skip_review = 'skip_review' in request.form
+        if 'skip_review' in request.form or 'skip_review_shown' in request.form:
+            booking.skip_review = 'skip_review' in request.form
         booking.assigned_cleaner = request.form.get('assigned_cleaner', booking.assigned_cleaner)
         hours_raw = request.form.get('hours_worked', '').strip()
         booking.hours_worked = float(hours_raw) if hours_raw else booking.hours_worked
         # Person-hours of work — the basis for cleaner pay on this job.
         _apply_hours(booking, request.form)
-        booking.below_floor_reason = (request.form.get('below_floor_reason') or '').strip() or None
+        if 'below_floor_reason' in request.form:
+            booking.below_floor_reason = (request.form.get('below_floor_reason') or '').strip() or None
         # Keep the balance in step with the price. It used to be written only by
         # the price-correction route, so editing the price here left the
         # Balance Collection card — and its charge button — showing a stale $0.
@@ -485,6 +530,10 @@ def detail(booking_id):
             first_day = date.today() + timedelta(days=14)
         plan_suggestion = {'price': suggested, 'start': first_day.isoformat(),
                            'services': SERVICE_LABELS}
+        if booking.is_commercial:
+            # Priced per visit, not from the bedroom matrix.
+            plan_suggestion.update(price=booking.price,
+                                   services={'commercial': Booking.SERVICE_LABELS['commercial']})
 
     monthly_choices = None
     if booking.frequency == 'monthly' and booking.preferred_date:
@@ -538,7 +587,7 @@ def detail(booking_id):
                            recurring_upcoming=recurring_upcoming,
                            monthly_choices=monthly_choices,
                            plan_suggestion=plan_suggestion,
-                           labor_rate=get_labor_rate(),
+                           labor_rate=booking.company_rate,
                            max_labor_pct=get_max_labor_percent(),
                            ad_expense=Expense.query.filter_by(booking_id=booking.id).first(),
                            ad_categories=[(k, l) for k, l, g, _s in EXPENSE_CATEGORIES
@@ -615,31 +664,44 @@ def _notify_customer(b, confirmation=True, pay_kind='none'):
         return ' ⚠️ No email or phone on this booking, so the customer was told nothing.'
 
     sent, failed = [], []
+    # Both sends report by returning, not by raising. Calling them bare inside a
+    # try and then appending to `sent` on the next line was the whole bug: a
+    # confirmation and a deposit request that reached nobody still produced
+    # "Sent the confirmation and deposit request", and the only way to find out
+    # otherwise was the customer saying they never got it.
     if confirmation:
         try:
-            _send_booking_confirmation(b)
-            sent.append('confirmation 📩')
+            ok, why = _send_booking_confirmation(b)
+            if ok:
+                sent.append('confirmation 📩')
+            else:
+                failed.append(f'confirmation ({why})')
         except Exception as e:
             failed.append(f'confirmation ({e})')
 
     if pay_kind in ('deposit', 'full'):
         label = 'deposit request 💳' if pay_kind == 'deposit' else 'payment link 💳'
         try:
-            from blueprints.payments import send_payment_link
-            send_payment_link(b, kind=pay_kind)
-            sent.append(label)
+            from blueprints.payments import send_payment_link_detail
+            ok, why = send_payment_link_detail(b, kind=pay_kind)
+            if ok:
+                sent.append(label)
+            else:
+                failed.append(f'{label} ({why})')
         except Exception as e:
             failed.append(f'{label} ({e})')
 
+    # Flash only. send_email and send_sms write their own Sent Log row on every
+    # refusal they report -- the demo guard blocking it, no key connected, no
+    # address, Resend rejecting it -- naming the actual reason and the actual
+    # recipient. This loop used to add a second, vaguer row on top ("Booking
+    # confirmation / payment request", no body), which never showed because
+    # `failed` was always empty while the senders claimed success. Now that
+    # failures are real, logging here would double every entry in her Sent Log
+    # and the duplicate would be the less informative of the two.
     for f in failed:
         flash(f'⚠️ Could not send the {f} to {b.name or "the customer"}. '
               f'Check the Sent Log for details.', 'warning')
-        try:
-            from notifications import _log_outbound
-            _log_outbound('email', b.email or b.phone, b.name,
-                          'Booking confirmation / payment request', '', False, f)
-        except Exception:
-            pass
 
     return (' Sent the ' + ' and '.join(sent) + '.') if sent else ''
 
@@ -819,6 +881,9 @@ def correct_price(booking_id):
         )
     except Exception:
         cleaning = 0.0
+    if booking.is_commercial:
+        # No matrix price for a business: start from what it is at now.
+        cleaning = (booking.price or 0) - (booking.lead_fee or 0)
     suggested_total = round((cleaning or 0) + (booking.lead_fee or 0), 2)
     old_price = round(booking.price or 0, 2)
 
@@ -980,7 +1045,8 @@ def broadcast(booking_id):
     # Offered from the list, not just the detail page (see bookings.html's row
     # actions) -- land back where the click happened rather than forcing a
     # detour through the job it was about.
-    return redirect(request.form.get('next') or request.referrer
+    import security
+    return redirect(security.local_target(request.form.get('next'), request.referrer)
                     or url_for('bookings.detail', booking_id=booking_id))
 
 
@@ -1006,9 +1072,8 @@ def _apply_hours(booking, form):
                 booking.estimated_hours = float(raw)
                 # First time a job gets hours, lock in today's rate. Never
                 # re-stamp after — that's what "Re-rate" is for.
-                if booking.estimated_hours and not booking.labor_rate_applied:
-                    from pricing import get_labor_rate as _rate
-                    booking.labor_rate_applied = _rate()
+                if booking.estimated_hours and booking.labor_rate_applied is None:
+                    booking.labor_rate_applied = booking.company_rate
                 changed = True
             except ValueError:
                 pass
@@ -1126,6 +1191,96 @@ def save_crew(booking_id):
         return _send_job_to(b, [added])
 
     flash('Saved — ' + ', '.join(msgs) + '.' if msgs else 'Pay saved.', 'success')
+    return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+
+@bookings_bp.route('/<int:booking_id>/assign', methods=['POST'])
+@login_required
+def assign(booking_id):
+    """Put somebody on this job -- a named cleaner or the whole team -- set what
+    they are paid, and send them the work, in one press.
+
+    One decision used to be three cards. The cleaner dropdown was buried at the
+    bottom of the pay card; "offer it to the whole team", much the rarer choice,
+    was a card of its own with the bigger gold button; and the checklist every
+    cleaner needs to do the job was a third card further down the page. The
+    common thing to want was the hardest of the three to reach."""
+    from flask import session, abort
+    import rbac
+    b = Booking.query.get_or_404(booking_id)
+    who = (request.form.get('assign_to') or '').strip()
+
+    # How many people the job needs is set in the same breath as who does it,
+    # and it has to be applied BEFORE anything is offered: it decides how many
+    # spots the team message advertises and how the pot divides per cleaner.
+    if 'crew_size' in request.form:
+        try:
+            want = max(1, min(6, int(request.form.get('crew_size') or 1)))
+        except ValueError:
+            want = b.crew_size or 1
+        # Never below the people already on it -- that would strand somebody,
+        # and orphan an already-paid share.
+        want = max(want, len(b.crew))
+        if want != (b.crew_size or 1):
+            b.crew_size = want
+            db.session.commit()
+
+    if not who:
+        # Changing only the headcount is a real thing to want, so saying so is
+        # better than scolding her for not picking a name as well.
+        if 'crew_size' in request.form:
+            flash(f'This job is set to {b.crew_size} paid cleaner'
+                  f'{"s" if b.crew_size != 1 else ""}.', 'success')
+        else:
+            flash('Pick a cleaner, or choose to offer it to the whole team.', 'warning')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+    # The pay is read before anybody is told anything, so the figure in the
+    # offer is the figure she just typed rather than the one it replaced.
+    raw = (request.form.get('add_pay') or '').strip().replace('$', '').replace(',', '')
+    pay = None
+    if raw:
+        try:
+            pay = max(0.0, round(float(raw), 2))
+        except ValueError:
+            flash('That pay figure is not a number.', 'error')
+            return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+    if who == 'team':
+        # Offering work to everyone is a dispatch action. Folding it into a
+        # control that also sets pay must not hand dispatch to a role that only
+        # had the money half, nor the reverse -- so the half this endpoint is
+        # not registered under is checked here by hand.
+        if not rbac.has_permission(session.get('role'), 'dispatch.manage'):
+            abort(403)
+        if pay is not None:
+            b.crew_pay_each = pay
+            db.session.commit()
+        return broadcast(booking_id)
+
+    s = Staff.query.get(int(who)) if who.isdigit() else None
+    if not s:
+        flash('That cleaner is no longer on your team.', 'warning')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+    if b.crew_row_for(s):
+        flash(f'{s.name} is already on this job.', 'warning')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+    if b.spots_left <= 0:
+        # Picking somebody when every spot is taken is what wanting one more
+        # person looks like, so make room rather than refusing.
+        b.crew_size = min(6, (b.crew_size or 1) + 1)
+
+    amount = pay if pay is not None else b.default_crew_pay(s)
+    db.session.add(BookingCrew(booking_id=b.id, staff_id=s.id, pay_amount=amount))
+    if not b.assigned_cleaner:
+        b.assigned_cleaner = s.name
+    b.open_for_claim = False          # assigned by hand -- it is off the board
+    db.session.commit()
+
+    if request.form.get('send_checklist'):
+        return _send_job_to(b, [s])
+    flash(f'{s.name} is on this job at ${amount:.2f}. Nothing was sent to her yet.',
+          'success')
     return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 
@@ -1271,13 +1426,12 @@ def re_rate(booking_id):
     quoted at so raising the company rate can't quietly restate work already
     agreed — but an unpaid job sometimes should move, and this is the only way
     it does."""
-    from pricing import get_labor_rate
     b = Booking.query.get_or_404(booking_id)
     back = redirect(url_for('bookings.detail', booking_id=booking_id))
     if b.cleaner_paid_at or any(c.paid_at for c in b.crew):
         flash('Someone has already been paid for this job — its rate stays as it was.', 'error')
         return back
-    was, now = b.labor_rate_applied, get_labor_rate()
+    was, now = b.labor_rate_applied, b.company_rate
     b.labor_rate_applied = now
     db.session.commit()
     flash(f'Re-rated from ${was:.0f} to ${now:.0f} per hour — this job now pays '
@@ -1565,7 +1719,8 @@ def hold(booking_id):
     # Held from the list, not just the detail page (see bookings.html's row
     # actions) -- every early return below shares this, so the list-hold
     # button lands back on the list whichever branch it hits.
-    back = redirect(request.form.get('next') or request.referrer
+    import security
+    back = redirect(security.local_target(request.form.get('next'), request.referrer)
                     or url_for('bookings.detail', booking_id=booking_id))
     if b.status in ('completed', 'cancelled'):
         flash(f'That job is {b.status_label.lower()} — there is nothing to put on hold.',
@@ -1747,22 +1902,18 @@ def charge_balance(booking_id):
     return jsonify({'ok': ok, 'error': error})
 
 
-@bookings_bp.route('/<int:booking_id>/send-invoice', methods=['POST'])
-@login_required
-def send_invoice(booking_id):
-    booking = Booking.query.get_or_404(booking_id)
+def _send_invoice(booking):
+    """Issue the invoice if it isn't yet, and email it. True when it went.
+    Shared by the button on the booking and by booking a commercial job."""
     import invoicing
     from blueprints.payments import payment_link_url, amount_due
     from notifications import send_email
-    # An invoice already issued keeps its dates unless she asks for new ones —
-    # a document the customer already has shouldn't change under them silently.
-    if request.form.get('reissue_dates'):
-        booking.invoice_issued_at = None
-        booking.invoice_due_date = None
     invoicing.issue(booking)
     payment_link_url(booking, 'full')  # ensure pay_token exists
     biz = branding.biz_name()
-    inv_url = request.host_url.rstrip('/') + url_for('invoices.view', token=booking.pay_token)
+    # The morning run has no request; the button does.
+    base = request.host_url.rstrip('/') if has_request_context() else branding.crm_base()
+    inv_url = f'{base}/invoice/{booking.pay_token}'
     due = amount_due(booking)
     sent = False
     if booking.email:
@@ -1784,10 +1935,43 @@ def send_invoice(booking_id):
         sent = ok
     booking.invoice_sent_at = datetime.utcnow()
     db.session.commit()
-    if sent:
+    return sent
+
+
+@bookings_bp.route('/<int:booking_id>/send-invoice', methods=['POST'])
+@login_required
+def send_invoice(booking_id):
+    booking = Booking.query.get_or_404(booking_id)
+    # An invoice already issued keeps its dates unless she asks for new ones —
+    # a document the customer already has shouldn't change under them silently.
+    if request.form.get('reissue_dates'):
+        booking.invoice_issued_at = None
+        booking.invoice_due_date = None
+    if _send_invoice(booking):
         flash(f'🧾 Invoice {booking.invoice_number} sent to {booking.email}.', 'success')
     else:
         flash(f'Invoice {booking.invoice_number} created — share the link manually (no email on file, or send failed).', 'warning')
+    return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+
+@bookings_bp.route('/<int:booking_id>/scope', methods=['POST'])
+@login_required
+def update_scope(booking_id):
+    """Correct a commercial job's scope of work and size -- its stand-in for
+    the service details. The price is left alone (Correct price changes it),
+    and visits already made from this one keep the scope they were sent."""
+    booking = Booking.query.get_or_404(booking_id)
+    if not booking.is_commercial:
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+    scope = (request.form.get('scope_of_work') or '').strip()
+    booking.scope_of_work = scope or None
+    try:
+        sqft = int(float(request.form.get('sqft') or 0))
+    except ValueError:
+        sqft = 0
+    booking.sqft = sqft if sqft > 0 else None
+    db.session.commit()
+    flash('Scope of work updated. Resend the confirmation or work order if they need the change.', 'success')
     return redirect(url_for('bookings.detail', booking_id=booking_id))
 
 
@@ -1811,6 +1995,10 @@ def update_service(booking_id):
     notifies them."""
     from pricing import calculate_price, SERVICE_LABELS, EXTRAS
     booking = Booking.query.get_or_404(booking_id)
+    if booking.is_commercial:
+        # Bedrooms and the residential matrix would overwrite a per-visit price.
+        flash('A commercial job is priced per visit — change its price with Correct price.', 'error')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
 
     service_type = (request.form.get('service_type') or '').strip()
     if service_type not in SERVICE_LABELS:
@@ -2223,6 +2411,12 @@ def proposal_send(booking_id):
               if ok else f"Couldn't send: {detail}", 'success' if ok else 'error')
         return redirect(url_for('bookings.detail', booking_id=b.id))
 
+    # The background button can be pressed twice, or retried after a lost
+    # response. A confirmation that went out a moment ago is not sent again.
+    if (_wants_json() and b.confirm_sent_at
+            and datetime.utcnow() - b.confirm_sent_at < REPEAT_DEDUPE_WINDOW):
+        return jsonify({'ok': True, 'sent': [], 'already': True})
+
     sent = []
     if b.email:
         ok, _ = send_email(to_email=b.email, to_name=b.name, subject=subject, html=html)
@@ -2238,9 +2432,14 @@ def proposal_send(booking_id):
     if sent:
         b.confirm_sent_at = datetime.utcnow()
         db.session.commit()
+        if _wants_json():
+            return jsonify({'ok': True, 'sent': sent})
         flash(f"Asked {b.name} to confirm — sent by {' and '.join(sent)}. "
               f"You'll be told either way.", 'success')
     else:
+        if _wants_json():
+            return jsonify({'ok': False,
+                            'error': 'Nothing could be sent — check the Sent Log for why.'}), 502
         flash('Nothing could be sent — check the Sent Log for why.', 'warning')
     return redirect(url_for('bookings.detail', booking_id=b.id))
 
@@ -2379,6 +2578,7 @@ def start_plan(booking_id):
         # Carry any card on file so the plan can bill itself from visit one.
         stripe_customer_id=first.stripe_customer_id,
         stripe_payment_method_id=first.stripe_payment_method_id,
+        **first.commercial_carry(),
     )
     db.session.add(seed)
     db.session.commit()
@@ -2388,6 +2588,109 @@ def start_plan(booking_id):
     flash(f'📅 Recurring {frequency} cleanings set up for {seed.name} — '
           f'{made + 1} visits on the calendar, starting {start}.', 'success')
     return redirect(url_for('bookings.detail', booking_id=seed.id))
+
+
+# What a repeat's confirmation opens with. The default opening is written for a
+# lead who asked about regular cleaning and went quiet; a customer being offered
+# another one-off clean has said nothing of the kind.
+REPEAT_CONFIRM_NOTE = ("Here's the date and price I have pencilled in for your next clean. "
+                       "Nothing is booked until you say so.")
+
+# A repeat made again within this window, for the same job, date and price, is
+# the same request arriving twice (a double tap, or a retry after a lost
+# response), so the first booking is returned instead of making another.
+REPEAT_DEDUPE_WINDOW = timedelta(minutes=2)
+
+
+def _repeat_payload(new):
+    """What the page needs to show a booked repeat and offer to confirm it."""
+    on_date = date.fromisoformat(new.preferred_date)
+    when = on_date.strftime('%a %-d %b')
+    if new.preferred_time:
+        when += f' at {new.preferred_time}'
+    return {
+        'ok': True, 'id': new.id, 'when': when, 'price': new.price, 'name': new.name,
+        'url': url_for('bookings.detail', booking_id=new.id),
+        'can_confirm': bool(new.email or new.phone),
+        'confirm_url': url_for('bookings.proposal_send', booking_id=new.id),
+        'preview_url': url_for('bookings.proposal_preview', booking_id=new.id),
+        'plan_date': new.preferred_date, 'plan_time': new.preferred_time or '',
+    }
+
+
+def _wants_json():
+    """The page posted this in the background (fetch) rather than as a form
+    submit, so it wants a JSON answer to draw in place, not a redirect."""
+    return request.headers.get('X-Requested-With') == 'fetch'
+
+
+@bookings_bp.route('/<int:booking_id>/book-again', methods=['POST'])
+@login_required
+def book_again(booking_id):
+    """Repeat a finished job on a date the owner picks — for clients who come
+    back now and then rather than on a schedule. The copy is a plain one-off
+    booking (no recurring plan), so confirmation, invoicing and payment work
+    exactly as they do for any other job."""
+    done = Booking.query.get_or_404(booking_id)
+
+    def refuse(message, status=400):
+        if _wants_json():
+            return jsonify({'ok': False, 'error': message}), status
+        flash(message, 'error')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+
+    if done.status != 'completed':
+        return refuse('Only a completed job can be booked again.')
+    # Same ceiling as every other way of creating a job — repeating a clean is
+    # still a new booking.
+    ok, why = entitlements.check_limit('jobs_per_month')
+    if not ok:
+        return refuse(why)
+    try:
+        on_date = date.fromisoformat((request.form.get('repeat_date') or '').strip())
+    except ValueError:
+        return refuse('Pick the date for the repeat clean.')
+
+    price = done.price
+    price_raw = (request.form.get('repeat_price') or '').strip().replace('$', '').replace(',', '')
+    if price_raw:
+        try:
+            price = round(float(price_raw), 2)
+        except ValueError:
+            return refuse('That price is not a number.')
+
+    twin = Booking.query.filter(
+        Booking.repeat_of_booking_id == done.id,
+        Booking.preferred_date == on_date.isoformat(),
+        Booking.price == price,
+        Booking.created_at >= datetime.utcnow() - REPEAT_DEDUPE_WINDOW,
+    ).first()
+    if twin:
+        if _wants_json():
+            return jsonify(_repeat_payload(twin))
+        return redirect(url_for('bookings.detail', booking_id=twin.id))
+
+    overrides = dict(
+        confirm_note=REPEAT_CONFIRM_NOTE,
+        frequency='one_time', recurring_active=False, repeat_of_booking_id=done.id,
+        price=price, balance_due=price, cc_email=done.cc_email, cc_name=done.cc_name,
+        # The scope the customer accepted, including tasks taken off the default.
+        promised_checklist=done.promised_checklist,
+        preferred_time=(request.form.get('repeat_time') or '').strip() or done.preferred_time,
+    )
+    # A crew job's people live in BookingCrew rows, which a repeat starts without.
+    # Keeping just the lead's name would mark the job covered while every spot
+    # is still open, so a crew job comes back unassigned and gets claimed fresh.
+    if not request.form.get('same_cleaner') or (done.crew_size or 1) > 1:
+        overrides['assigned_cleaner'] = None
+    new = recurring.clone_booking(done, on_date, **overrides)
+    db.session.add(new)
+    db.session.commit()
+    _link_client(new)
+    if _wants_json():
+        return jsonify(_repeat_payload(new))
+    flash(f'🔁 Booked again — #{new.id} on {on_date.isoformat()}.', 'success')
+    return redirect(url_for('bookings.detail', booking_id=new.id))
 
 
 @bookings_bp.route('/<int:booking_id>/stop-recurring', methods=['POST'])
@@ -2539,7 +2842,13 @@ def client_detail(client_id):
     from blueprints.portal import ensure_portal_token
     portal_url = f"{branding.crm_base()}/portal/{ensure_portal_token(client)}"
     from models import BusinessSetting
+    # Latest by when it was actually finished, not by booking id: backfilled or
+    # rescheduled jobs aren't entered in order.
+    done = [b for b in client.bookings if b.status == 'completed']
+    last_done = max(done, key=lambda b: (b.completed_at or datetime.min,
+                                         b.preferred_date or '', b.id), default=None)
     return render_template('admin/client_detail.html', client=client, portal_url=portal_url,
+                           last_done=last_done,
                            email_ok=looks_like_email(client.email),
                            invite_sent=BusinessSetting.get(f'portal_invite_sent_{client.id}'))
 
@@ -2680,32 +2989,82 @@ def delete_client(client_id):
 
 # ── Cleaner accept / decline ────────────────────────────────────────────────────
 
-@bookings_bp.route('/<int:booking_id>/cleaner-response', methods=['GET'])
+def cleaner_response_token(booking):
+    """The token on a cleaner's accept / decline links for `booking`.
+
+    Signed over the company, the job and the cleaner it was offered to. The
+    old one was sha256(booking id + secret): the same token for job #N at
+    every company on the platform, so a link one company sent opened job #N at
+    any other; and it outlived a reassignment, so whoever was first offered the
+    job could still decline it for whoever has it now.
+    """
+    import hmac
+    import os
+    import tenancy
+    secret = (os.environ.get('SECRET_KEY') or '').encode()
+    who = (booking.assigned_cleaner or '').strip().lower()
+    msg = f'cleaner-response:{tenancy.current_schema()}:{booking.id}:{who}'.encode()
+    return hmac.new(secret, msg, 'sha256').hexdigest()[:32]
+
+
+def _legacy_cleaner_token(booking_id):
+    """What links sent before cleaner_response_token() carry. Honoured on a
+    single-business install only, where there is no other company for it to
+    open; on the platform an old link asks for a fresh one."""
+    import hashlib
+    import os
+    return hashlib.sha256(f"{booking_id}{os.environ.get('SECRET_KEY', 'secret')}".encode()).hexdigest()[:16]
+
+
+def _cleaner_token_ok(booking, token):
+    import hmac
+    import os
+    token = (token or '').strip()
+    if not token or not booking.assigned_cleaner:
+        return False
+    if hmac.compare_digest(token, cleaner_response_token(booking)):
+        return True
+    return (not (os.environ.get('BASE_DOMAIN') or '').strip()
+            and hmac.compare_digest(token, _legacy_cleaner_token(booking.id)))
+
+
+@bookings_bp.route('/<int:booking_id>/cleaner-response', methods=['GET', 'POST'])
 def cleaner_response(booking_id):
-    """Public link — cleaner accepts or declines a job."""
+    """Public link -- the cleaner accepts or declines a job.
+
+    Opening the link only asks; the answer is a POST from the button on that
+    page. Email security scanners open every link in a message, and on a GET
+    they used to accept and then decline the job -- and a decline unassigns
+    the cleaner.
+    """
     booking = Booking.query.get_or_404(booking_id)
-    action = request.args.get('action', '')
-    token = request.args.get('token', '')
-    import hashlib, os
-    expected = hashlib.sha256(f"{booking_id}{os.environ.get('SECRET_KEY','secret')}".encode()).hexdigest()[:16]
-    if token != expected:
-        return 'Invalid link.', 400
+    action = (request.values.get('action') or '').strip()
+    token = request.values.get('token') or ''
+    if not _cleaner_token_ok(booking, token):
+        return ('This link is no longer valid -- the job may have been reassigned. '
+                'Please contact the office.', 400)
+    if action not in ('accept', 'decline'):
+        return 'Unknown action.', 400
+    if request.method == 'GET':
+        return render_template('public/cleaner_response.html', booking=booking, action=action,
+                               token=token, done=None, biz=branding.biz_name())
     who = booking.assigned_cleaner or 'The cleaner'
     if action == 'accept':
         booking.cleaner_response = 'accepted'
         booking.internal_notes = (booking.internal_notes or '') + f'\n[Cleaner accepted job on {datetime.utcnow().strftime("%b %d %Y")}]'
         db.session.commit()
         _alert_owner_response(booking, who, accepted=True)
-        return '<h2 style="font-family:sans-serif;text-align:center;margin-top:60px;color:#065f46">✅ Job accepted! We\'ll see you on ' + (booking.preferred_date or 'the scheduled date') + '.</h2>'
-    elif action == 'decline':
+        done = 'accepted'
+    else:
         booking.cleaner_response = 'declined'
         booking.internal_notes = (booking.internal_notes or '') + f'\n[{who} declined job on {datetime.utcnow().strftime("%b %d %Y")} — needs reassignment]'
         db.session.commit()
         _alert_owner_response(booking, who, accepted=False)
         booking.assigned_cleaner = ''      # unassign after the alert so we know who declined
         db.session.commit()
-        return '<h2 style="font-family:sans-serif;text-align:center;margin-top:60px;color:#991b1b">Job declined. We\'ve let the office know and will reassign. Thank you for telling us!</h2>'
-    return 'Unknown action.', 400
+        done = 'declined'
+    return render_template('public/cleaner_response.html', booking=booking, action=action,
+                           token='', done=done, biz=branding.biz_name())
 
 
 def _alert_owner_response(booking, cleaner_name, accepted):
@@ -2824,7 +3183,8 @@ def confirmation_content(booking):
     words before they reach a customer. A preview built from a separate copy of
     the wording would drift from the real thing and be worth less than nothing."""
     biz = branding.biz_name()
-    first = (booking.name or 'there').split()[0]
+    # A business is greeted by its name, not the first word of it.
+    first = booking.name if booking.is_commercial and booking.name else (booking.name or 'there').split()[0]
     date_text = booking.preferred_date or 'the scheduled date'
     time_text = booking.preferred_time or ''
     when = f"{date_text}{(' at ' + time_text) if time_text else ''}"
@@ -2849,6 +3209,28 @@ def confirmation_content(booking):
     </ul>
   </div>"""
 
+    # The terms travel with the confirmation, in the email itself rather than
+    # behind a link. Most bookings are taken over the phone, so the customer
+    # never passes through a checkout page and never ticks anything -- the
+    # confirmation is the only moment they are told the rules at all. Putting
+    # them here also means the Sent log holds the exact wording that was sent
+    # and the day it went, which is what a card network asks for.
+    #
+    # The window is first and in its own box because it is the clause that
+    # decides a dispute, and nobody reads to the bottom of a terms block.
+    import customer_terms
+    terms_block = f"""
+  <div style="background:#fffaf0;border:1px solid #f0dcb4;border-radius:10px;padding:14px 16px;margin:18px 0">
+    <p style="margin:0 0 6px;font-weight:700;color:#8a5a12">If something isn't right — tell us within 24 hours</p>
+    <p style="margin:0;font-size:0.88rem;line-height:1.6;color:#3f3a52">We would much rather fix it than argue about it. If
+      something was missed, contact us within <strong>24 hours</strong> of the cleaning and we will come back and re-clean
+      the affected areas at no charge. That is how we put an unsatisfactory clean right.</p>
+  </div>
+  <details style="margin:16px 0">
+    <summary style="cursor:pointer;font-size:0.85rem;font-weight:700;color:#9a95ad">Our full service terms</summary>
+    <pre style="white-space:pre-wrap;font-family:inherit;font-size:0.8rem;line-height:1.55;color:#5f5878;margin:10px 0 0">{customer_terms.get_terms()}</pre>
+  </details>"""
+
     subject = f"You're booked with {biz}! ✨"
     html = f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
@@ -2860,34 +3242,56 @@ def confirmation_content(booking):
     {f'<p style="margin:4px 0"><strong>Address:</strong> {addr}</p>' if addr else ''}
     {f'<p style="margin:4px 0"><strong>Total:</strong> {price_text}</p>' if price_text else ''}
   </div>
-  <p style="font-size:0.82rem;color:#9a95ad;background:#f6f5fb;border-radius:8px;padding:10px 12px">💡 Your price is based on an average-size home for this many bedrooms. Larger homes may have a small size adjustment — always confirmed with you first. No surprises!</p>
+{'' if booking.is_commercial else '''  <p style="font-size:0.82rem;color:#9a95ad;background:#f6f5fb;border-radius:8px;padding:10px 12px">💡 Your price is based on an average-size home for this many bedrooms. Larger homes may have a small size adjustment — always confirmed with you first. No surprises!</p>'''}
 {included}
   <p>If anything changes or you have questions, just reply to this email or text us — we're happy to help.</p>
+{terms_block}
   <p style="margin-top:18px">See you soon!<br><strong>{biz}</strong></p>
 </div>"""
     sms = (f"Hi {first}! ✨ Your {biz} cleaning is booked for {when}."
            + (f" Total {price_text}." if price_text else "")
            + (f" The full list of all {len(items)} things we'll do is in your email."
               if items else "")
+           + " If anything's not right, tell us within 24 hours and we'll come back and redo it."
            + " Reply here with any questions. Reply STOP to opt out.")
     return subject, html, sms
 
 
 def _send_booking_confirmation(booking):
     """Confirm a hand-created booking to the customer via email + text.
-    No deposit language — a simple 'you're booked' note. Best-effort."""
+    No deposit language — a simple 'you're booked' note.
+
+    Returns (ok, detail): ok is True when the email or the text actually went.
+    It used to return nothing at all, and send_email reports a refusal by
+    returning (False, detail) rather than raising, so the caller's try/except
+    could only ever conclude the confirmation had been sent."""
     from notifications import send_email, send_sms
     subject, html, sms = confirmation_content(booking)
+    ok, detail = False, ''
 
     if booking.email:
-        send_email(to_email=booking.email, to_name=booking.name,
-                   subject=subject, html=html, cc=booking.cc_email)
+        try:
+            mailed, why = send_email(to_email=booking.email, to_name=booking.name,
+                                     subject=subject, html=html, cc=booking.cc_email)
+            ok = ok or bool(mailed)
+            if not mailed:
+                detail = why or 'the email was refused'
+        except Exception as e:
+            detail = str(e)
 
     if booking.phone:
         try:
-            send_sms(booking.phone, sms)
-        except Exception:
-            pass
+            texted, why = send_sms(booking.phone, sms)
+            ok = ok or bool(texted)
+            if not texted and not detail:
+                detail = why or 'the text was refused'
+        except Exception as e:
+            if not detail:
+                detail = str(e)
+
+    if not ok and not detail:
+        detail = 'no email address or phone number on this booking'
+    return ok, detail
 
 
 def _create_next_recurring(booking):
@@ -2908,6 +3312,12 @@ def _create_next_recurring(booking):
         return
 
     next_date = last_date + timedelta(days=delta)
+    if booking.is_commercial:
+        # Everything a business visit is described and paid by -- building
+        # size, crew, card on file, account -- is what clone_booking carries.
+        import recurring
+        db.session.add(recurring.clone_booking(booking, next_date))
+        return
     next_booking = Booking(
         client_id=booking.client_id,
         service_type=booking.service_type,
@@ -2928,13 +3338,13 @@ def _create_next_recurring(booking):
         status='pending',
         price=booking.price,
         balance_due=booking.balance_due,
+        **booking.commercial_carry(),
     )
     db.session.add(next_booking)
 
 
 def _notify_cleaner(booking):
     """Email the assigned cleaner with job details, earnings, and accept/decline links."""
-    import hashlib, os
     from models import Staff
     from notifications import send_email
     from pricing import SERVICES
@@ -2959,7 +3369,7 @@ def _notify_cleaner(booking):
     size_line = booking.size_line()
 
     base = branding.crm_base()
-    token = hashlib.sha256(f"{booking.id}{os.environ.get('SECRET_KEY','secret')}".encode()).hexdigest()[:16]
+    token = cleaner_response_token(booking)
     accept_url = f"{base}/bookings/{booking.id}/cleaner-response?action=accept&token={token}"
     decline_url = f"{base}/bookings/{booking.id}/cleaner-response?action=decline&token={token}"
     svc_label = SERVICES.get(booking.service_type, {}).get('label', booking.service_type.title())

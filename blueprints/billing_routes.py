@@ -244,7 +244,7 @@ def stripe_webhook():
         # safe, and losing a payment event is worse than processing it twice.
         return jsonify({'ok': False}), 500
 
-    if not changed:
+    if not changed and not detail.startswith(billing.NOT_OURS):
         # Acknowledged, not applied -- an event we do not act on, or one for a
         # company we do not know. Recorded so it is visible, and 200 so Stripe
         # stops retrying something that will never succeed.

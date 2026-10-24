@@ -45,6 +45,7 @@ USAGE_WARN = 0.8
 
 LABELS = {
     'backup:akye': 'Akye database, every company',
+    'backup:dazzle': 'The original CRM database',
     'scheduler:hourly': 'Scheduler, hourly',
     'scheduler:daily': 'Scheduler, daily',
     'job:trial-nudges': 'Trial emails to owners',
@@ -95,9 +96,14 @@ def ago(hours):
     return f'{d} days ago'
 
 
+BACKUP_TARGETS = ('backup:akye', 'backup:dazzle')    # the matrix in .github/workflows/backup.yml
+
+
 def backups(engine, now=None):
     import control_plane
-    kinds = set(control_plane.platform_run_kinds(engine, 'backup:')) | {'backup:akye'}
+    # Every target the nightly workflow backs up, so one that never reports
+    # shows as "not reported yet" instead of being absent from the table.
+    kinds = set(control_plane.platform_run_kinds(engine, 'backup:')) | set(BACKUP_TARGETS)
     return [run_state(engine, k, BACKUP_STALE_HOURS, now) for k in sorted(kinds)]
 
 

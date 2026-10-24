@@ -7,8 +7,13 @@
 <div class="card" style="text-align:center;padding:40px 20px">
   <h2 style="margin:0 0 8px">That's {{ done_today }} calls. Nice work.</h2>
   <p style="color:var(--softer);margin:0 0 20px">
+    {% if my_rep %}
+    That's today's target of {{ daily_stint }} made. {{ queue_left }} still
+    waiting, and they'll keep — anything past this is extra.
+    {% else %}
     {{ queue_left }} still waiting, and they'll keep. Twenty calls is a good
     morning — the rest is there whenever you want it.
+    {% endif %}
   </p>
   <a href="{{ url_for('places_finder.call_sheet', more=1) }}" class="btn btn-gold">Keep going anyway</a>
   <a href="{{ url_for('places_finder.dashboard') }}" class="btn btn-outline">I'm done for now</a>
@@ -27,11 +32,11 @@
 
 {% else %}
 <p style="color:var(--softer);font-size:0.85rem;margin:0 0 10px">
-  {{ done_today }} done today · {{ queue_left }} left
+  {% if my_rep %}{{ done_today }} of {{ daily_stint }} calls today{% else %}{{ done_today }} done today{% endif %} · {{ queue_left }} left
 </p>
 
 <div class="card">
-  <h2 style="margin:0 0 2px">{{ current.business_name }}</h2>
+  <h2 style="margin:0 0 2px"><a href="{{ url_for('places_finder.lead_page', prospect_id=current.id) }}" style="color:var(--ink)">{{ current.business_name }}</a></h2>
   <p style="color:var(--softer);font-size:0.86rem;margin:0 0 14px">
     {{ category_labels.get(current.category, current.category) }}
     {% if current.address %} · {{ current.address }}{% endif %}
@@ -133,6 +138,35 @@
   </script>
   {% endif %}
   {% endif %}
+  <p style="margin:0 0 14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    {% if text_phone %}
+    <a href="{{ url_for('messages.thread', phone=text_phone, name=current.business_name) }}" class="btn btn-outline">💬 Text them</a>
+    {% elif lead_text %}
+    <a href="{{ url_for('places_finder.lead_page', prospect_id=current.id) }}#texts" class="btn btn-outline">💬 Text them</a>
+    {% endif %}
+    {# Which quote follows from the kind of work: a cleaning contract, or a
+       per-home price for the turnovers a property manager buys. #}
+    {% if current.is_commercial %}
+      {% if can_quote %}
+      <a href="{{ url_for('quotes.new', prospect_id=current.id) }}" class="btn btn-outline">📝 Contract quote</a>
+      {% endif %}
+    {% elif can_home_quote %}
+    <a href="{{ url_for('leads.new_quote', prospect_id=current.id) }}" class="btn btn-outline">📝 Home quote</a>
+    {% endif %}
+  </p>
+  <form method="POST" action="{{ url_for('places_finder.set_kind', prospect_id=current.id) }}"
+        style="margin:0 0 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <input type="hidden" name="next" value="{{ request.full_path }}">
+    <span style="font-size:0.8rem;color:var(--softer)">What they're buying:</span>
+    <div style="display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden">
+      {% for value, label, on in [('residential', '🏠 Residential', not current.is_commercial),
+                                  ('commercial', '🏢 Commercial', current.is_commercial)] %}
+      <button type="submit" name="kind" value="{{ value }}" class="kt"
+              style="border:0;padding:6px 12px;font:inherit;font-size:0.82rem;font-weight:600;cursor:pointer;
+                     background:{{ 'var(--ink)' if on else 'transparent' }};color:{{ '#fff' if on else 'var(--muted)' }}">{{ label }}</button>
+      {% endfor %}
+    </div>
+  </form>
 
   {% if current.attempts or current.notes or current.contact_name %}
   <div style="background:var(--surface-2,rgba(0,0,0,0.03));border-radius:8px;padding:12px;margin-bottom:16px">
@@ -206,7 +240,15 @@
         </div>
         <div class="form-group" style="grid-column:1/-1">
           <label>When does their current contract end?</label>
-          <input type="text" name="renewal" value="{{ current.renewal_note or '' }}" placeholder="e.g. March 2027 — worth more than it sounds">
+          {# The month is the half that acts: it puts this prospect back on the
+             call list thirty days before the date, which is the one week an
+             incumbent is actually displaceable. The text box beside it keeps
+             whatever they said about it. #}
+          <input type="month" name="renewal_date"
+                 value="{{ (current.renewal_date or '')[:7] }}">
+          <input type="text" name="renewal" value="{{ current.renewal_note or '' }}"
+                 placeholder="anything else about the renewal — worth more than it sounds"
+                 style="margin-top:6px">
         </div>
         <div class="form-group" style="grid-column:1/-1">
           <label>Anything else worth remembering</label>

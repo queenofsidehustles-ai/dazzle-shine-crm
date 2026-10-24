@@ -45,14 +45,16 @@ with app.app_context():
                 stripe_payment_method_id='pm_test_card')
     db.session.add(b); db.session.commit()
 
-    for when, ch, subj, body in [
-        (datetime(2026, 8, 1, 9, 0), 'email', "You're booked", 'Your deep clean is confirmed'),
-        (datetime(2026, 8, 5, 8, 0), 'sms', '', 'Your cleaner is on the way'),
-        (datetime(2026, 8, 6, 14, 31), 'email', 'Payment received', 'Thank you for your payment'),
+    # The confirmation's delivery was later confirmed by the mail service
+    # (delivery_events.py): the strongest proof in the pack, never a failure.
+    for when, ch, subj, body, status in [
+        (datetime(2026, 8, 1, 9, 0), 'email', "You're booked", 'Your deep clean is confirmed', 'delivered'),
+        (datetime(2026, 8, 5, 8, 0), 'sms', '', 'Your cleaner is on the way', 'sent'),
+        (datetime(2026, 8, 6, 14, 31), 'email', 'Payment received', 'Thank you for your payment', 'sent'),
     ]:
         db.session.add(OutboundLog(channel=ch, to_address=cl.email if ch == 'email' else cl.phone,
                                    to_name=cl.name, subject=subj, body=body,
-                                   status='sent', created_at=when))
+                                   status=status, created_at=when))
     db.session.add(OutboundLog(channel='email', to_address='someone.else@example.com',
                                to_name='Not Them', subject='Unrelated', body='x',
                                status='sent', created_at=datetime(2026, 8, 3)))
@@ -87,6 +89,8 @@ with app.app_context():
     check("You're booked" in page, 'the confirmation')
     check('on the way' in page, 'the on-the-way text')
     check('Payment received' in page, 'the receipt')
+    check('✓ delivered' in page and '>failed<' not in page,
+          'an email the mail service confirmed delivered says so -- not "failed"')
     check('someone.else@example.com' not in page,
           "another customer's mail is not swept into this pack")
     check('Unrelated' not in page, 'nor its contents')

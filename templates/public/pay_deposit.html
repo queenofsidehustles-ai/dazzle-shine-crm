@@ -79,7 +79,7 @@
 
       <div class="summary">
         <div class="row"><span class="k">Service</span><span class="v">{{ booking.service_label }}</span></div>
-        <div class="row"><span class="k">Home</span><span class="v">{{ booking.bedrooms }} bed / {{ booking.bathrooms }} bath</span></div>
+        {% if booking.is_commercial %}{% if booking.scope_of_work %}<div class="row"><span class="k">Scope</span><span class="v" style="white-space:pre-line;text-align:right">{{ booking.scope_of_work }}</span></div>{% endif %}{% else %}<div class="row"><span class="k">Home</span><span class="v">{{ booking.bedrooms }} bed / {{ booking.bathrooms }} bath</span></div>{% endif %}
         <div class="row"><span class="k">Date</span><span class="v">{{ booking.preferred_date or 'Flexible' }}{% if booking.preferred_time and booking.preferred_time != 'Flexible' %} · {{ booking.preferred_time }}{% endif %}</span></div>
         <div class="row"><span class="k">Estimated total</span><span class="v">${{ '%.2f'|format(booking.price or 0) }}</span></div>
         <div class="row dep"><span class="k">Deposit today</span><span class="v">${{ '%.2f'|format(deposit) }}</span></div>
@@ -174,7 +174,7 @@
       document.getElementById('success-card').classList.remove('hidden');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e) {
-      showErr(e.message + ' — or call/text us at {{ BIZ_PHONE }}.');
+      showErr(e.message + ' — or call/text us at {{ BIZ_PHONE|js }}.');
       payBtn.disabled = false;
       payBtn.textContent = 'Pay Deposit & Confirm →';
     }

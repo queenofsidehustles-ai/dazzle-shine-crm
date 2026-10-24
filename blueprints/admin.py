@@ -74,6 +74,21 @@ def version():
     return out
 
 
+# Browsers ask for these at fixed addresses on every host -- a customer's quote
+# link or booking page as much as the CRM -- whether or not the page names an
+# icon. Answering with the app's own icon turns a 404 on most first visits into
+# a picture, and keeps the logs' 404s for links that are actually broken.
+@admin_bp.route('/favicon.ico')
+def favicon():
+    return redirect(url_for('static', filename='icon-192.png'), code=301)
+
+
+@admin_bp.route('/apple-touch-icon.png')
+@admin_bp.route('/apple-touch-icon-precomposed.png')
+def apple_touch_icon():
+    return redirect(url_for('static', filename='icon-180.png'), code=301)
+
+
 def _daily_plan():
     """The day's list must never be the reason the dashboard fails to load."""
     try:
@@ -301,6 +316,71 @@ def demo_enter():
         return redirect(url_for(endpoint))
     except Exception:
         return redirect(url_for('admin.dashboard'))
+
+
+@admin_bp.route('/switch-city/<slug>')
+@login_required
+def switch_city(slug):
+    """Leave for another of this owner's cities.
+
+    Mints a token and sends the browser there. No session travels with it: the
+    other city issues its own, after checking for itself that this person
+    belongs there.
+    """
+    import city_switch
+    from flask import session, redirect, flash, url_for
+    from models import User
+    import auth as _auth
+    # The other city signs this person in as its owner without its password or
+    # second factor, so only an owner here may start one. A dispatcher or a
+    # read-only login that shares an owner's email elsewhere is not that owner.
+    if not _auth.is_owner_session():
+        flash('Only an owner can switch cities.', 'warning')
+        return redirect(url_for('bookings.index'))
+    user = User.query.get(session.get('user_id') or 0)
+    email = (user.username if user else '').strip().lower()
+    if not email or not city_switch.may_switch(email, slug):
+        flash('That is not one of your cities.', 'warning')
+        return redirect(url_for('bookings.index'))
+    token = city_switch.mint(email, slug)
+    return redirect(city_switch.url_for_city(slug, token))
+
+
+@admin_bp.route('/switch-city/accept')
+def accept_city_switch():
+    """Arrive from another city and start a session here.
+
+    Deliberately outside login_required: arriving here is how the session is
+    obtained. Everything that makes that safe lives in verify() -- the
+    signature, the ninety-second expiry, the destination being named in the
+    token, the id being spendable exactly once, and this company's own records
+    saying the person belongs. The account here must already exist and be an
+    owner; a switch is a shortcut past re-typing a password, never a way to
+    create access that was not already granted.
+    """
+    import city_switch
+    from flask import request, redirect, url_for, flash, session
+    import auth as _auth
+    slug = (_auth.current_tenant_slug() or '').strip().lower()
+    email = city_switch.verify(request.args.get('t') or '', slug)
+    if not email:
+        flash('That link has expired. Sign in and switch again.', 'warning')
+        return redirect(url_for('admin.login'))
+    from models import User
+    user = User.query.filter_by(username=email, active=True).first()
+    if not user or user.role != 'owner':
+        flash('There is no owner account for you at this company yet.', 'warning')
+        return redirect(url_for('admin.login'))
+    # A fresh session rather than an amended one: nothing from the city just
+    # left should survive into this one.
+    session.clear()
+    import auth
+    # bind_authenticated_session, not a hand-assigned set of session keys: it
+    # sets the tenant binding and the credential fingerprint together, and its
+    # own docstring records that forgetting the fingerprint is exactly how a
+    # new signup was silently logged out on its next request.
+    auth.bind_authenticated_session(user)
+    return redirect(url_for('bookings.index'))
 
 
 @admin_bp.route('/login', methods=['GET', 'POST'])

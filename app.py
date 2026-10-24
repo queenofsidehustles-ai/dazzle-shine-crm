@@ -48,6 +48,7 @@ from blueprints.invoices import invoices_bp
 from blueprints.portal import portal_bp
 from blueprints.money import money_bp
 from blueprints.team import team_bp, availability_bp
+from blueprints.tips import tips_bp
 
 
 def create_app():
@@ -257,6 +258,7 @@ def create_app():
     app.register_blueprint(money_bp)
     app.register_blueprint(team_bp)
     app.register_blueprint(availability_bp)
+    app.register_blueprint(tips_bp)
 
     # The menu itself — see navigation.py. Built per request because what the
     # sidebar shows depends on whether the owner or a team member is looking.
@@ -274,45 +276,69 @@ def create_app():
             # sits. Cheap: the flag is written once the last step is done and
             # read from settings thereafter, so an established business is not
             # recomputing its onboarding on every page.
-            setup_done = True
+            # Two questions, and they are not the same one.
+            #
+            # `setup_done` decides whether to pile anything else on: the
+            # feature dots and the "did you know" both wait for it. That is
+            # about being able to trade, which is `complete`.
+            #
+            # `setup` is what the meter, the card and Nana's chat read, and it
+            # has to outlive `complete` -- the optional steps come after it,
+            # and keying this to completeness made them vanish off the page
+            # the moment the required list was finished.
+            #
+            # The flag is the cache: current means nothing is left at all and
+            # none of this has to be worked out again.
+            setup, setup_done = None, True
             try:
                 from models import BusinessSetting
+                import onboarding as _ob
                 if session.get('role') == 'owner':
-                    setup_done = BusinessSetting.get('setup_complete') == '1'
+                    if BusinessSetting.get('setup_complete') != _ob.SETUP_VERSION:
+                        setup = _ob.progress()
+                        setup_done = bool(setup['complete'])
             except Exception:
-                pass
-            # How far through setup, for the meter and the reminder. Only
-            # worked out for an owner who has not finished -- an established
-            # business pays nothing for a question it answered months ago.
-            setup = None
-            if not setup_done and session.get('role') == 'owner':
-                try:
-                    import onboarding
-                    setup = onboarding.progress()
-                except Exception:
-                    setup = None
+                setup, setup_done = None, True
 
+            nav = navigation.sidebar(role, can, setup_done)
+            # What each menu item is for, shown on hover (help_tips.py), and
+            # the ⓘ beside this page's title -- on the page a menu item opens,
+            # not on the records behind it.
+            import help_tips
+            # Which features this person has found (adoption.py): this page
+            # counts as found, then a dot on a few they haven't, and at most
+            # one "Did you know?" per sign-in.
+            import adoption
+            if request.method == 'GET':
+                adoption.note_visit(request.endpoint, nav)
             # Whether Nana's setup chat is on, so the welcome pop-up and the
-            # nudge can offer her. Only asked while setup is unfinished.
+            # nudge can offer her. Asked while there is a step left -- which
+            # outlasts `complete`, because that now means able to trade and
+            # the optional steps carry on after it.
             setup_chat = False
-            if setup is not None and not setup.get('complete'):
+            if setup is not None and setup.get('next'):
                 try:
                     import setup_assistant
                     setup_chat = setup_assistant.configured()
                 except Exception:
                     setup_chat = False
-
-            return {'NAV': navigation.sidebar(role, can, setup_done),
+            return {'NAV': nav,
                     'NAV_ACTIVE': navigation.active_item(request.endpoint),
                     'NAV_TITLE': navigation.title_for(request.endpoint),
                     'NAV_TABS': tabs,
                     'NAV_ACTIVE_TAB': active_tab,
                     'SETUP': setup,
+                    'MENU_TIPS': help_tips.for_menu(nav),
+                    'NAV_DOTS': adoption.dots(nav, setup_done),
+                    'SUGGESTION': adoption.suggestion(nav, setup_done),
+                    'PAGE_TIP': request.endpoint if request.endpoint in help_tips.TIPS else None,
                     'SETUP_CHAT': setup_chat}
         except Exception:
             # A broken menu must never take a working page down with it.
             return {'NAV': [], 'NAV_ACTIVE': None, 'NAV_TABS': [],
-                    'NAV_ACTIVE_TAB': None, 'SETUP': None, 'SETUP_CHAT': False}
+                    'NAV_ACTIVE_TAB': None, 'SETUP': None,
+                    'MENU_TIPS': {}, 'PAGE_TIP': None,
+                    'NAV_DOTS': set(), 'SUGGESTION': None, 'SETUP_CHAT': False}
 
     @app.context_processor
     def inject_trial():
@@ -333,7 +359,11 @@ def create_app():
                 return {'TRIAL': None}
 
             state = billing.trial_state(org)
-            if state and not state['activated']:
+            # Not "has the trial started" any more -- under one clock it always
+            # has, and asking that question here stopped activation ever being
+            # recorded at all. The question is whether this company has been
+            # stamped yet.
+            if state and not org.get('activated_at'):
                 # Have they actually begun? Cheap: onboarding already knows.
                 if onboarding.progress().get('activated'):
                     if billing.mark_activated(provisioning._engine(), org['slug']):
@@ -346,6 +376,16 @@ def create_app():
                             trial_nudges.send_event(org['slug'], 'activated')
                     org = billing.current_org()
                     state = billing.trial_state(org)
+                    # Once, here, because this is the only place that knows
+                    # the moment it became true. `mark_activated` has already
+                    # stamped the company, so a second page load does not
+                    # reach this branch and cannot send it twice.
+                    try:
+                        import meta_capi
+                        meta_capi.activation(org)
+                    except Exception:
+                        pass            # a banner, and now a report, are both
+                                        # worth less than the page
             return {'TRIAL': state}
         except Exception:
             return {'TRIAL': None}          # never take a page down for a banner
@@ -382,6 +422,32 @@ def create_app():
             return False
 
     @app.context_processor
+    def inject_cities():
+        """The owner's other cities, for the sidebar switcher.
+
+        Never raises and never blocks a page: a switcher that cannot be built
+        is a missing menu, while an exception here would be a blank CRM. Only
+        for a signed-in owner, and only when there is more than one city --
+        otherwise it is a menu with nothing in it.
+        """
+        try:
+            from flask import session, g
+            if not session.get('logged_in') or session.get('role') != 'owner':
+                return {'OTHER_CITIES': []}
+            here = (getattr(g, 'tenant_slug', None) or '').strip().lower()
+            if not here:
+                return {'OTHER_CITIES': []}
+            from models import User
+            user = User.query.get(session.get('user_id') or 0)
+            if not user:
+                return {'OTHER_CITIES': []}
+            import city_switch
+            return {'OTHER_CITIES': [c for c in city_switch.cities_for(user.username)
+                                     if c['slug'] != here]}
+        except Exception:
+            return {'OTHER_CITIES': []}
+
+    @app.context_processor
     def inject_product():
         import product
         return {'PRODUCT': product.name(), 'TAGLINE': product.tagline(),
@@ -399,6 +465,7 @@ def create_app():
                 'PRODUCT_BASE': product.canonical_base().rstrip('/'),
                 'LEGAL_ENTITY': product.legal_entity(),
                 'LEGAL_ADDRESS': product.legal_address(),
+                'META_PIXEL_ID': product.meta_pixel_id(),
                 # Texting, email, photos and lead search come from Akye, not
                 # from the company (integrations._PLATFORM).
                 'CONNECTIONS_PROVIDED': _connections_provided()}
@@ -489,15 +556,23 @@ def create_app():
             from models import BusinessSetting
             if not session.get('logged_in') or session.get('role') != 'owner':
                 return {'SETUP_PENDING': None}
-            if BusinessSetting.get('setup_complete') == '1':
-                return {'SETUP_PENDING': None}
             import onboarding
-            s = onboarding.summary()
-            if s['complete']:
-                BusinessSetting.set('setup_complete', '1')
+            if BusinessSetting.get('setup_complete') == onboarding.SETUP_VERSION:
+                return {'SETUP_PENDING': None}
+            p = onboarding.progress()
+            # Latched only when there is genuinely nothing left -- optional
+            # steps included. Latching at `complete` would switch off the
+            # meter and the chat while four steps were still on the page.
+            if p['next'] is None:
+                BusinessSetting.set('setup_complete', onboarding.SETUP_VERSION)
                 db.session.commit()
                 return {'SETUP_PENDING': None}
-            n = len(s['blocking'])
+            # The nag counts what is actually blocking, which is the required
+            # steps. "3 things" about a cleaner they have not hired yet is a
+            # reminder to ignore.
+            n = sum(1 for s in p['steps'] if s.get('required') and not s['done'])
+            if not n:
+                return {'SETUP_PENDING': None}
             return {'SETUP_PENDING': f"{n} thing{'s' if n != 1 else ''}"}
         except Exception:
             return {'SETUP_PENDING': None}
@@ -509,6 +584,13 @@ def create_app():
     app.jinja_env.filters['stamp'] = _sched.stamp
     app.jinja_env.filters['short_stamp'] = _sched.short_stamp
     app.jinja_env.globals['business_tz_label'] = lambda: _sched.local_now().strftime('%Z')
+    # {{ tip('key') }}: an ⓘ that explains a feature or a term (help_tips.py).
+    import help_tips as _help_tips
+    app.jinja_env.globals['tip'] = _help_tips.render
+    # The same $/sq ft formatting the proposal email builds by hand, so a
+    # commercial quote's rate reads the same on the page and in the inbox.
+    import commercial_pricing as _cp
+    app.jinja_env.filters['sqft_rate'] = _cp.fmt_sqft_rate
 
     with app.app_context():
         # Migrations run FIRST, and the order is not cosmetic.
@@ -2583,13 +2665,6 @@ def _seed_pricing_defaults():
         pass
 
 
-if __name__ == '__main__':
-    app = create_app()
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8001)), debug=True)
-
-# Redeploy trigger: ensure clean boot runs _migrate_db (adds access_notes + recent columns to prod)
-
-
 def _grandfather_established_business():
     """A business already running on this CRM does not get downgraded by the
     arrival of plans.
@@ -2637,3 +2712,11 @@ def _grandfather_established_business():
         BusinessSetting.set('plan', 'solo')
         BusinessSetting.set('plan_status', 'active')
     db.session.commit()
+
+
+if __name__ == '__main__':
+    # Local development only -- production runs gunicorn. On this machine's
+    # loopback, and the debugger only when asked for: the Werkzeug debugger
+    # runs whatever code it is sent, so it must never face a network.
+    create_app().run(host='127.0.0.1', port=int(os.environ.get('PORT', 8001)),
+                     debug=os.environ.get('FLASK_DEBUG') == '1')

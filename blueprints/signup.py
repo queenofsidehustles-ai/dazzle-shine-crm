@@ -57,9 +57,20 @@ EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[a-z]{2,}$', re.I)
 
 # Every signup creates a whole schema for a company. Without limits, a script
 # could create thousands and take the database down for every real company.
-# Three companies a day from one address covers somebody setting up a second
-# business; the daily ceiling is a circuit breaker, raised with an env var.
-SIGNUPS_PER_ADDRESS_PER_DAY = 3
+# The daily ceiling below is the circuit breaker, raised with an env var.
+#
+# Ten a day from one address, not three. Three covers somebody opening a
+# second business and nothing else: it refuses an owner signing up customers
+# from one office, a trade stand, or anybody testing the thing -- and because
+# the refusal reads as a sensible rule rather than a fault, the first
+# assumption is always that signup is broken. Ten still stops a script.
+#
+# Worth knowing what this counts: the address the app sees, which behind a
+# proxy is only the visitor's if ProxyFix is reading the right hop. Console →
+# Health shows the addresses actually recorded, so a cap that has quietly
+# become a cap on everybody is visible rather than inferred.
+SIGNUPS_PER_ADDRESS_PER_DAY = int(
+    os.environ.get('SIGNUPS_PER_ADDRESS_PER_DAY') or 10)
 DEFAULT_DAILY_SIGNUP_CAP = 50
 # A field people never see. Browsers leave it empty; form-filling bots do not.
 HONEYPOT_FIELD = 'website'
@@ -323,9 +334,10 @@ def signup():
                                    base=base, terms_accepted=terms_accepted,
                                    error=error)
 
+        came_from = _came_from()
         try:
             token = _create_everything(slug, form, password,
-                                       attribution=_came_from(),
+                                       attribution=came_from,
                                        terms_accepted=terms_accepted)
         except SlugTaken:
             return render_template(
@@ -349,6 +361,18 @@ def signup():
         import security
         control_plane.record_signup_attempt(_engine(), security.client_ip())
         _tell_us(slug, form, base)
+        # Tell Meta an ad produced an account. Sent here, before the
+        # attribution cookie is forgotten below, and from `came_from` --
+        # the same dict just written to the company, carrying the click id
+        # that makes this conversion match an ad rather than nobody.
+        try:
+            import meta_capi
+            meta_capi.registration(
+                slug, form.get('email') or '', attribution=came_from,
+                ip=security.client_ip(),
+                user_agent=request.headers.get('User-Agent'))
+        except Exception as _e:
+            print(f'  ⚠️  meta conversion not sent for {slug!r}: {_e}')
         scheme = 'http' if base.startswith('localhost') else 'https'
         # Where they came from is recorded on the company now; a second
         # company opened from this browser should not inherit the first's link.
@@ -429,6 +453,14 @@ def _validate(form, slug, password, terms_accepted=False):
         return 'What is your name?'
     if not EMAIL_RE.match(form['email'] or ''):
         return 'That email address does not look right.'
+    # Refused here rather than fixed up later: a ZIP we cannot place is a
+    # timezone we cannot work out, and that is the one setting whose being
+    # wrong never announces itself.
+    import zip_zones
+    if len(zip_zones.digits(form.get('zip_code'))) != 5:
+        return 'What is the business ZIP code? Five digits.'
+    if not zip_zones.zone_for_zip(form.get('zip_code')):
+        return 'That does not look like a US ZIP code.'
     if len(password) < 8:
         return 'Please use a password of at least 8 characters.'
     if password.lower() in ('password', '12345678', 'changeme'):
@@ -492,6 +524,17 @@ def _create_everything(slug, form, password, attribution=None, terms_accepted=Fa
                 from models import BusinessSetting
                 BusinessSetting.set('business_name', form['business'])
                 BusinessSetting.set('email', form['email'])
+                # The ZIP, and with it the timezone -- worked out rather than
+                # asked. Everything is scheduled against the timezone and the
+                # default is New York, so a business that is never asked and
+                # never tells us runs an hour out forever without a symptom.
+                import zip_zones
+                zip_code = zip_zones.digits(form.get('zip_code'))
+                if zip_code:
+                    BusinessSetting.set('zip_code', zip_code)
+                zone, _source = zip_zones.resolve(zip_code, form.get('browser_tz'))
+                if zone:
+                    BusinessSetting.set('timezone', zone)
                 db.session.commit()
                 raw, _ = LoginToken.issue(owner, 'signup', email=form['email'])
 
@@ -550,4 +593,14 @@ def welcome(token):
     # rather than hand-assigning session keys, so this can't again silently
     # drift out of sync with what a real login sets -- see JOURNEY-01.
     bind_authenticated_session(user)
+    # A real, finished signup: the first screen records it once for Akye's
+    # ads (templates/_meta_pixel.html). Set after bind_authenticated_session,
+    # which may reset the session, and only here -- a sign-in later never sets it.
+    session['meta_signup_complete'] = True
+    # ...and the id the Conversions API used for this same signup, so the
+    # browser's copy and the server's collapse into one conversion rather
+    # than counting the company twice.
+    import meta_capi
+    session['meta_signup_event_id'] = \
+        meta_capi.registration_event_id_for_host(request.host)
     return redirect(url_for('settings.getting_started'))

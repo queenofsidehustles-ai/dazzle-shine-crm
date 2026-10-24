@@ -9,4 +9,5 @@
   <a href="{{ url_for('console.leads_view') }}" class="{{ 'on' if request.endpoint == 'console.leads_view' }}">New Leads{% if counts and counts.leads %}<span class="pill">{{ counts.leads }}</span>{% endif %}</a>
   <a href="{{ url_for('console.sales_view') }}" class="{{ 'on' if request.endpoint == 'console.sales_view' }}">Sales</a>
   <a href="{{ url_for('console.discounts') }}" class="{{ 'on' if request.endpoint == 'console.discounts' }}">Discount codes</a>
+  <a href="{{ url_for('console.tips_view') }}" class="{{ 'on' if request.endpoint == 'console.tips_view' }}">Help tips</a>
 </nav>

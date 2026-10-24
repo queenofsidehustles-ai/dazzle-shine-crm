@@ -8,13 +8,17 @@ straight off `feature/tenancy` on every push, untested, to businesses paying to
 use it. The product being sold had weaker deployment safety than the business
 selling it.
 
-    This business's own CRM    Akye
-    ──────────────────────    ────
-    main    → this business    feature/tenancy → nobody. The working branch.
-              (the canary)
-    stable  → its customers    akye-stable     → every company on Akye
+    The single-business CRM (retired)            Akye
+    ──────────────────────────────────            ────
+    dazzle-shine-single-tenant → its archive      main        → nobody. The working branch:
+    stable  → its customer instances                              every pull request lands here.
+                                                  akye-stable → every company on Akye
+                                                                (Railway deploys it)
 
-Each line moves only when this script runs, and only if every test passes.
+Dazzle & Shine now runs on Akye as one of its companies, so the single-business
+line is kept only to rebuild an old instance. Akye reaches customers only when
+`--akye --go` promotes main to akye-stable, fast-forward, after every suite
+passes.
 
     python3 release.py                  # this CRM: what would go out
     python3 release.py --go             # this CRM: test, tag, promote
@@ -45,22 +49,32 @@ REMOTE = 'origin'
 class Line:
     """One product's path from working branch to the people running it."""
 
-    def __init__(self, key, source, channel, tag_prefix, product, audience):
+    def __init__(self, key, source, channel, tag_prefix, product, audience,
+                 required_checks=()):
         self.key = key
         self.source = source            # where the work lands
         self.channel = channel          # what deployed instances follow
         self.tag_prefix = tag_prefix    # keeps two tag series apart
         self.product = product
         self.audience = audience
+        # GitHub checks that must have passed on the exact commit released.
+        self.required_checks = required_checks
 
 
 LINES = {
-    'dazzle': Line('dazzle', source='main', channel='stable', tag_prefix='v',
-                   product='this CRM',
+    'dazzle': Line('dazzle', source='dazzle-shine-single-tenant', channel='stable',
+                   tag_prefix='v', product='the single-business CRM',
                    audience='every customer instance'),
-    'akye': Line('akye', source='feature/tenancy', channel='akye-stable',
+    'akye': Line('akye', source='main', channel='akye-stable',
                  tag_prefix='akye-v', product='Akye',
-                 audience='every cleaning company on Akye'),
+                 audience='every cleaning company on Akye',
+                 # The four workflows that run on every push to main. The
+                 # suites here run on this machine; the browser journeys and
+                 # the Postgres-only suites run there.
+                 required_checks=('Every test suite',
+                                  'Exact-head P0 launch certification',
+                                  'Local disposable Akye business and accessibility journeys',
+                                  'Destructive lifecycle P1 falsification')),
 }
 
 
@@ -104,6 +118,155 @@ def line_tags(line):
                            '--sort=-creatordate').split('\n') if t]
     other = [l.tag_prefix for l in LINES.values() if l.key != line.key]
     return [t for t in tags if not any(t.startswith(p) for p in other)]
+
+
+def check_problems(runs, required):
+    """What stops a commit being released, from its GitHub check runs.
+
+    `runs` is the API's list ({'name', 'status', 'conclusion', 'id'}); a check
+    re-run leaves both attempts there, so the newest of each name counts."""
+    newest = {}
+    for r in runs:
+        if r.get('name') in required and r.get('id', 0) >= newest.get(r['name'], {}).get('id', -1):
+            newest[r['name']] = r
+    out = []
+    for name in required:
+        r = newest.get(name)
+        if r is None:
+            out.append(f'{name}: has not run on this commit')
+        elif r.get('status') != 'completed':
+            out.append(f'{name}: still running')
+        elif r.get('conclusion') != 'success':
+            out.append(f'{name}: {r.get("conclusion")}')
+    return out
+
+
+def _github_repo():
+    url = git('remote', 'get-url', REMOTE, check=False)
+    m = re.search(r'github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/?$', url)
+    return m.group(1) if m else None
+
+
+def check_runs(sha):
+    """The commit's check runs from GitHub, or None if they cannot be read
+    (no `gh`, not logged in, no network)."""
+    import json
+    repo = _github_repo()
+    if not repo:
+        return None
+    try:
+        r = subprocess.run(['gh', 'api', f'repos/{repo}/commits/{sha}/check-runs?per_page=100'],
+                           cwd=ROOT, capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if r.returncode != 0:
+        return None
+    try:
+        return json.loads(r.stdout).get('check_runs') or []
+    except ValueError:
+        return None
+
+
+def require_green(line, sha):
+    """Refuse to promote a commit whose checks did not all pass.
+
+    Railway deploys the channel the moment it moves, so the checks on the
+    exact commit are the gate, before the push, not a report after it."""
+    if not line.required_checks:
+        return []
+    runs = check_runs(sha)
+    if runs is None:
+        return _attest_by_hand(line, sha)
+    problems = check_problems(runs, line.required_checks)
+    if problems:
+        sys.exit(f'{line.source} at {sha[:7]} is not ready to release:\n'
+                 + '\n'.join(f'  · {p}' for p in problems)
+                 + '\nNothing was released.')
+    say(f'All {len(line.required_checks)} checks passed on {sha[:7]}.')
+    return check_evidence(runs, line.required_checks)
+
+
+def _attest_by_hand(line, sha):
+    """When GitHub cannot be asked: a durable link for each check, and a second
+    person, both written into the release's tag -- never a hash typed back.
+
+    A run link is the evidence somebody can open later; a second name is the
+    exception being approved by someone who did not write the release. Neither
+    can be checked from here, which is why both are recorded rather than
+    trusted silently."""
+    repo = _github_repo() or ''
+    say(f'Could not ask GitHub for the checks on {sha[:7]} (is `gh` installed and '
+        f'logged in?). Open https://github.com/{repo}/commit/{sha}, and for each '
+        f'check paste the link to the run that passed:')
+    pattern = re.compile(rf'^https://github\.com/{re.escape(repo)}/actions/runs/(\d+)(/job/\d+)?/?$')
+    evidence, seen = [], set()
+    for name in line.required_checks:
+        link = input(f'  {name}: ').strip()
+        match = pattern.match(link)
+        if not match:
+            sys.exit(f'That is not a run of {repo or "this repository"} '
+                     f'(https://github.com/{repo}/actions/runs/...). Not released — nothing changed.')
+        # Each check is its own workflow, so one run cannot be evidence for two.
+        if match.group(1) in seen:
+            sys.exit(f'That run was already given for another check; {name} runs in a '
+                     f'workflow of its own. Not released — nothing changed.')
+        seen.add(match.group(1))
+        evidence.append(f'{name}: confirmed by hand ({link})')
+    me = git('config', 'user.name', check=False).strip().lower()
+    second = input('Who else has checked these runs? Their name: ').strip()
+    if not second or second.lower() == me:
+        sys.exit('A release without GitHub\'s own answer needs a second person who checked '
+                 'the runs. Not released — nothing changed.')
+    evidence.append(f'Released without GitHub\'s answer; runs checked by {second}')
+    return evidence
+
+
+def check_evidence(runs, required):
+    """One line per required check: its result and the run it came from, so
+    the release records which runs it was let through on."""
+    newest = {}
+    for r in runs:
+        if r.get('name') in required and r.get('id', 0) >= newest.get(r['name'], {}).get('id', -1):
+            newest[r['name']] = r
+    return [f'{name}: {newest[name].get("conclusion")} ({newest[name].get("html_url") or newest[name].get("id")})'
+            for name in required if name in newest]
+
+
+def migration_head():
+    """The schema revision this release migrates every company to."""
+    try:
+        from alembic.config import Config
+        from alembic.script import ScriptDirectory
+        cfg = Config()
+        cfg.set_main_option('script_location', str(ROOT / 'migrations'))
+        return ScriptDirectory.from_config(cfg).get_current_head()
+    except Exception as e:  # noqa: BLE001
+        return f'(could not read: {e})'
+
+
+def release_manifest(line, tag, checked_sha, evidence, commits, previous):
+    """What a release was, written into its tag: the evidence a later reader
+    needs without going back to the Actions page or the terminal."""
+    out = [f'Release {tag} — {len(commits)} change(s)', '',
+           f'Promotes {line.source} to {line.channel} ({line.audience}).',
+           f'Checked commit: {checked_sha} (the release commit adds only RELEASE).', '',
+           'Checks on the checked commit:']
+    out += [f'  {e}' for e in evidence] or ['  (none required)']
+    out += ['', f'Migrations: every company to {migration_head()}.', '',
+            'Changes:'] + [f'  {c}' for c in commits]
+    flag = ' --akye' if line.key == 'akye' else ''
+    out += ['', f'Rollback: python3 release.py{flag} --rollback'
+            + (f' (back to {previous}).' if previous else ' (no earlier release).')]
+    return '\n'.join(out)
+
+
+def release_before(tags, current, commit_of):
+    """(the release the channel is on, the one before it), from `tags`
+    newest first; None if the channel is not on one of them."""
+    for i, tag in enumerate(tags):
+        if commit_of(tag) == current:
+            return (tag, tags[i + 1]) if i + 1 < len(tags) else (tag, None)
+    return None
 
 
 def pending(line):
@@ -248,13 +411,28 @@ def show(line):
     say('\nNothing has changed. Run with --go to release.')
 
 
-def go(line):
+def go(line, expect=None, expect_stable=None):
     preflight(line)
     first = not remote_has(line.channel)
     commits = pending(line)
     if not commits and not first:
         sys.exit(f'Nothing to release — {line.channel} already matches '
                  f'{line.source}.')
+
+    checked = git('rev-parse', f'{REMOTE}/{line.source}')
+    # The console's Release page shows a diff and asks for exactly that commit.
+    # If anything has landed since, what was reviewed is not what would ship.
+    if expect and not checked.startswith(expect.lower()):
+        sys.exit(f'{line.source} is now at {checked[:7]}, not the {expect[:7]} that '
+                 f'was reviewed. Nothing was released; look at the page again.')
+    # And the other end: if the channel has moved (a rollback, say) since the
+    # page was drawn, fast-forwarding to main would ship what was never shown.
+    if expect_stable:
+        on = git('rev-parse', f'{REMOTE}/{line.channel}', check=False)
+        if not on.startswith(expect_stable.lower()):
+            sys.exit(f'{line.channel} is now at {on[:7]}, not the {expect_stable[:7]} '
+                     f'that was reviewed. Nothing was released; look at the page again.')
+    evidence = require_green(line, checked)
 
     say(f'Releasing {line.product} to {line.audience}:\n')
     for c in commits:
@@ -271,32 +449,47 @@ def go(line):
 
     # The running app cannot read a git tag: Railway clones the branch to run
     # the code, not the history. So the release writes its own name into a file
-    # that ships with it, and /version reads that.
+    # that ships with it, and /version reads that. It is the only change on top
+    # of the commit whose checks were required above.
     (ROOT / 'RELEASE').write_text(f'{tag}\n{date.today().isoformat()}\n')
     git('add', 'RELEASE')
     git('commit', '-m', f'Release {tag}')
     git('push', REMOTE, line.source)
 
-    git('tag', '-a', tag, '-m', f'Release {tag} — {len(commits)} change(s)',
-        line.source)
+    earlier = line_tags(line)
+    manifest = release_manifest(line, tag, checked, evidence, commits,
+                                earlier[0] if earlier else None)
+    git('tag', '-a', tag, '-m', manifest, line.source)
     # Fast-forward only: the channel can never contain anything the source does not.
     git('branch', '-f', line.channel, line.source)
     git('push', REMOTE, f'{line.channel}:{line.channel}')
     git('push', REMOTE, tag)
+    say(f'\n{manifest}')
     say(f'\n✅ Released {tag}. Instances will redeploy within a few minutes.')
+    say(f'   The above is kept as the tag\'s message: git show {tag}')
     say(f'   Check one at /version — it should report release {tag} '
         f'on channel {line.channel}.')
 
 
-def rollback(line):
+def rollback(line, confirm_tag=None):
     preflight(line)
     tags = line_tags(line)
-    if len(tags) < 2:
-        sys.exit(f'There is no earlier {line.product} release to go back to.')
-    current, previous = tags[0], tags[1]
+    on = git('rev-parse', f'{REMOTE}/{line.channel}')
+    # From the release the channel is actually on: the newest tag is wrong
+    # after one rollback, and walks forward if it was moved back by hand.
+    found = release_before(tags, on, lambda t: git('rev-list', '-n', '1', t))
+    if found is None:
+        sys.exit(f'{line.channel} is at {on[:7]}, which is no {line.product} release. '
+                 f'Move it by hand.')
+    current, previous = found
+    if previous is None:
+        sys.exit(f'There is no {line.product} release before {current} to go back to.')
     say(f'Rolling {line.audience} back from {current} to {previous}.')
     say('Their data is untouched — this only changes which code runs.\n')
-    if input(f'Type {previous} to confirm: ').strip() != previous:
+    # The console's Rollback button names the release it showed; if the channel
+    # has moved since, the one before it is no longer the one that was reviewed.
+    typed = confirm_tag if confirm_tag is not None else input(f'Type {previous} to confirm: ')
+    if typed.strip() != previous:
         sys.exit('Cancelled — nothing changed.')
     git('branch', '-f', line.channel, previous)
     git('push', REMOTE, '--force-with-lease', f'{line.channel}:{line.channel}')
@@ -310,13 +503,23 @@ if __name__ == '__main__':
     ap.add_argument('--akye', action='store_true',
                     help="release Akye rather than this business's own CRM")
     ap.add_argument('--go', action='store_true', help='test, tag and release')
+    ap.add_argument('--expect', metavar='SHA',
+                    help='release only if the source branch is at this commit')
+    ap.add_argument('--expect-stable', metavar='SHA',
+                    help='release only if the release channel is at this commit')
+    ap.add_argument('--confirm-tag', metavar='TAG',
+                    help='with --rollback: the release to go back to, instead of asking')
     ap.add_argument('--rollback', action='store_true',
                     help='put them back on the previous release')
     args = ap.parse_args()
     chosen = LINES['akye' if args.akye else 'dazzle']
     if args.rollback:
-        rollback(chosen)
+        rollback(chosen, args.confirm_tag)
     elif args.go:
-        go(chosen)
+        if args.expect and not re.fullmatch(r'[0-9a-fA-F]{7,40}', args.expect):
+            sys.exit('--expect needs a commit id.')
+        if args.expect_stable and not re.fullmatch(r'[0-9a-fA-F]{7,40}', args.expect_stable):
+            sys.exit('--expect-stable needs a commit id.')
+        go(chosen, args.expect, args.expect_stable)
     else:
         show(chosen)

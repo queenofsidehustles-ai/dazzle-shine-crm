@@ -287,10 +287,18 @@ def issue_login(engine, affiliate_id, now=None):
 
     Returns the raw token; only its hash is kept."""
     now = now or datetime.utcnow()
-    if login_requests_recent(engine, affiliate_id, now) >= LOGIN_REQUESTS_PER_HOUR:
-        return None
     raw = secrets.token_urlsafe(32)
     with engine.begin() as conn:
+        # The partner's row is locked for the count and the insert together.
+        # Counted outside, parallel requests all see the same few and all pass.
+        conn.execute(select(affiliates.c.id).where(affiliates.c.id == affiliate_id)
+                     .with_for_update())
+        recent = conn.execute(
+            select(func.count()).select_from(affiliate_logins).where(
+                affiliate_logins.c.affiliate_id == affiliate_id,
+                affiliate_logins.c.created_at >= now - timedelta(hours=1))).scalar() or 0
+        if recent >= LOGIN_REQUESTS_PER_HOUR:
+            return None
         conn.execute(insert(affiliate_logins).values(
             affiliate_id=affiliate_id, token_hash=_hash(raw), created_at=now,
             expires_at=now + timedelta(minutes=LOGIN_MINUTES)))
@@ -393,9 +401,11 @@ def _accrue(engine, slug, invoice, now):
         first = conn.execute(
             select(func.min(affiliate_commissions.c.invoice_paid_at)).where(
                 affiliate_commissions.c.affiliate_id == partner['id'],
-                affiliate_commissions.c.org_slug == slug,
-                affiliate_commissions.c.status != 'reversed')).scalar()
+                affiliate_commissions.c.org_slug == slug)).scalar()
         if first:
+            # The first real payment, even if it was refunded since: refunding
+            # it does not start a fresh twelve months. A refund that arrived
+            # before its payment leaves no paid date, so it does not count.
             # Exclusive: a monthly plan first paid on 1 January is paid again on
             # 1 January a year later, and that thirteenth payment is outside a
             # twelve-month term. An averaged day count would let it in.
@@ -416,23 +426,34 @@ def _accrue(engine, slug, invoice, now):
     return dict(row)
 
 
-def reverse(engine, invoice_id, reason='refunded', now=None, slug=None):
+def reverse(engine, invoice_id, reason='refunded', now=None, slug=None,
+            affiliate_id=None):
     """Cancel the commission an invoice earned (refund, chargeback).
 
-    Only an unpaid commission is reversed here. One already paid out is left
-    alone and reported to the caller as such, so staff can settle it by hand:
-    quietly rewriting history that a partner has already been paid against is
-    how a ledger stops being believed. Returns 'reversed', 'already paid',
-    'already reversed', 'being paid' or 'none'.
+    An unpaid commission is reversed in place. One already paid out is never
+    rewritten -- a ledger a partner has been paid against has to stay
+    believable -- so the money is taken back with a debit instead: a negative
+    commission under `clawback:<invoice id>`, payable at once, that nets
+    against their next payout. Until their balance covers it, they are paid
+    nothing. Returns 'reversed', 'debited' (paid already; a debit now stands),
+    'already debited', 'already reversed', 'being paid' or 'none'.
 
     Stripe does not promise to deliver events in order, so a refund can arrive
     before the payment it refunds. With `slug` given and no commission yet, a
     zero-value reversed row is written under the invoice id: the payment event,
-    when it comes, finds the invoice already recorded and earns nothing."""
+    when it comes, finds the invoice already recorded and earns nothing.
+
+    With `affiliate_id` given, only that partner's commission may be reversed:
+    an invoice belonging to anybody else reads as 'none'."""
     now = now or datetime.utcnow()
     with engine.begin() as conn:
+        # Locked: a payout claiming this row at the same moment must finish
+        # first, so the state decided on below is the one that is really there.
         row = conn.execute(select(affiliate_commissions).where(
-            affiliate_commissions.c.stripe_invoice_id == invoice_id)).mappings().first()
+            affiliate_commissions.c.stripe_invoice_id == invoice_id)
+            .with_for_update()).mappings().first()
+        if row and affiliate_id is not None and row['affiliate_id'] != affiliate_id:
+            return 'none'
         if not row:
             partner = None
             if slug:
@@ -452,7 +473,18 @@ def reverse(engine, invoice_id, reason='refunded', now=None, slug=None):
         if row['status'] == 'reversed':
             return 'already reversed'
         if row['status'] == 'paid':
-            return 'already paid'
+            debit_id = f'clawback:{invoice_id}'
+            if conn.execute(select(affiliate_commissions.c.id).where(
+                    affiliate_commissions.c.stripe_invoice_id == debit_id)).first():
+                return 'already debited'
+            conn.execute(insert(affiliate_commissions).values(
+                affiliate_id=row['affiliate_id'], org_slug=row['org_slug'],
+                stripe_invoice_id=debit_id, invoice_paid_at=row['invoice_paid_at'],
+                amount_cents=0, rate_bps=row['rate_bps'],
+                commission_cents=-row['commission_cents'], status='accrued',
+                payable_at=now, reversal_reason=(reason or '')[:200] or None,
+                created_at=now))
+            return 'debited'
         if row['status'] == 'paying':
             # Claimed for a transfer that has been, or may yet be, sent. Letting
             # it become 'reversed' now would leave a paid payout whose
@@ -606,9 +638,45 @@ def can_pay_by_stripe(partner):
     return True, ''
 
 
+# Stripe keeps an idempotency key for about 24 hours. A retry older than this
+# (less an hour's margin) cannot rely on it, so it asks Stripe whether the
+# first attempt went through before it sends anything.
+KEY_RETENTION = timedelta(hours=23)
+
+
+def _reconcile_aged(engine, partner, pay, now):
+    """For a payout whose key may have expired: (settled, response).
+
+    `settled` is True when the question is answered and `response` is the
+    (ok, message, payout) to return -- either the transfer was found and the
+    books now say paid, or Stripe could not be asked and nothing is sent.
+    False means Stripe confirmed no such transfer exists: sending is safe."""
+    import partner_payouts
+    claimed = pay.get('paid_at')
+    if not claimed or now - claimed < KEY_RETENTION:
+        return False, None
+    ok, found = partner_payouts.find_transfer(
+        partner['payout_account_id'], pay['amount_cents'],
+        f'(payout {pay["id"]})', claimed)
+    if not ok:
+        return True, (False, (f'This payout is over a day old, so Stripe may have forgotten '
+                              f'it was already sent, and it could not be settled ({found}). '
+                              f'Nothing was sent. Try again, or check the transfers in the '
+                              f'Stripe dashboard.'), pay)
+    if found:
+        first = _finish(engine, pay['id'], found, now)
+        done = dict(payout(engine, pay['id']), finished_now=first)
+        return True, (True, f'{money(pay["amount_cents"])} to {partner["name"]} had already '
+                            f'been sent ({found}); the books now say so.', done)
+    return False, None
+
+
 def _send(engine, partner, pay, now):
     """Send the transfer for a claimed payout and settle the books on the answer."""
     import partner_payouts
+    settled, response = _reconcile_aged(engine, partner, pay, now)
+    if settled:
+        return response
     ok, value, uncertain = partner_payouts.transfer(
         partner['payout_account_id'], pay['amount_cents'],
         f'Akye partner commission {partner["code"]} (payout {pay["id"]})',
@@ -829,6 +897,8 @@ def portal(engine, partner, now=None, staff=False):
             c['state'] = 'sending'
         else:
             c['state'] = c['status']
+        if c['commission_cents'] < 0:
+            c['state'] = 'refund debit'
 
     # By campaign tag: the one question a partner can act on, "which of my
     # posts and emails actually brought people?".
