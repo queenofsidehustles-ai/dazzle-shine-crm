@@ -120,12 +120,12 @@ STEP_PROMPTS = {
     'pricing': 'What do you charge for a standard clean of a 2-bed, 2-bath?',
     'terms': 'Your customer terms are ready. Have a look and accept them.',
     'balance': 'When a job’s finished, should the rest come off the card on file?',
-    'payments': ('That’s the four essentials done — you can take bookings right '
-                 'now. The one thing left, whenever you’re ready: connect '
-                 'payments so customers can pay by card. Your bank details stay '
-                 'with you.'),
+    'team': 'Who cleans for you? Start with yourself if you still clean.',
+    'payments': ('Last step: connect payments, so you’re ready to be paid before '
+                 'your first customer books. It takes a few minutes and your bank '
+                 'details stay with you. No bank details to hand? Skip it for '
+                 'tonight and it will be first on your list tomorrow.'),
     'booking_page': 'Want to put your booking page where customers can find it?',
-    'team': 'Add a cleaner? Yourself counts, if you’re still cleaning.',
     'client': 'Add a customer you already clean for?',
     'job': 'Book a job and send it to a cleaner — that’s the whole loop.',
 }
@@ -226,11 +226,9 @@ def next_message(done_line=''):
         # The business prompt reads differently with boxes already filled in
         # than with blank ones to complete.
         text = text(any(c.get('prefilled') for c in cards))
-    # The payments step is the seam right after the four required ones. Its own
-    # wording already says "that's the essentials done", so a generic "That step
-    # is done." in front of it is both redundant and quietly wrong -- the owner
-    # did not just finish an optional step, they finished setup. Drop the prefix
-    # here only; later optional steps (booking page, team...) still get it.
+    # The payments step is the last of the four required ones, and its own
+    # wording opens with "Last step", so a generic "That step is done." in
+    # front of it is the same news twice. Drop the prefix here only.
     if step.get('key') == 'payments':
         done_line = ''
     # A choice card asks its own question, in the card. Saying it again in a
@@ -242,7 +240,8 @@ def next_message(done_line=''):
         cards.append(_link_card(*link))
     # "Step 2 of 4": counted over the REQUIRED steps only, the same four the
     # progress meter counts, so the card and the meter never disagree. The
-    # optional extras that come after (payments, booking page, team...) get no
+    # go-live checks and extras that come after (terms, balance, booking
+    # page...) get no
     # number -- they are not step five of four, they are what's left to do once
     # setup is already finished.
     try:
@@ -253,7 +252,7 @@ def next_message(done_line=''):
                    if s['key'] == step['key']), None)
         if no:
             for c in cards:
-                if c.get('kind') in ('form', 'confirm', 'choice'):
+                if c.get('kind') in ('form', 'confirm', 'choice', 'team'):
                     c['step_no'], c['step_total'] = no, total
     except Exception:
         pass
@@ -265,6 +264,7 @@ def next_message(done_line=''):
 # the model answers, or a page the owner has to go to.
 _STEP_CARDS = {
     'business': lambda: prefilled_business_card(),
+    'team': lambda: team_card(),
     'pricing': lambda: price_card(),
     'terms': lambda: terms_card(),
     'balance': lambda: balance_cards(),
@@ -504,6 +504,190 @@ def price_card():
                       lines=lines)
     card['prefilled'] = True
     return lines, card
+
+
+def _owner_name():
+    from flask import session
+    from models import User
+    uid = session.get('user_id')
+    u = User.query.get(uid) if uid else None
+    return ((u.name if u else '') or session.get('user_name') or '').strip()
+
+
+def team_card():
+    """Step 2: the owner, already filled in, and room for anyone she has.
+
+    One card, not one per cleaner. The owner's own row arrives filled in from
+    her login and the details she just saved, with "I clean jobs myself"
+    ticked -- a solo owner taps Save and is done. Unticked, the same card is
+    a company adding the team it already has. Nothing here emails anybody:
+    adding a person and inviting her are two decisions, and owners often
+    add people before they have told them.
+    """
+    me = {'name': _owner_name(), 'phone': _setting('phone'),
+          'email': _setting('email'), 'cleans': True}
+    card = {'kind': 'team', 'step': 'team', 'title': 'Your team',
+            'note': 'Add everyone who cleans for you. Nobody is emailed until '
+                    'you choose to invite them.',
+            'me': me, 'label': 'Save my team',
+            'paste_hint': 'One per line: name, email, phone'}
+    card['prefilled'] = bool(me['name'])
+    return [card]
+
+
+_EMAIL_IN = re.compile(r'[^\s,;<>]+@[^\s,;<>]+\.[^\s,;<>]+')
+
+
+def _parse_team_paste(text):
+    """Rows out of a pasted list: one person per line, in any order of name,
+    email and phone, split by commas, tabs or semicolons. Whatever is not an
+    email or a phone number is the name."""
+    rows = []
+    for line in (text or '').splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        email = ''
+        m = _EMAIL_IN.search(line)
+        if m:
+            email = m.group(0)
+            line = line.replace(email, ' ')
+        name_bits, phone = [], ''
+        for part in re.split(r'[,\t;]', line):
+            part = part.strip()
+            if not part:
+                continue
+            if not phone and _phone_ok(part) and not re.search(r'[A-Za-z]', part):
+                phone = part
+            else:
+                name_bits.append(part)
+        rows.append({'name': ' '.join(name_bits), 'email': email, 'phone': phone})
+    return rows
+
+
+def _team_rows(fields):
+    """The people on a submitted team card, owner first. (rows, problems).
+
+    Every row is checked before any is written, so a card with one bad email
+    saves nobody rather than half a team -- fixing the one box and pressing
+    Save again must not then trip over the people the first press added."""
+    from blueprints.staff import _name_taken
+    rows, problems = [], []
+    if str(fields.get('me_cleans') or '') in ('1', 'true', 'on', 'yes'):
+        rows.append({'name': _clean(fields.get('me_name')),
+                     'phone': _clean(fields.get('me_phone')),
+                     'email': _clean(fields.get('me_email')).lower(), 'me': True})
+    others = fields.get('others')
+    for o in (others if isinstance(others, list) else [])[:50]:
+        if isinstance(o, dict):
+            rows.append({'name': _clean(o.get('name')), 'phone': _clean(o.get('phone')),
+                         'email': _clean(o.get('email')).lower()})
+    for o in _parse_team_paste(str(fields.get('paste') or '')[:5000]):
+        rows.append({'name': _clean(o['name']), 'phone': _clean(o['phone']),
+                     'email': _clean(o['email']).lower()})
+    # A row with nothing in it is an empty box, not a person.
+    rows = [r for r in rows if r['name'] or r['phone'] or r['email']]
+    seen = set()
+    for r in rows:
+        who = r['name'] or r['email'] or r['phone']
+        if not r['name']:
+            problems.append(f'{who} needs a name')
+            continue
+        long = _too_long(r, STAFF_LIMITS)
+        if long:
+            problems.append(f'{r["name"]}: ' + long.replace('Not offered: ', ''))
+        if r['phone'] and not _phone_ok(r['phone']):
+            problems.append(f'{r["name"]}’s phone "{r["phone"]}" is not a full number')
+        if r['email'] and not _email_ok(r['email']):
+            problems.append(f'{r["name"]}’s email "{r["email"]}" is not complete')
+        # Names must be distinct: a solo job pays the cleaner it names, and
+        # two Marias share one pay history (blueprints/staff._name_taken).
+        key = r['name'].lower()
+        if key in seen:
+            problems.append(f'{r["name"]} is on the list twice — add a surname or initial')
+        elif _name_taken(r['name']):
+            problems.append(f'you already have a team member called {r["name"]}')
+        seen.add(key)
+    return rows, problems
+
+
+def save_team(fields):
+    """Write the team card: every row, or none of them."""
+    import entitlements
+    from flask import session
+    from extensions import db
+    from models import Staff, User
+    rows, problems = _team_rows(fields or {})
+    if problems:
+        return False, 'Please check: ' + '; '.join(problems) + '.'
+    if not rows:
+        return False, ('Add at least one cleaner, or tick “I clean jobs myself” '
+                       'if it’s you for now.')
+    left = entitlements.remaining('field_workers')
+    if left is not None and len(rows) > left:
+        _ok, why = entitlements.check_limit('field_workers')
+        room = f'{left} more cleaner{"" if left == 1 else "s"}'
+        return False, (why or f'Your plan has room for {room}.') + (
+            f' This card has {len(rows)}.')
+    added = []
+    for r in rows:
+        s = Staff(name=r['name'], phone=r['phone'], email=r['email'], is_active=True)
+        if r.get('me'):
+            # Her own login, linked from the start, so she never gets a
+            # "join the team" email from her own business.
+            uid = session.get('user_id')
+            if uid and User.query.get(uid) and not Staff.query.filter_by(user_id=uid).first():
+                s.user_id = uid
+        db.session.add(s)
+        added.append(r['name'] + (' (you)' if r.get('me') else ''))
+    db.session.commit()
+    return True, f'Your team: {", ".join(added)}.'
+
+
+def invite_card():
+    """After the team is saved: invite the people who can be invited.
+
+    A separate card with its own token, so emailing is a decision the owner
+    makes on purpose -- and the token carries the exact list, so pressing it
+    invites the people it named and nobody added later."""
+    from models import Staff
+    people = (Staff.query.filter(Staff.is_active.is_(True), Staff.user_id.is_(None),
+                                 Staff.agreement_token.is_(None))
+              .order_by(Staff.id).all())
+    people = [p for p in people if (p.email or '').strip()]
+    if not people:
+        return None
+    names = [p.name for p in people]
+    card = _offer('setup_send_invites', {'ids': [p.id for p in people]},
+                  'Invite them to sign in?',
+                  ['Each gets an email to set up a sign-in and see their jobs:',
+                   ', '.join(names)],
+                  'Send invites now')
+    card['later'] = 'Not yet — I’ll tell them first'
+    return card
+
+
+def send_invites(payload):
+    from blueprints.migration import send_join_invite
+    from extensions import db
+    from models import Staff
+    ids = [i for i in (payload.get('ids') or []) if isinstance(i, int)]
+    sent, failed = [], []
+    for s in Staff.query.filter(Staff.id.in_(ids)).all() if ids else []:
+        # Re-checked: somebody may have joined, or been invited, since.
+        if s.user_id or not (s.email or '').strip() or s.agreement_token:
+            continue
+        ok, _detail = send_join_invite(s)
+        (sent if ok else failed).append(s.name)
+    db.session.commit()
+    if not sent and not failed:
+        return True, 'Everyone on that list has already been invited.'
+    said = f'Invites sent to {", ".join(sent)}.' if sent else ''
+    if failed:
+        said += (' ' if said else '') + (
+            f'Could not email {", ".join(failed)} just now — you can resend '
+            f'from their page on your team list.')
+    return bool(sent), said
 
 
 def terms_card():
@@ -807,11 +991,16 @@ def system_prompt(opening):
         'three short sentences, then one question. They may be on a phone.\n\n'
 
         'THE SETUP STEPS, IN ORDER\n'
-        'business (contact details customers see), pricing (one price for a '
-        '2 bed / 2 bath standard clean sets the whole list), booking_page '
-        '(share the self-booking link), team (add a cleaner, or themselves), '
-        'client (add one real customer), job (book and assign a job). After '
-        'that, payments are connected on the Connections page by the owner.\n'
+        'Required, in this order: business (contact details customers see), '
+        'team (the owner herself if she cleans, plus anyone who already cleans '
+        'for her; the card on screen takes them all at once), pricing (one '
+        'price for a 2 bed / 2 bath standard clean sets the whole list), '
+        'payments (the owner connects Stripe herself on the Connections page, '
+        'so she is ready to be paid before her first booking). Then, before '
+        'going live: terms (accept the customer terms), balance (charge the '
+        'rest automatically or not). Then optional: booking_page (share the '
+        'self-booking link), client (add one real customer), job (book and '
+        'assign a job).\n'
         'Work on the next unfinished step unless they ask about something else. '
         'Ask for one step at a time. If they want to skip, move on.\n\n'
 
@@ -1081,6 +1270,8 @@ def save_form(step, fields):
         if not payload:
             return False, 'Add at least one detail before saving.'
         return save_business(payload)
+    if step == 'team':
+        return save_team(fields)
     if step == 'pricing':
         try:
             anchor = float(re.sub(r'[^\d.]', '', str(fields.get('two_bed_two_bath'))) or 0)
@@ -1195,6 +1386,7 @@ ACTIONS = {
     'setup_set_prices': set_prices,
     'setup_add_cleaner': add_cleaner,
     'setup_add_customer': add_customer,
+    'setup_send_invites': send_invites,
 }
 
 

@@ -135,6 +135,15 @@ def save():
     if ok:
         chat = transcript(catch_up=False)
         follow, cards, key = setup_assistant.next_message()
+        if step == 'team':
+            # Inviting is its own decision, offered once the team is saved and
+            # before the next step -- never done as a side effect of Save.
+            try:
+                invite = setup_assistant.invite_card()
+            except Exception:
+                invite = None
+            if invite:
+                cards = [invite] + cards
         chat = chat + [
             {'role': 'user', 'content': f'(I saved my {step} details.)', 'hidden': True},
             {'role': 'assistant', 'content': follow, 'cards': cards, 'step': key},
