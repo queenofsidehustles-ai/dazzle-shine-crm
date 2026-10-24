@@ -1,7 +1,7 @@
 # Akye: Improvements and Changes, 9–23 Oct 2026
 
-**Scope:** 114 non-merge commits, 13–23 Oct (320 files, about +37,300 / −2,200 lines). Release `akye-v2026.10.23` was cut on 23 Oct.
-Source: `git log --since="2 weeks ago"`.
+**Scope:** about 135 non-merge commits (352 files, about +41,200 / −2,500 lines), now including everything merged from `main` on 24 Oct. Release `akye-v2026.10.23` was cut on 23 Oct. Work after that release is on `main` only and is marked "not yet released" below.
+Source: `git log --since=2026-10-10`.
 
 ## Highlights
 1. Quotes became a legally trackable record. A sent offer is frozen, acceptance is all-or-nothing, and the audit trail has a hash chain.
@@ -94,6 +94,21 @@ Source: `git log --since="2 weeks ago"`.
 - Fixes were ported between `main` and `akye-stable`: affiliates, Health, payouts and migration IDs.
 - White-label sweep: no business name in the source. `release.py` is exempt because it names git branches.
 - Remediation report of 19 Oct (#128) and a 22 Oct report.
+
+## 7. Added since the 23 Oct release (on `main`, not yet released)
+- **Console Release page** at `/console/release` (#154): reviews `main` against `akye-stable` and lists blockers. It has a Release button (`/console/release/go`) and a Roll back button (`/console/release/rollback`). The review binds to both ends of the reviewed diff, snapshots by commit, and uses wider risk patterns. The repo name comes from `GITHUB_REPO`.
+- **Commercial accounts:** book scheduled, confirmed jobs paid by card or invoice. Jobs get full repeats, no residential commission, a real morning invoice and scope fixes. Commercial jobs pay the commercial cleaner cost, not the residential rate. Migration renumbered to 0035.
+- **Pay rate:** new companies start paying cleaners $25 an hour. Existing companies keep theirs, and restoring an old backup keeps $43.
+- **Simpler booking (#148):** New Booking form, and one place for each fact on the booking page.
+- **Book again:** the form is an inline expandable at the top of the booking. It posts in the background, confirms inline, is safe to retry, and uses one-off confirmation wording.
+- **Console:**
+  - Support meter, owner activity, and three "gone quiet" emails (off until switched on). The meter counts done visits, and a switched-off email no longer holds the next.
+  - Companies table reads company, then Support.
+  - Partners pages drop the funnel tabs.
+  - Three false console errors were fixed.
+- **City switch:** one login, two cities. The menu reads each company's own city.
+- **Charging safety:** two clocks must not charge one card twice. A runbook describes how the charging clock moves.
+- **Earlier work now merged in:** the confirmation email carries the terms. The blog moved off the application. Interview recordings are signed on upload and private on read. Interview-recording evidence is inside the release gate, and a purged company takes its recordings with it.
 
 ## Follow-ups seen in the log
 - Two ports left photo-wording migration 0021 as a no-op, so stamped databases keep resolving. Keep that in mind before renumbering migrations.
