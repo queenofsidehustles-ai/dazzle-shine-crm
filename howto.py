@@ -96,15 +96,14 @@ GUIDES = [
                      'request deposit', 'take a deposit'],
         'steps': [
             _open_booking(),
-            {'say': 'In Talk to the customer, under What do you want to send?, choose '
-                    '"The booking confirmation — and the deposit, if you want it". It is usually chosen already.',
-             'page': _BOOKING, 'start': '/bookings/', 'target': 'send-kind'},
-            {'say': 'In the box next to Send, change "Confirmation only" to "+ ask for the $… deposit", '
-                    'then press Send. It goes by email and text.',
+            {'say': 'At the top of the booking, in Confirm with the customer, check the box next '
+                    'to Send says "Confirmation + ask for the $… deposit". It is chosen for you '
+                    'when you take deposits.',
              'page': _BOOKING, 'start': '/bookings/', 'target': 'confirm-send'},
-            {'say': 'When they pay, the booking is marked confirmed and their card is saved for the '
-                    'balance. Your deposit amount is set on Pricing, under Deposit.',
-             'page': _BOOKING, 'start': '/bookings/'},
+            {'say': 'Press Send. One email and text carries the confirmation and the link to pay '
+                    'the deposit. When they pay, the booking is confirmed and their card is saved '
+                    'for the balance. Your deposit amount is set on Pricing, under Deposit.',
+             'page': _BOOKING, 'start': '/bookings/', 'target': 'confirm-send'},
         ],
     },
     {
