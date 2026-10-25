@@ -31,7 +31,7 @@
 </div>
 
 <!-- Add account (collapsible) -->
-<details class="card" style="margin-bottom:18px">
+<details class="card" data-tour="account-add" style="margin-bottom:18px">
   <summary style="cursor:pointer;font-weight:700;color:var(--ink)">➕ Add a commercial account by hand</summary>
   <form method="POST" action="{{ url_for('commercial.new') }}" style="margin-top:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
     <div><label class="lbl">Business name *</label><input class="inp" name="business_name" required></div>
@@ -60,7 +60,7 @@
   {% endfor %}
 </div>
 
-<div class="card">
+<div class="card" data-tour="accounts-list">
   {% if accounts %}
   <div class="table-wrap">
     <table>

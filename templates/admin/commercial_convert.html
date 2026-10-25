@@ -16,7 +16,7 @@
   <p style="color:var(--softer);font-size:0.88rem;margin:0 0 16px">
     Fill in what you agreed on the call, and this becomes an active commercial account.
   </p>
-  <form method="POST" action="{{ url_for('commercial.convert', prospect_id=p.id) }}"
+  <form method="POST" action="{{ url_for('commercial.convert', prospect_id=p.id) }}" data-tour="convert-form"
         style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
     <div><label class="lbl">Contact person</label><input class="inp" name="contact_name" value="{{ p.contact_name or '' }}" placeholder="Who you spoke to"></div>
     <div><label class="lbl">Email</label><input class="inp" name="email" value="{{ p.email or '' }}" placeholder="for invoices"></div>
@@ -28,7 +28,7 @@
     <div><label class="lbl">Amount ($)</label><input class="inp" name="billing_amount" placeholder="600"></div>
     <div style="grid-column:1/-1"><label class="lbl">Notes</label><textarea class="inp" name="notes" rows="2" placeholder="e.g. after-hours, 3 floors, start next Monday">{{ p.notes or '' }}</textarea></div>
     {% include 'admin/_comm_calc.html' %}
-    <div style="grid-column:1/-1"><button type="submit" class="btn" style="padding:11px 26px">🎉 Create commercial account</button></div>
+    <div style="grid-column:1/-1"><button type="submit" class="btn" data-tour="convert-save" style="padding:11px 26px">🎉 Create commercial account</button></div>
   </form>
 </div>
 

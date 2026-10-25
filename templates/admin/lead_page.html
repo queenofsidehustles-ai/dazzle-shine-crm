@@ -94,7 +94,7 @@
     <a href="#texts" class="btn btn-outline" style="padding:9px 14px">💬 Text</a>
     {% endif %}
     {% if p.is_commercial %}
-      {% if can_quote %}<a href="{{ url_for('quotes.new', prospect_id=p.id) }}" class="btn btn-outline" style="padding:9px 14px">📝 Contract quote</a>{% endif %}
+      {% if can_quote %}<a href="{{ url_for('quotes.new', prospect_id=p.id) }}" data-tour="lead-contract-quote" class="btn btn-outline" style="padding:9px 14px">📝 Contract quote</a>{% endif %}
     {% elif can_home_quote %}
       <a href="{{ url_for('leads.new_quote', prospect_id=p.id) }}" class="btn btn-outline" style="padding:9px 14px">📝 Home quote</a>
     {% endif %}
@@ -103,7 +103,7 @@
       <a href="{{ url_for('commercial.detail', account_id=account.id) }}" class="btn btn-outline" style="padding:9px 14px">🏢 Their account</a>
     {% elif p.is_commercial and can_convert %}
       {# The step that had no button anywhere: they said yes, now they are a customer. #}
-      <a href="{{ url_for('commercial.convert', prospect_id=p.id) }}" class="btn btn-outline" style="padding:9px 14px">🎉 Make them an account</a>
+      <a href="{{ url_for('commercial.convert', prospect_id=p.id) }}" data-tour="lead-make-account" class="btn btn-outline" style="padding:9px 14px">🎉 Make them an account</a>
     {% endif %}
   </div>
 </div>
@@ -141,7 +141,7 @@
         {% if walk_booked %}
         <p style="margin:0 0 10px;font-size:0.9rem">📅 <strong>{{ p.next_action }}</strong> — {{ p.next_action_date }}</p>
         {% else %}
-        <form method="POST" action="{{ url_for('places_finder.book_walkthrough', prospect_id=p.id) }}"
+        <form method="POST" action="{{ url_for('places_finder.book_walkthrough', prospect_id=p.id) }}" data-tour="walk-book"
               class="lp-row" style="margin-bottom:12px;align-items:end">
           <div><label for="wbDate" style="{{ lbl }}">Book it for</label>
             <input type="date" name="date" id="wbDate" min="{{ today }}" required style="{{ fld }}"></div>
@@ -152,7 +152,7 @@
         {% endif %}
       {% endif %}
 
-      <details {{ 'open' if walk_booked and not walk }} style="margin-top:12px">
+      <details {{ 'open' if walk_booked and not walk }} data-tour="walk-checklist" style="margin-top:12px">
         <summary style="cursor:pointer;font-weight:700;font-size:0.9rem">{{ 'Edit the checklist' if walk else 'Fill in the checklist on site' }}</summary>
         <form method="POST" action="{{ url_for('places_finder.save_walkthrough', prospect_id=p.id) }}" style="margin-top:12px">
           <div class="lp-row" style="margin-bottom:10px">

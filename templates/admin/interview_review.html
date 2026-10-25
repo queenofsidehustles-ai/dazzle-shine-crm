@@ -200,7 +200,7 @@
 
         {% if app.status not in ('hired', 'onboarding', 'reviewing', 'rejected') %}
 
-          <form method="POST" action="{{ url_for('interviews.approve_interview', app_id=app.id) }}"
+          <form method="POST" action="{{ url_for('interviews.approve_interview', app_id=app.id) }}" data-tour="interview-approve"
                 onsubmit="return confirm('Approve {{ app.name|js }}\'s video and send background check request?')"
                 style="margin-bottom:10px">
             <button type="submit"

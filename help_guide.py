@@ -99,8 +99,19 @@ def guide_for(question):
             best, best_score = g, sc
     if best is None:
         return None
+    # Two or more of a guide's own keyword words is a real match, and is what
+    # a "how do I" question wants even when a longer help paragraph scores a
+    # point or two higher -- the paragraph has more words to match on, and no
+    # Show me. Letting it win hid the add-cleaner, Stripe, booking-page and
+    # team-import walkthroughs (found 2026-10-25). One stray word ("card",
+    # "post") is not: then the guide has to beat the paragraph outright.
+    kw = set()
+    for k in best['keywords']:
+        kw |= _words(k)
+    if len(words & kw) >= 2:
+        return best
     top = search(question, limit=1)
-    if top and _score(top[0], words) > best_score:
+    if top and _score(top[0], words) >= best_score:
         return None
     return best
 

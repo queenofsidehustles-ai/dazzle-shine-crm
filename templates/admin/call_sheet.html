@@ -44,7 +44,7 @@
   </p>
 
   {% if current.phone %}
-  <div style="margin:0 0 14px">
+  <div data-tour="call-phone" style="margin:0 0 14px">
     {% if calling.ready %}
     {# In-browser calling (voice.py). The number never comes from this page:
        the server dials the one on the prospect's record. #}
@@ -232,10 +232,10 @@
   <form method="POST" action="{{ url_for('places_finder.log_call', prospect_id=current.id) }}">
     {% if request.args.get('more') == '1' %}<input type="hidden" name="more" value="1">{% endif %}
     <p style="font-weight:600;margin:0 0 8px">How did it go?</p>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+    <div data-tour="call-quick" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px">
       <button type="submit" name="outcome" value="no_answer" class="btn btn-outline" style="padding:12px 20px">No answer</button>
       <button type="submit" name="outcome" value="voicemail" class="btn btn-outline" style="padding:12px 20px">Left a message</button>
-      <button type="button" class="btn btn-gold" style="padding:12px 20px"
+      <button type="button" data-tour="call-spoke" class="btn btn-gold" style="padding:12px 20px"
               onclick="document.getElementById('spoke').style.display='block';this.style.display='none'">
         Spoke to someone
       </button>
@@ -337,7 +337,7 @@
       </div>
 
       <p style="font-weight:600;margin:14px 0 8px">What did they say?</p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div data-tour="call-outcomes" style="display:flex;gap:10px;flex-wrap:wrap">
         <button type="submit" name="outcome" value="interested" class="btn btn-gold" style="padding:12px 20px">Booked a walkthrough 🎉</button>
         <button type="submit" name="outcome" value="send_info" class="btn btn-outline" style="padding:12px 20px">They asked for info</button>
         <button type="submit" name="outcome" value="callback" class="btn btn-outline" style="padding:12px 20px">Call me back</button>
@@ -346,7 +346,7 @@
         <button type="submit" name="outcome" value="do_not_contact" class="btn btn-outline" style="padding:12px 20px">Don't call again</button>
       </div>
 
-      <details style="margin-top:16px">
+      <details data-tour="call-followup" style="margin-top:16px">
         <summary style="cursor:pointer;font-size:0.85rem;color:var(--softer)">Set the follow-up date yourself</summary>
         <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px">
           <div class="form-group" style="flex:1;min-width:200px">

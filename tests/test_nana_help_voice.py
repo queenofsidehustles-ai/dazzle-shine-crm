@@ -88,7 +88,8 @@ with app.app_context(), app.test_request_context():
                   'stop_reason': 'end_turn'}]
     out = agent.run('how does hiring work?')
 fed = SENT[-1]['messages'][-1]['content'][0]['content']
-check('help guide' in fed, 'the guide text was handed to Claude')
+check('help guide' in fed or 'step-by-step guide' in fed,
+      'the guide text (help topic or step-by-step guide) was handed to Claude')
 check(out.get('link') and out['link']['href'].startswith('/'), 'answer comes with a page button')
 check('how_to' in SENT[0]['system'][0]['text'], 'the prompt sends how-to questions to the guide')
 

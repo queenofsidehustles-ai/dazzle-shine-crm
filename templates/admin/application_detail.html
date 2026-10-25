@@ -197,7 +197,7 @@
               🔕 <strong>No Response</strong> — link sent 3× with no reply. Re-send below to give them another chance.
             </div>
           {% endif %}
-          <form method="POST" action="{{ url_for('interviews.send_invite', app_id=a.id) }}"
+          <form method="POST" action="{{ url_for('interviews.send_invite', app_id=a.id) }}" data-tour="app-send-interview"
                 onsubmit="return confirm('Send the bilingual interview link to {{ a.name|js }}? This restarts the follow-up nudges.')">
             <button type="submit"
                     style="width:100%;background:var(--ink);color:var(--amber);border:none;padding:10px 16px;
@@ -233,7 +233,7 @@
               ⚠️ Conditional offer <strong>not sent yet</strong>
             </div>
           {% endif %}
-          <form method="POST" action="{{ url_for('interviews.resend_offer', app_id=a.id) }}"
+          <form method="POST" action="{{ url_for('interviews.resend_offer', app_id=a.id) }}" data-tour="app-send-offer"
                 onsubmit="return confirm('Send the conditional offer email (pay details + background check link) to {{ a.name|js }}?')"
                 style="margin-top:8px">
             <button type="submit"
@@ -356,7 +356,7 @@
       {% endif %}
       {% endif %}
 
-      <form method="POST">
+      <form method="POST" data-tour="app-bgcheck">
         <input type="hidden" name="action" value="bgcheck" />
         <div class="form-group">
           <label>Status</label>

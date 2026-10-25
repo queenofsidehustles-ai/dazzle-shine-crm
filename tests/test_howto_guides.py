@@ -56,8 +56,39 @@ with app.app_context():
     db.session.add_all([booking, cleaner])
     db.session.commit()
 
+    # The commercial pages: a business on the call list, due a first call
+    # today, with no walkthrough or account yet (so Book walkthrough and
+    # Make them an account are offered); an account to book a job for; and a
+    # draft quote to review. Hiring: an applicant who has finished the video
+    # interview and is not yet approved.
+    import brands
+    from datetime import date
+    from models import CommercialAccount, CommercialQuote, ContractorApplication, Prospect
+    lead = Prospect(business_name='Riverside Dental', category='office', phone='2565550123',
+                    email='office@riverside.example', city='Huntsville', status='new', stage='new',
+                    source='manual', brand=brands.COMMERCIAL, next_action='First call',
+                    next_action_date=date.today().isoformat())
+    account = CommercialAccount(business_name='Oak Tower Offices', contact_name='Pat Lee',
+                                email='pat@oaktower.example', category='office', frequency='weekly',
+                                billing_type='monthly', billing_amount=800, status='active', source='manual')
+    quote = CommercialQuote(company='Oak Tower Offices', contact_name='Pat Lee', email='pat@oaktower.example',
+                            property_type='Office', frequency='weekly', price_per_visit=200,
+                            token=secrets.token_urlsafe(32), status='draft')
+    applicant = ContractorApplication(name='Rosa Diaz', email='rosa@example.com', phone='+12565550122',
+                                      status='new', interview_status='completed')
+    db.session.add_all([lead, account, quote, applicant])
+    db.session.commit()
+
     RECORD = {r'^/bookings/\d+$': f'/bookings/{booking.id}',
-              r'^/contractors/team/\d+$': f'/contractors/team/{cleaner.id}'}
+              r'^/contractors/team/\d+$': f'/contractors/team/{cleaner.id}',
+              r'^/find-leads/\d+$': f'/find-leads/{lead.id}',
+              r'^/find-leads/call(/\d+)?$': '/find-leads/call',
+              r'^/commercial/convert/\d+$': f'/commercial/convert/{lead.id}',
+              r'^/commercial/\d+$': f'/commercial/{account.id}',
+              r'^/commercial/\d+/book$': f'/commercial/{account.id}/book',
+              r'^/quotes/\d+/review$': f'/quotes/{quote.id}/review',
+              r'^/contractors/applications/\d+$': f'/contractors/applications/{applicant.id}',
+              r'^/admin/interviews/\d+$': f'/admin/interviews/{applicant.id}'}
 
     print('\n1. The guides themselves are sound')
     problems = howto.validate()
@@ -72,7 +103,9 @@ with app.app_context():
         page = st.get('page') or ''
         if page in RECORD:
             return RECORD[page]
-        return (st.get('start') or '/').split('?')[0]
+        # Kept whole: a view picked by query string (/find-leads/?view=find)
+        # is a different screen on the same path.
+        return st.get('start') or '/'
 
     pages = {}
 
