@@ -12,8 +12,12 @@ fi
 .venv/bin/python -m pip install --quiet -r requirements.txt
 
 # test_release.py runs release.py against the other branches and tags, so a
-# Codespace's single-branch checkout is not enough.
-git fetch --all --tags --quiet || echo "git fetch failed; run it again once you are signed in"
+# Codespace's single-branch checkout is not enough. `git fetch --all` means
+# "every remote", not "every branch": it still obeys a single-branch refspec,
+# so widen the refspec to every branch and fetch that explicitly.
+git config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+git fetch origin '+refs/heads/*:refs/remotes/origin/*' --tags --quiet \
+  || echo "git fetch failed; run it again once you are signed in"
 
 # Wait for Postgres, then say plainly whether the suites can run.
 .venv/bin/python - <<'PY'
