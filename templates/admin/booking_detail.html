@@ -513,6 +513,46 @@
       </form>
     </div>
   </div>
+
+    {# ── Confirm with the customer ────────────────────────────────────────
+       Top half of the page, straight under the booking, because it is the
+       next thing to do with one. One send carries the confirmation AND the
+       deposit request, so nobody confirms a booking and then has to come back
+       to ask for the money (Monica, 2026-10-25). The deposit is chosen by
+       default when this business takes one and it is not paid yet. #}
+    {% if not settled %}
+    {% set want_deposit = deposit_amount and deposit_amount > 0 and not booking.deposit_paid and not booking.paid_at %}
+    <div class="card" data-card-key="confirm" style="margin-top:18px">
+      <h2 style="font-size:1rem;font-weight:700;margin:0 0 4px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Confirm with the customer</h2>
+      <p style="font-size:0.84rem;color:var(--muted);margin:0 0 12px">
+        One email and text: the service, date, time, address and price{% if want_deposit %} —
+        and a link to pay the deposit, in the same send{% endif %}.
+      </p>
+      <a href="{{ url_for('bookings.confirmation_preview', booking_id=booking.id) }}"
+         target="_blank" class="btn btn-outline"
+         style="width:100%;justify-content:center;margin-bottom:9px">👁 Preview the email &amp; text</a>
+      <form method="POST" action="{{ url_for('bookings.send_confirmation', booking_id=booking.id) }}"
+            data-tour="confirm-send"
+            style="display:flex;gap:7px;flex-wrap:wrap;align-items:center">
+        <select name="pay_kind" aria-label="What to ask for with the confirmation"
+                style="flex:1;min-width:150px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;margin:0">
+          {# Name the figure, so the amount in Settings can be checked from here. #}
+          <option value="deposit" {{ 'selected' if want_deposit }}>Confirmation + ask for the ${{ '%.0f' % deposit_amount }} deposit</option>
+          <option value="full">Confirmation + ask for the full amount</option>
+          <option value="none" {{ 'selected' if not want_deposit }}>Confirmation only</option>
+        </select>
+        <button type="submit" class="btn btn-gold" style="flex-shrink:0"
+                {% if not booking.email and not booking.phone %}disabled{% endif %}>Send to {{ booking.name.split()[0] }}</button>
+      </form>
+      {% if not booking.email and not booking.phone %}
+      <p style="font-size:0.78rem;color:var(--warn);margin:8px 0 0">⚠️ This booking has no email or phone — nothing can be sent.</p>
+      {% elif want_deposit %}
+      <p style="font-size:0.76rem;color:var(--softer);margin:8px 0 0">
+        The deposit counts toward the total. Paying it confirms the booking and saves their card for the balance.
+      </p>
+      {% endif %}
+    </div>
+    {% endif %}
   </div>
 
   <!-- RIGHT: The money and who does it -->
@@ -535,6 +575,26 @@
       {% if not settled %}
       <form method="POST" action="{{ url_for('bookings.assign', booking_id=booking.id) }}"
             {% if booking.crew %}style="padding:0 13px 14px"{% endif %}>
+        {# How many people this job needs is an ASSIGNMENT decision with a pay
+           consequence, not an arithmetic detail -- it decides how many spots the
+           team offer advertises and how the pot divides. It spent one release
+           folded into "How this pay is worked out", where nobody could find it,
+           and because the form below used to hide itself once the spots were
+           full, a one-cleaner job had no visible way to become a two-cleaner
+           job at all. It comes FIRST in the card now: how many people the job
+           needs, then who they are (Monica, 2026-10-25). #}
+        <div class="form-group" style="margin-bottom:10px">
+          <label for="crewSize" style="font-size:0.84rem">Cleaners needed</label>
+          <select id="crewSize" name="crew_size" style="width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:8px">
+            {% for n in range(1, 7) %}
+            <option value="{{ n }}" {{ 'selected' if (booking.crew_size or 1) == n }}>{{ n }} paid cleaner{{ 's' if n != 1 }}</option>
+            {% endfor %}
+          </select>
+          <p style="font-size:0.78rem;color:var(--softer);margin-top:5px">
+            Don't count yourself if you're working this one. Two cleaners splits the pay in
+            half each and tells the team there are two spots going.
+          </p>
+        </div>
         <div class="form-group" style="margin-bottom:10px">
           <label for="assignTo" style="font-size:0.84rem">{{ 'Add another cleaner' if booking.crew else 'Assign to' }}</label>
           <select id="assignTo" name="assign_to" style="width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:8px">
@@ -562,25 +622,6 @@
               Leave it blank and this job pays its usual share. Put the hours in under
               <em>Pay details</em> to price it by the hour instead.
             {% endif %}
-          </p>
-        </div>
-        {# How many people this job needs is an ASSIGNMENT decision with a pay
-           consequence, not an arithmetic detail -- it decides how many spots the
-           team offer advertises and how the pot divides. It spent one release
-           folded into "How this pay is worked out", where nobody could find it,
-           and because the form below used to hide itself once the spots were
-           full, a one-cleaner job had no visible way to become a two-cleaner
-           job at all. #}
-        <div class="form-group" style="margin-bottom:10px">
-          <label for="crewSize" style="font-size:0.84rem">Cleaners needed</label>
-          <select id="crewSize" name="crew_size" style="width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:8px">
-            {% for n in range(1, 7) %}
-            <option value="{{ n }}" {{ 'selected' if (booking.crew_size or 1) == n }}>{{ n }} paid cleaner{{ 's' if n != 1 }}</option>
-            {% endfor %}
-          </select>
-          <p style="font-size:0.78rem;color:var(--softer);margin-top:5px">
-            Don't count yourself if you're working this one. Two cleaners splits the pay in
-            half each and tells the team there are two spots going.
           </p>
         </div>
         {# The tickbox only means anything for a named cleaner. Offering the job
@@ -1232,17 +1273,15 @@
         ⚠️ No email or phone on this booking, so nothing can be delivered. An invoice
         can still be raised here and its link shared by hand.</p>
       {% endif %}
-      {# Order matters: a select with nothing marked selected opens on its first
-         option, and the script below then hides every panel but that one. The
-         Yes/No request used to be first, so the booking confirmation — the only
-         send that can carry the deposit request — opened hidden, behind a
-         dropdown there was no reason to open. It leads now, and says so. #}
+      {# The booking confirmation is not in this chooser any more: it has its
+         own card at the top of the page, "Confirm with the customer", because
+         it is the one send that carries the deposit request too, and the first
+         thing to do with a new booking (2026-10-25). Everything else that goes
+         to the customer is chosen here. A select with nothing marked selected
+         opens on its first option, and the script below shows only that one. #}
       <div class="form-group" style="margin:12px 0 14px">
         <label for="sendKind" style="font-size:0.82rem">What do you want to send?</label>
         <select id="sendKind" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px">
-          {% if not settled %}
-          <option value="confirmation" selected>The booking confirmation — and the deposit, if you want it</option>
-          {% endif %}
           {% if booking.status in ['pending', 'confirmed'] and booking.confirm_response not in ['yes', 'no'] %}
           <option value="confirm-request">Ask them to confirm — with a Yes / No button</option>
           {% endif %}
@@ -1323,36 +1362,6 @@
     {% endif %}
 
       {% if not settled %}
-      <div class="send-panel" data-kind="confirmation">
-      {# The confirmation used to fire only at the moment a booking was created.
-         If it didn't go then, there was no way to send it at all. #}
-      <div style="background:var(--good-soft);border:1px solid var(--good-soft);border-radius:10px;padding:12px 13px;margin-top:12px">
-        <div style="font-weight:700;font-size:0.88rem;color:var(--good);margin-bottom:3px">📩 Send the booking confirmation</div>
-        <p style="font-size:0.79rem;color:var(--good);margin:0 0 9px">
-          The full details — service, date, time, address and price — by email and text.
-          Add a payment request to the same send if you want one.
-        </p>
-        <a href="{{ url_for('bookings.confirmation_preview', booking_id=booking.id) }}"
-           target="_blank" class="btn btn-outline"
-           style="width:100%;justify-content:center;margin-bottom:9px;background:#fff">👁 Preview the email &amp; text</a>
-        <form method="POST" action="{{ url_for('bookings.send_confirmation', booking_id=booking.id) }}"
-              style="display:flex;gap:7px;flex-wrap:wrap;align-items:center">
-          <select name="pay_kind" style="flex:1;min-width:150px;padding:8px 10px;border:1px solid var(--good-soft);border-radius:8px;margin:0">
-            <option value="none" selected>Confirmation only</option>
-            {# Name the figure. "the deposit" gave her no way to check from here
-               that the amount in Settings is still the one she means to ask for. #}
-            <option value="deposit">+ ask for the ${{ '%.0f' % deposit_amount }} deposit</option>
-            <option value="full">+ ask for the full amount</option>
-          </select>
-          <button type="submit" class="btn btn-gold" style="flex-shrink:0">Send</button>
-        </form>
-        <p style="font-size:0.76rem;color:var(--good);margin:8px 0 0">
-          Set to <strong>Confirmation only</strong> — no money is requested unless you change it.
-        </p>
-        {% if not booking.email and not booking.phone %}
-        <p style="font-size:0.78rem;color:var(--warn);margin:8px 0 0">⚠️ This booking has no email or phone — nothing can be sent.</p>
-        {% endif %}
-      </div>      </div>
       <div class="send-panel" data-kind="payment-link">
 
       <form method="POST" action="{{ url_for('bookings.send_payment_link_route', booking_id=booking.id) }}" style="margin-top:10px">
