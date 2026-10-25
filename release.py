@@ -221,6 +221,60 @@ def _attest_by_hand(line, sha):
     return evidence
 
 
+# How long to wait for the required checks to finish on the release commit
+# before giving up. "Every test suite" is the slow one, about twenty minutes.
+RELEASE_CHECK_WAIT = int(os.environ.get('RELEASE_CHECK_WAIT_MINUTES') or 45) * 60
+RELEASE_CHECK_POLL = 30
+
+
+def marker_only(checked, release_sha):
+    """Whether the release commit differs from the checked one by the RELEASE
+    file alone -- the claim that lets checks on one stand for the other."""
+    changed = [f for f in git('diff', '--name-only', checked, release_sha).split('\n') if f]
+    return changed == ['RELEASE']
+
+
+def wait_for_checks(line, sha, timeout=None, poll=None, sleep=None, clock=None):
+    """Wait for the required checks on the release commit itself.
+
+    The channel is a protected branch that needs those checks on the exact
+    commit it is moved to, and the release commit is new: pushing it straight
+    away is refused, which left 2026.10.23 half-released (main moved, the
+    channel did not) until somebody pushed it by hand. Returns the evidence
+    lines, or None if GitHub cannot be asked; exits on a failure or a timeout,
+    saying exactly what is done and what is left."""
+    import time as _time
+    timeout = RELEASE_CHECK_WAIT if timeout is None else timeout
+    poll = RELEASE_CHECK_POLL if poll is None else poll
+    sleep, clock = sleep or _time.sleep, clock or _time.monotonic
+    if not line.required_checks:
+        return []
+    start = clock()
+    said = None
+    while True:
+        runs = check_runs(sha)
+        if runs is None:
+            return None
+        problems = check_problems(runs, line.required_checks)
+        failed = [p for p in problems if not p.endswith(('still running', 'has not run on this commit'))]
+        if failed:
+            sys.exit(f'The release commit {sha[:7]} failed its checks, so {line.channel} was '
+                     f'not moved:\n' + '\n'.join(f'  · {p}' for p in failed)
+                     + f'\n{line.source} has the RELEASE commit; customers are unaffected.')
+        if not problems:
+            say(f'All {len(line.required_checks)} checks passed on the release commit {sha[:7]}.')
+            return check_evidence(runs, line.required_checks)
+        if clock() - start > timeout:
+            sys.exit(f'Gave up after {timeout // 60} minutes waiting for the checks on the release '
+                     f'commit {sha[:7]}:\n' + '\n'.join(f'  · {p}' for p in problems)
+                     + f'\n{line.source} has the RELEASE commit; {line.channel} was not moved. '
+                     f'When they pass: git push {REMOTE} {sha}:{line.channel}, then push the tag.')
+        if problems != said:
+            say(f'Waiting for the checks on the release commit {sha[:7]}: ' + '; '.join(problems))
+            said = problems
+        sleep(poll)
+
+
 def check_evidence(runs, required):
     """One line per required check: its result and the run it came from, so
     the release records which runs it was let through on."""
@@ -244,14 +298,24 @@ def migration_head():
         return f'(could not read: {e})'
 
 
-def release_manifest(line, tag, checked_sha, evidence, commits, previous):
+def release_manifest(line, tag, checked_sha, evidence, commits, previous,
+                     release_sha=None, release_evidence=None):
     """What a release was, written into its tag: the evidence a later reader
-    needs without going back to the Actions page or the terminal."""
+    needs without going back to the Actions page or the terminal -- both
+    commits, the runs each passed on, and that they differ by RELEASE alone."""
     out = [f'Release {tag} — {len(commits)} change(s)', '',
            f'Promotes {line.source} to {line.channel} ({line.audience}).',
-           f'Checked commit: {checked_sha} (the release commit adds only RELEASE).', '',
-           'Checks on the checked commit:']
+           f'Checked commit: {checked_sha} (the release commit adds only RELEASE).']
+    if release_sha:
+        out.append(f'Release commit: {release_sha} — what {line.channel} points at and '
+                   f'Railway deploys; differs from the checked commit in RELEASE only.')
+    out += ['', 'Checks on the checked commit:']
     out += [f'  {e}' for e in evidence] or ['  (none required)']
+    if release_sha:
+        out += ['', 'Checks on the release commit:']
+        out += ([f'  {e}' for e in release_evidence] if release_evidence
+                else ['  (GitHub could not be asked; the branch protection on '
+                      f'{line.channel} required them before the push)'])
     out += ['', f'Migrations: every company to {migration_head()}.', '',
             'Changes:'] + [f'  {c}' for c in commits]
     flag = ' --akye' if line.key == 'akye' else ''
@@ -454,11 +518,18 @@ def go(line, expect=None, expect_stable=None):
     (ROOT / 'RELEASE').write_text(f'{tag}\n{date.today().isoformat()}\n')
     git('add', 'RELEASE')
     git('commit', '-m', f'Release {tag}')
+    release_sha = git('rev-parse', 'HEAD')
+    if not marker_only(checked, release_sha):
+        sys.exit(f'The release commit {release_sha[:7]} changes more than RELEASE. Nothing was pushed.')
     git('push', REMOTE, line.source)
+    # The channel needs the checks on this exact commit; wait for them here
+    # rather than have the push refused half-way through the release.
+    release_evidence = wait_for_checks(line, release_sha)
 
     earlier = line_tags(line)
     manifest = release_manifest(line, tag, checked, evidence, commits,
-                                earlier[0] if earlier else None)
+                                earlier[0] if earlier else None,
+                                release_sha=release_sha, release_evidence=release_evidence)
     git('tag', '-a', tag, '-m', manifest, line.source)
     # Fast-forward only: the channel can never contain anything the source does not.
     git('branch', '-f', line.channel, line.source)

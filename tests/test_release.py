@@ -223,6 +223,54 @@ for part, what in (('abc1234def', 'the exact commit whose checks were required')
                    ('aaa111 One change', 'every change'),
                    ('--rollback (back to akye-v2026.10.06)', 'the way back')):
     check(part in m, f'the manifest names {what}')
+
+# P1-09 (25 Oct report): the release commit is what akye-stable points at and
+# Railway deploys, and it is a protected branch needing the checks on that
+# exact commit. The tool used to push it straight away and be refused.
+check(go_src.index('wait_for_checks(') < go_src.index("f'{line.channel}:{line.channel}'")
+      and go_src.index("git('push', REMOTE, line.source)") < go_src.index('wait_for_checks('),
+      'the release commit goes to main, its checks are waited for, and only then the channel moves')
+check(go_src.index('marker_only(') < go_src.index("git('push', REMOTE, line.source)"),
+      'and it is refused before any push if it changes more than RELEASE')
+_git = rel.git
+rel.git = lambda *a, **k: 'RELEASE' if a[0] == 'diff' else _git(*a, **k)
+check(rel.marker_only('a', 'b'), 'a release commit changing only RELEASE is the checked commit plus a name')
+rel.git = lambda *a, **k: 'RELEASE\napp.py' if a[0] == 'diff' else _git(*a, **k)
+check(not rel.marker_only('a', 'b'), 'one that changes code as well is not')
+rel.git = _git
+_runs, _said = rel.check_runs, []
+seq = [running, running, green]
+rel.check_runs = lambda sha: seq.pop(0)
+t = [0]
+got = rel.wait_for_checks(akye, 'f00e8d7', timeout=600, poll=30,
+                          sleep=lambda n: t.__setitem__(0, t[0] + n), clock=lambda: t[0])
+check(got is not None and len(got) == 4 and t[0] == 60,
+      'it waits while a check runs, and returns the four results once they pass')
+rel.check_runs = lambda sha: failed
+try:
+    rel.wait_for_checks(akye, 'f00e8d7', timeout=600, poll=30, sleep=lambda n: None, clock=lambda: 0)
+    check(False, 'a failing check on the release commit stops it')
+except SystemExit as e:
+    check('was not moved' in str(e) and 'failure' in str(e),
+          'a failing check on the release commit stops it, and says the channel was not moved')
+rel.check_runs = lambda sha: running
+t = [0]
+try:
+    rel.wait_for_checks(akye, 'f00e8d7', timeout=90, poll=30,
+                        sleep=lambda n: t.__setitem__(0, t[0] + n), clock=lambda: t[0])
+    check(False, 'it gives up in the end')
+except SystemExit as e:
+    check('Gave up' in str(e) and 'git push origin f00e8d7:akye-stable' in str(e),
+          'it gives up in the end, and says exactly what is left to do')
+rel.check_runs = lambda sha: None
+check(rel.wait_for_checks(akye, 'f00e8d7', sleep=lambda n: None) is None,
+      'with GitHub unreachable it says so rather than guessing')
+rel.check_runs = _runs
+m2 = rel.release_manifest(akye, 'akye-v2026.10.25.3', 'abc1234def', ev, ['aaa111 One'], None,
+                          release_sha='fff9999eee', release_evidence=ev)
+check('Release commit: fff9999eee' in m2 and 'RELEASE only' in m2
+      and m2.count(ev[0]) == 2 and 'Checks on the release commit:' in m2,
+      'the tag records both commits, that they differ by RELEASE only, and the runs on each')
 check('(no earlier release)' in rel.release_manifest(akye, 't', 's', ev, [], None),
       'a first release says there is nothing to roll back to')
 check('release.py --rollback (back to v1)' in rel.release_manifest(dazzle, 'v2', 's', [], [], 'v1'),
