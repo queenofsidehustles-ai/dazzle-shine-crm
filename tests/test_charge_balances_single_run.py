@@ -188,6 +188,67 @@ with app.app_context():
         held.commit()
         held.close()
 
+    print('\n7. Two real runs at the same moment, five cards due')
+    # P0-02 (25 Oct report): not a lock held by hand -- two requests on two
+    # threads, each its own connection, racing for the same five bookings,
+    # with Stripe slowed so the first is still part-way down its list when
+    # the second starts. Every card is charged once, and the transcript of
+    # who did what is printed for the release record.
+    import threading
+    import time as _time
+    due = [make_booking() for _ in range(5)]
+    CHARGES.clear()
+    slow = _PI.create
+
+    def slow_create(**kw):
+        _time.sleep(0.3)
+        return slow(**kw)
+    _PI.create = staticmethod(slow_create)
+    results, gate = {}, threading.Barrier(2)
+
+    def run(name):
+        gate.wait()
+        with app.test_client() as cl:
+            r = cl.post(URL, headers=HOST)
+        results[name] = (r.status_code, r.get_json())
+    threads = [threading.Thread(target=run, args=(n,)) for n in ('run A', 'run B')]
+    try:
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(60)
+    finally:
+        _PI.create = slow
+    for name in sorted(results):
+        code, body = results[name]
+        print(f'     {name}: HTTP {code}, charged {body.get("charged")}, '
+              f'skipped {body.get("skipped")!r}')
+    charged_ids = [kw.get('metadata', {}).get('booking_id') for kw in CHARGES]
+    print(f'     Stripe asked {len(CHARGES)} times, for bookings {sorted(map(str, charged_ids))}')
+    check(len(results) == 2 and all(code == 200 for code, _ in results.values()),
+          'both runs were answered')
+    check(len(CHARGES) == 5, f'five cards due, five charges in all (got {len(CHARGES)})')
+    check(sum(1 for _, b in results.values() if b.get('skipped')) == 1
+          and sum((b.get('charged') or 0) for _, b in results.values()) == 5,
+          'one run charged all five, the other stood aside')
+    check(all(paid(b) for b in due), 'and every booking is settled exactly once')
+    keys = [kw.get('idempotency_key') for kw in CHARGES]
+    check(all(keys) and len(set(keys)) == 5 and all(SCHEMA in k for k in keys),
+          'each charge carries its own idempotency key, naming the company')
+    check(sorted(charged_ids) == sorted(str(b) for b in due),
+          'and the booking it is for, for reconciling against Stripe')
+    from models import Booking
+    db.session.remove()
+    with tenancy.use_tenant(SLUG):
+        b0 = db.session.get(Booking, due[0])
+        again = payment_service.charge_key('balance', b0, 40000, 'pm_x')
+        moved = payment_service.charge_key('balance', b0, 45000, 'pm_x')
+        card = payment_service.charge_key('balance', b0, 40000, 'pm_new')
+    db.session.remove()
+    check(again == keys[[str(x) for x in charged_ids].index(str(due[0]))],
+          'retrying the same charge sends the same key, so Stripe returns the first result')
+    check(len({again, moved, card}) == 3, 'a corrected price or a new card is a new charge')
+
 if failures:
     print(f'\n❌ {len(failures)} failed:')
     for f in failures:
