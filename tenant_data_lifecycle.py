@@ -299,6 +299,11 @@ def purge_tenant(engine, slug, *, now=None, media_delete=None):
         # Feedback is tenant-linked control-plane content, including screenshots.
         conn.execute(text('DELETE FROM public.feedback WHERE org_slug = :slug'),
                      {'slug': slug})
+        # So is a question an owner asked Nana that had no guide: it can name a
+        # customer. Guarded, because a deployment older than the table has none.
+        if conn.execute(text("SELECT to_regclass('public.howto_misses')")).scalar():
+            conn.execute(text('DELETE FROM public.howto_misses WHERE org_slug = :slug'),
+                         {'slug': slug})
         # Keep only the narrow tenant/billing/audit tombstone. Ordinary owner PII
         # and display content are no longer needed to serve a purged workspace.
         conn.execute(text(

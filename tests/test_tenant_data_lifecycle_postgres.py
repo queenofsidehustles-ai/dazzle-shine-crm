@@ -64,6 +64,11 @@ def lifecycle_db():
         conn.execute(text(
             "INSERT INTO public.feedback (org_slug, user_name, body) "
             "VALUES (:slug, 'Bravo Owner', 'bravo private feedback')"), {'slug': B})
+        # An owner's how-to question with no guide can name a customer.
+        for slug in (A, B):
+            conn.execute(text(
+                "INSERT INTO public.howto_misses (org_slug, question) "
+                "VALUES (:slug, 'How do I bill Jane Private?')"), {'slug': slug})
     try:
         yield engine
     finally:
@@ -122,9 +127,15 @@ def test_eligible_purge_is_tenant_bounded_and_removes_control_plane_content(life
             'SELECT count(*) FROM public.feedback WHERE org_slug=:s'), {'s': A}).scalar_one()
         bravo_feedback = conn.execute(text(
             'SELECT count(*) FROM public.feedback WHERE org_slug=:s'), {'s': B}).scalar_one()
+        alpha_asked = conn.execute(text(
+            'SELECT count(*) FROM public.howto_misses WHERE org_slug=:s'), {'s': A}).scalar_one()
+        bravo_asked = conn.execute(text(
+            'SELECT count(*) FROM public.howto_misses WHERE org_slug=:s'), {'s': B}).scalar_one()
         tombstone = conn.execute(text(
             'SELECT status, name, owner_email, closed_at, purged_at '
             'FROM public.organizations WHERE slug=:s'), {'s': A}).mappings().one()
+    assert alpha_asked == 0, 'a purged company keeps no how-to questions'
+    assert bravo_asked == 1, 'another company keeps its own'
     assert bravo == f'{B}-private'
     assert alpha_feedback == 0
     assert bravo_feedback == 1
