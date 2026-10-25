@@ -4,8 +4,8 @@
 established business is not recomputing its onboarding forever. That is the
 right trade until the list changes -- and it changed: the timezone, the terms,
 payments and how balances are collected were all added to it. It changed
-again on 2026-10-24 (SETUP_VERSION 3): the required steps became details,
-prices and payments, with terms and balances straight after.
+again on 2026-10-24 (SETUP_VERSION 3): the required four became details,
+team, prices and payments, with terms and balances straight after.
 
 Every company already carrying the old flag would have gone on being told it
 had finished a list it was never shown. No banner, no meter, no Nana: the
@@ -72,7 +72,7 @@ with app.app_context():
     p = onboarding.progress()
 check(p['complete'] is False, 'they are not finished after all')
 missing = [s['key'] for s in p['steps'] if s.get('required') and not s['done']]
-check(missing == ['payments'],
+check(missing == ['team', 'payments'],
       f'and the required steps they never finished are open: {missing}')
 open_after = [s['key'] for s in p['steps']
               if not s.get('required') and not s['done'] and s['key'] in ('terms', 'balance')]

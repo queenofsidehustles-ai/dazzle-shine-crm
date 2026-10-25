@@ -19,7 +19,7 @@ Ordered by what would hurt most if it were skipped.
 # plain '1' would have gone on being told it had finished a list it had never
 # been shown. A version here means they are asked once more, and then latched
 # again. Bump it whenever a required step is added.
-SETUP_VERSION = '3'
+SETUP_VERSION = '4'
 
 
 def checklist():
@@ -179,7 +179,12 @@ def journey():
     # The owner is the first cleaner (owner_cleaner.py), so having staff says
     # nothing; what says something is having hired somebody else.
     from owner_cleaner import hired_team_count
+    from models import Staff
     has_team = hired_team_count() > 0
+    owner_row = Staff.query.filter_by(is_owner=True).first()
+    team_done = (setting('team_confirmed') or has_team
+                 or (owner_row is None
+                     and Staff.query.filter_by(is_active=True).count() > 0))
     has_client = False
     try:
         from models import Client
@@ -205,12 +210,13 @@ def journey():
         pass
 
     steps = [
-        # ── Required: three, in the order an owner can actually do them ───
+        # ── Required: four, in the order an owner can actually do them ────
         #
-        # Agreed 2026-10-24: details, prices, payments. The owner is already
-        # the first cleaner, so there is no team step to do first: a job can be
-        # given to herself the moment it exists, and adding people comes after,
-        # when she hires. Most owners have no customer in their first five
+        # Agreed with William 2026-10-24: details, your team (the owner as
+        # first cleaner), prices, payments. The team step stays even though
+        # signup creates her row: confirming herself as a cleaner is the first
+        # thing setup gives back, and the point of it. Hiring comes after, on
+        # the Team page. Most owners have no customer in their first five
         # minutes, which is why neither the customer nor the job is required.
         #
         # The phone, and only the phone. The timezone is derived -- from the
@@ -225,6 +231,21 @@ def journey():
          'title': 'Check your details',
          'why': 'What customers see on every quote, invoice and reminder.',
          'cta': 'Check them', 'link': '/settings/business'},
+        # Step 2 of 4, as agreed with William on 2026-10-24: the owner sets
+        # herself up as a cleaner. Signup already made her row (#158), so the
+        # row existing proves nothing -- the step is done when she has looked
+        # at it and pressed Save (`team_confirmed`), or when there is a hired
+        # team already, or for an older company that has staff but predates
+        # the owner row. Restored 2026-10-25 after a merge had dropped it.
+        {'key': 'team', 'video': 'team_and_customer', 'required': True,
+         'done': team_done,
+         'title': 'Set yourself up as a cleaner',
+         'why': 'You’re the first person on your team. Check your details, '
+                'and add the people who clean for you on the Team page when '
+                'you’re ready.',
+         'cta': 'Set up my team', 'link': '/contractors/team',
+         'secondary': {'label': 'Already have a team? Import them all at once',
+                       'link': '/migration/team'}},
         {'key': 'pricing', 'required': True, 'done': setting('pricing_reviewed'),
          'title': 'Confirm your prices',
          'why': 'Until you look, Akye is quoting somebody else’s numbers.',
@@ -283,14 +304,6 @@ def journey():
          'why': 'Give it to yourself to start. When you add a cleaner, they get '
                 'a text with the address, the price and the checklist.',
          'cta': 'Book a job', 'link': '/bookings/new'},
-        {'key': 'team', 'video': 'team_and_customer', 'required': False,
-         'done': has_team,
-         'title': 'Add a team member when you hire',
-         'why': 'You are on the team already. Add people when you are ready to '
-                'send work to someone else.',
-         'cta': 'Add a team member', 'link': '/staff/new',
-         'secondary': {'label': 'Already have a team? Import them all at once',
-                       'link': '/migration'}},
     ]
     if demo:
         steps = [s for s in steps if s['key'] != 'payments']

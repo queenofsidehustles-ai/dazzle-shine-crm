@@ -6,7 +6,8 @@ Signup now makes the owner that row (owner_cleaner.py). This walks the parts
 that would go wrong if it were only half done:
 
   * the row exists, is the owner's, and is not a contractor to chase or pay;
-  * setup no longer asks for a cleaner, and activation is a customer plus a job;
+  * setup's second step is the owner confirming herself as a cleaner -- the
+    row signup made does not tick it -- and activation is a customer plus a job;
   * the owner is not on their own payroll or 1099 list, and nothing is queued
     to pay them for their own work.
 """
@@ -107,7 +108,7 @@ check('PAY: 0.0' in out, 'and not paid')
 check('MY DAY LINK: True NO AGREEMENT: True' in out,
       'with a My day link, and no contractor agreement to chase')
 
-print('\n2. Setup asks for a customer and a job, not a cleaner')
+print('\n2. Setup asks the owner to confirm herself as a cleaner; the row alone does not tick it')
 out = run(STUB + '''
 from app import create_app
 app = create_app()
@@ -119,17 +120,31 @@ with app.app_context():
         import onboarding, owner_cleaner
         steps = {s["key"]: s for s in onboarding.journey()}
         order = [s["key"] for s in onboarding.journey() if not s.get("required")]
+        req = [s["key"] for s in onboarding.journey() if s.get("required")]
+        print("REQUIRED:", req)
         print("ORDER:", order)
         print("TEAM DONE:", steps["team"]["done"])
+        print("TEAM TITLE:", steps["team"]["title"])
         print("HIRED:", owner_cleaner.hired_team_count())
         print("ACTIVATED:", onboarding.progress()["activated"])
         print("CHECKLIST TEAM:", [i["done"] for i in onboarding.checklist() if i["key"] == "team"][0])
+        from models import BusinessSetting
+        from extensions import db
+        BusinessSetting.set("team_confirmed", "1"); db.session.commit()
+        steps = {s["key"]: s for s in onboarding.journey()}
+        print("CONFIRMED DONE:", steps["team"]["done"], "STILL HIRED:", owner_cleaner.hired_team_count())
+        BusinessSetting.query.filter_by(key="team_confirmed").delete(); db.session.commit()
 print("OK")
 ''', 'journey')
-check("ORDER: ['terms', 'balance', 'booking_page', 'client', 'job', 'team']" in out,
-      'customer, then job, then (when you hire) a team member')
+check("REQUIRED: ['business', 'team', 'pricing', 'payments']" in out,
+      'four required steps: details, you as a cleaner, prices, payments')
+check("ORDER: ['terms', 'balance', 'booking_page', 'client', 'job']" in out,
+      'then a customer and a job as offers, with no second team step at the end')
+check('TEAM TITLE: Set yourself up as a cleaner' in out, 'the team step is the owner setting herself up')
 check('TEAM DONE: False' in out and 'HIRED: 0' in out,
-      'the owner alone is not "a team", so the hire step stays an offer')
+      'the row signup made does not tick the step, and the owner is not "a hire"')
+check('CONFIRMED DONE: True STILL HIRED: 0' in out,
+      'confirming it (team_confirmed) does, with nobody hired')
 check('ACTIVATED: False' in out, 'nothing is activated until a customer and a job exist')
 check('CHECKLIST TEAM: False' in out, 'the older checklist agrees')
 
