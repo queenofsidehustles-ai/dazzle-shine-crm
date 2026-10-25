@@ -64,9 +64,12 @@ with app.app_context():
     keys = re.findall(r'data-card-key="([^"]+)"', SRC)
     # Who's doing it before the money: assigning is the next thing a new
     # booking needs, and being paid comes after the work.
-    check(keys == ['booking', 'who', 'money', 'talk', 'extras'],
+    check(keys == ['booking', 'confirm', 'who', 'money', 'talk', 'extras'],
           f'the page is {" · ".join(keys)}')
     check(len(keys) == len(set(keys)), 'every key is distinct, so a saved order cannot collide')
+    # How many cleaners, then who (2026-10-25): headcount is chosen first.
+    check(SRC.index('for="crewSize"') < SRC.index('for="assignTo"'),
+          'Cleaners needed comes before Assign to')
     for gone in ('customer', 'service', 'manage', 'crew-pay', 'send-customer',
                  'recurring-cleaning', 'recurring-plan', 'job-photos',
                  'on-hold', 'put-on-hold', 'payment'):
