@@ -82,19 +82,24 @@ with app.app_context():
     with c.session_transaction() as s:
         s['logged_in'] = True; s['role'] = 'owner'
 
-    print('\n1. The deposit send is the one the page opens on')
+    print('\n1. Confirmation and deposit go in one send, from the top half')
     b = a_booking()
     page = c.get(f'/bookings/{b.id}').get_data(as_text=True)
-    check('id="sendKind"' in page, 'the chooser is on the page')
-    chooser = page.split('id="sendKind"', 1)[1].split('</select>', 1)[0]
-    opts = [o.split('value="', 1)[1].split('"', 1)[0]
-            for o in chooser.split('<option ')[1:]]
-    check(opts and opts[0] == 'confirmation',
-          'and it opens on the booking confirmation, not the Yes/No request')
-    check('selected' in chooser.split('<option ')[1],
-          'marked selected, so the browser cannot pick a different one')
-    check('ask for the $50 deposit' in page,
+    left = page.split('data-reorder-col="left"', 1)[1].split('data-reorder-col="right"', 1)[0]
+    check('data-card-key="confirm"' in left,
+          'the confirm card is in the top half of the page, with the booking')
+    card = page.split('data-card-key="confirm"', 1)[1].split('data-card-key=', 1)[0]
+    form = card.split('name="pay_kind"', 1)[1] if 'name="pay_kind"' in card else ''
+    check(form != '' and 'Preview the email' in card, 'it sends the booking confirmation, with a preview')
+    sel = form.split('</select>', 1)[0]
+    chosen = [o for o in sel.split('<option ')[1:] if 'selected' in o.split('>', 1)[0]]
+    check(len(chosen) == 1 and 'value="deposit"' in chosen[0],
+          'with the deposit request chosen by default, so it is one send')
+    check('ask for the $50 deposit' in card,
           'the deposit option names the figure, so she can see it is still $50')
+    chooser = page.split('id="sendKind"', 1)[1].split('</select>', 1)[0]
+    check('value="confirmation"' not in chooser,
+          'and the lower card does not offer the same send a second time')
 
     print('\n2. A confirmation that could not be delivered says so')
     state['email_ok'] = state['sms_ok'] = False
