@@ -330,6 +330,18 @@ html = c2.get('/settings/getting-started').get_data(as_text=True)
 check('sa-card sa-focus' not in html,
       'the chat does not pop up again as if it were the first visit')
 
+# What Nana is told the steps are. Until 2026-10-25 her instructions still
+# said three required steps with the team an optional extra -- the cards and
+# the meter had been put back to four, and the guide talking the owner
+# through them had not.
+with app.app_context():
+    prompt = setup_assistant.system_prompt('')
+order = [prompt.find(w) for w in ('business (contact details', 'team (the owner checks',
+                                  'pricing (one price', 'payments (the owner connects')]
+check(all(i >= 0 for i in order) and order == sorted(order) and 'Required, four' in prompt,
+      'Nana is told the same four required steps, team second')
+check('team (add people when she hires' not in prompt, 'and not that the team is optional')
+
 print()
 if failures:
     print(f'❌ {len(failures)} team-step check(s) failed')

@@ -40,7 +40,8 @@ from datetime import datetime, timedelta
 
 BACKUP_STALE_HOURS = 36
 SCHEDULER_STALE_HOURS = {'scheduler:hourly': 3, 'scheduler:daily': 30}
-JOB_STALE_HOURS = {'job:trial-nudges': 30, 'job:lead-nurture': 30}
+JOB_STALE_HOURS = {'job:trial-nudges': 30, 'job:lead-nurture': 30,
+                   'job:recording-retention': 30}
 USAGE_WARN = 0.8
 
 LABELS = {
@@ -50,6 +51,7 @@ LABELS = {
     'scheduler:daily': 'Scheduler, daily',
     'job:trial-nudges': 'Trial emails to owners',
     'job:lead-nurture': 'Emails to leads',
+    'job:recording-retention': 'Call recordings past their keep date deleted',
     'stripe:webhook': "Stripe's webhook",
 }
 

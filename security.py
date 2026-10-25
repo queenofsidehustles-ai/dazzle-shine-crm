@@ -59,6 +59,7 @@ CSRF_EXEMPT_PATHS = frozenset({
     # and carrying a ticket we signed (voice.py); no session, no CSRF token.
     '/voice/outbound',
     '/voice/notice',
+    '/voice/consent',
     '/voice/ended',
     '/voice/recording',
     # The email service posting a prospect's reply. Arrives from somewhere
@@ -90,6 +91,7 @@ CRON_PATHS = frozenset({
 PRODUCT_CRON_PATHS = frozenset({
     '/api/trial-nudges',
     '/api/lead-nurture',
+    '/api/recording-retention',
     '/api/rebuild-demo',
     '/api/platform-run',        # backups and the scheduler report here
 })
@@ -370,7 +372,7 @@ def validate_booking_payment_intent():
 # accepting unsigned POSTs from anybody.
 TWILIO_WEBHOOK_PATHS = ('/messages/incoming', '/messages/relay',
                         '/api/sms-status', '/voice/outbound', '/voice/notice',
-                        '/voice/ended', '/voice/recording')
+                        '/voice/consent', '/voice/ended', '/voice/recording')
 
 
 def validate_twilio_webhook():

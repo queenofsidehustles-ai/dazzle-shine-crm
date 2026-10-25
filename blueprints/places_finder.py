@@ -675,7 +675,7 @@ def call_sheet(prospect_id=None):
     from models import CallLog
     calling = {'ready': integrations.voice_ready(), 'block': None,
                'used': voice.calls_this_month(), 'limit': voice.MONTHLY_CALLS,
-               'recording': voice.recording_on(), 'past': []}
+               'recording': voice.recording_on(), 'keep_days': voice.RECORDING_KEEP_DAYS, 'past': []}
     if current is not None:
         calling['block'] = voice.refusal(current) if calling['ready'] else None
         calling['past'] = (CallLog.query.filter_by(prospect_id=current.id)

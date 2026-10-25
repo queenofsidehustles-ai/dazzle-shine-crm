@@ -1,10 +1,11 @@
 """Calling from the call sheet: the page's two endpoints, and Twilio's four.
 
 The page asks `start` for a token and a ticket. Twilio then calls
-/voice/outbound (what to do), /voice/notice (said to whoever picks up),
-/voice/ended and /voice/recording (what happened). Those four arrive on the
-product's host, signature-checked in security.py, and each is tied to one
-company and one call by the ticket -- see voice.py.
+/voice/outbound (what to do), /voice/notice (asked of whoever picks up: may we
+record?), /voice/consent (their answer), /voice/ended and /voice/recording
+(what happened). Those arrive on the product's host, signature-checked in
+security.py, and each is tied to one company and one call by the ticket -- see
+voice.py.
 """
 import contextlib
 
@@ -62,17 +63,26 @@ def _slug():
     return getattr(g, 'tenant_slug', '') or ''
 
 
+def may_hear(call):
+    """A recording is the other person's voice, kept with their say-so: the
+    owner can play it, and so can whoever made the call. Nobody else."""
+    return session.get('role') == 'owner' or (
+        call.user_id is not None and session.get('user_id') == call.user_id)
+
+
 @voice_bp.route('/find-leads/call/<int:call_id>/recording')
 @login_required
 @requires_plan('lead_finder')
 def recording(call_id):
     """Play a recording. Twilio keeps it behind our account's login, so it is
-    fetched here and passed on, and only to somebody signed in to the company
-    that made the call."""
+    fetched here and passed on, and only to the owner or the caller of the
+    company that made the call."""
     import integrations
     call = CallLog.query.get_or_404(call_id)
     if not call.recording_sid:
         abort(404)
+    if not may_hear(call):
+        abort(403)
     sid = integrations.twilio_account_sid()
     token = integrations.twilio_auth_token()
     if not (sid and token):
@@ -88,9 +98,25 @@ def recording(call_id):
 
 # ── Twilio ──────────────────────────────────────────────────────────────────
 
+@voice_bp.route('/find-leads/call/<int:call_id>/recording/delete', methods=['POST'])
+@owner_required
+def delete_recording(call_id):
+    """The owner deletes a recording now rather than waiting for the
+    RECORDING_KEEP_DAYS clean-up -- because the person asked, say."""
+    from flask import flash, redirect
+    call = CallLog.query.get_or_404(call_id)
+    if voice.delete_recording(call):
+        db.session.commit()
+        flash('Recording deleted.', 'success')
+    else:
+        flash('Could not delete the recording from Twilio. Try again shortly.', 'error')
+    return redirect(request.referrer or url_for('places_finder.call_sheet'))
+
+
 def _urls(ticket):
     return {key: url_for(f'voice.{endpoint}', t=ticket, _external=True)
             for key, endpoint in (('ended', 'ended'), ('notice', 'notice'),
+                                  ('consent', 'consent'),
                                   ('recording', 'recording_ready'))}
 
 
@@ -144,23 +170,48 @@ def _stale_since_start(call):
 @voice_bp.route('/find-leads/call/recording-setting', methods=['POST'])
 @owner_required
 def recording_setting():
-    """The owner's switch for recording calls. Off means no recording and no
-    notice; on is the default."""
+    """The owner's switch for recording calls. Off (the default) means no
+    recording and no question; on means the person who answers is asked, and
+    only a yes is recorded."""
     from flask import flash, redirect
     from models import BusinessSetting
     on = request.form.get('recording') == '1'
     BusinessSetting.set('call_recording', '1' if on else '0')
-    flash('Calls will be recorded, and the person who answers is told.' if on
+    flash(f'The person who answers will be asked first, and only recorded if they press 1. '
+          f'Recordings are deleted after {voice.RECORDING_KEEP_DAYS} days.' if on
           else 'Calls will not be recorded.', 'success')
     return redirect(url_for('places_finder.call_sheet'))
 
 
 @voice_bp.route('/voice/notice', methods=['POST'])
 def notice():
-    """Said to the person who picks up, before they are put through."""
-    if not voice.read_ticket(request.args.get('t')):
+    """Asked of the person who picks up, before they are put through."""
+    ticket = request.args.get('t')
+    if not voice.read_ticket(ticket):
         abort(403)
-    return _xml(voice.notice_twiml())
+    return _xml(voice.notice_twiml(url_for('voice.consent', t=ticket, _external=True)))
+
+
+@voice_bp.route('/voice/consent', methods=['POST'])
+def consent():
+    """Their answer. A 1 starts the recording on the answered call; any
+    other key puts them through unrecorded. Written down either way."""
+    ticket = request.args.get('t')
+    data = voice.read_ticket(ticket)
+    if not data:
+        abort(403)
+    agreed = (request.form.get('Digits') or '').strip() == '1'
+    started = False
+    with _in_company(data):
+        call = CallLog.query.get(data['c'])
+        if call:
+            call.recording_consent = 'yes' if agreed else 'no'
+            if agreed and data.get('rec'):
+                started, _ = voice.start_recording(
+                    request.form.get('CallSid'),
+                    url_for('voice.recording_ready', t=ticket, _external=True))
+            db.session.commit()
+    return _xml(voice.consent_twiml(agreed and started))
 
 
 @voice_bp.route('/voice/ended', methods=['POST'])

@@ -4,6 +4,30 @@ import branding
 import integrations
 
 
+def charge_key(kind, booking, cents, payment_method):
+    """Stripe's idempotency key for one off-session charge.
+
+    Two requests with the same key within Stripe's 24 hours get the first one's
+    result back instead of a second charge -- so a retried request, a second
+    clock, or a button pressed while the hourly run is mid-way cannot take the
+    same balance twice, whatever the lock in the API did. Built from what makes
+    it the same charge: which company, which job, how much has been collected
+    on it so far, how much this takes, which card. The amount already collected
+    is what tells a retry from a new balance: a $100 balance charged, the price
+    then raised by $100, is a second $100 owed on the same job and card -- the
+    same key without it, which Stripe would answer with the first charge while
+    the job was marked paid in full. A retry of a charge that never recorded
+    has the same collected figure, so it still gets the first result."""
+    from blueprints.payments import collected
+    try:
+        import tenancy
+        where = tenancy.current_schema() or 'public'
+    except Exception:
+        where = 'public'
+    have = int(round((collected(booking) or 0) * 100))
+    return f'akye-{kind}-{where}-{booking.id}-{have}-{cents}-{payment_method}'[:255]
+
+
 def charge_balance(booking) -> tuple:
     """Charge saved card for the remaining balance. Returns (success: bool, error: str).
 
@@ -50,6 +74,9 @@ def charge_balance(booking) -> tuple:
             confirm=True,
             off_session=True,
             description=f'Balance for Booking #{booking.id} — {booking.service_label}',
+            metadata={'booking_id': str(booking.id), 'kind': 'balance'},
+            idempotency_key=charge_key('balance', booking, amount_cents,
+                                       booking.stripe_payment_method_id),
         )
         if intent.status == 'succeeded':
             # Mark the booking PAID, not merely "balance collected".
@@ -115,6 +142,7 @@ def autocharge(booking) -> tuple:
             payment_method=pm_id, confirm=True, off_session=True,
             description=f'Auto-pay for Booking #{booking.id} — {booking.service_label}',
             metadata={'booking_id': str(booking.id), 'kind': 'autopay'},
+            idempotency_key=charge_key('autopay', booking, cents, pm_id),
         )
         if intent.status == 'succeeded':
             booking.stripe_payment_intent = intent.id

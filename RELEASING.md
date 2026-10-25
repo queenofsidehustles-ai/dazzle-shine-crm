@@ -31,7 +31,16 @@ are four separate workflows) and name a second person who checked them, and
 both go into the release's tag (a typed-back hash is not evidence, and the
 exception needs somebody other than the releaser). Then every suite runs again here on Python 3.12, and only then does it
 write `RELEASE` (the one change on top of the checked commit), tag
-`akye-vYYYY.MM.DD`, and fast-forward `akye-stable` to `main`. Railway deploys
+`akye-vYYYY.MM.DD`, and fast-forward `akye-stable` to `main`.
+
+`akye-stable` is protected and needs the four checks on the exact commit it
+moves to, which is the new release commit. So after pushing that commit to
+`main`, the tool waits for its four checks (up to `RELEASE_CHECK_WAIT_MINUTES`,
+45 by default) and only then moves `akye-stable` and pushes the tag. It refuses
+before any push if the release commit changes anything but `RELEASE`, and the
+tag records both commits and the runs each passed on. If the checks fail or the
+wait runs out, `main` has the release commit and `akye-stable` has not moved;
+the message says the one push left to do. Railway deploys
 it; the push to `akye-stable` certifies the exact deployed commit once more.
 A fix goes in on `main` and goes out in the next release; `akye-stable` never
 takes a commit `main` does not have.

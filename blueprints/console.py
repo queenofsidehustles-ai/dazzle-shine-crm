@@ -891,6 +891,71 @@ def purge_company(slug):
     return redirect(here)
 
 
+@console_bp.route('/metrics.json')
+@console_required
+def metrics_json():
+    """Who is on the platform, as JSON, for a daily report to read.
+
+    tenant_report.compute over the control plane -- the same definitions
+    `certify.py tenants` prints (real / test / demo, status, billing, what
+    happened in the last 24 hours and 7 days, and what operators did) -- with
+    when it was read, from which release and commit, and a count of each list
+    so a report never has to count slugs itself. Slugs and counts only: no
+    names, emails or amounts. Read-only: nothing here writes."""
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+    from flask import jsonify
+    from sqlalchemy import select
+    import tenant_report
+    engine = _engine()
+    now = datetime.utcnow()
+    orgs = control_plane.all_orgs(engine)
+    since = now - tenant_report.WINDOWS[-1][1]
+    log = control_plane.console_log
+    with engine.connect() as conn:
+        actions = [dict(r) for r in conn.execute(
+            select(log.c.action, log.c.target, log.c.created_at)
+            .where(log.c.created_at >= since)).mappings()]
+    report = tenant_report.compute(orgs, now, actions)
+    # "Today" as the business reads it: since midnight Eastern, in UTC.
+    eastern = datetime.now(timezone.utc).astimezone(ZoneInfo('America/New_York'))
+    midnight = eastern.replace(hour=0, minute=0, second=0, microsecond=0)
+    start = midnight.astimezone(timezone.utc).replace(tzinfo=None)
+    report['today_eastern'] = {
+        'since': start.isoformat() + 'Z',
+        'events': {event: sorted(f'{o["slug"]} ({tenant_report.kind(o)})' for o in orgs
+                                 if o.get(field) and o[field] >= start)
+                   for event, field in tenant_report.EVENTS}}
+
+    def counted(tree):
+        return {k: (len(v) if isinstance(v, list) else counted(v))
+                for k, v in tree.items() if isinstance(v, (list, dict))}
+    report['counts'] = {
+        'by_kind': counted(report['by_kind']),
+        'real': counted(report['real']),
+        'windows': {name: counted(w['events']) for name, w in report['windows'].items()},
+        'today_eastern': counted(report['today_eastern']['events']),
+    }
+    report['source'] = {
+        'read_at': now.isoformat() + 'Z',
+        'release': _release_name(),
+        'commit': (os.environ.get('RAILWAY_GIT_COMMIT_SHA') or '')[:40] or None,
+        'from': 'control plane (public.organizations, public.console_log)',
+    }
+    resp = jsonify(report)
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
+
+
+def _release_name():
+    try:
+        with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                               'RELEASE')) as fh:
+            return fh.readline().strip() or None
+    except OSError:
+        return None
+
+
 @console_bp.route('/leads.csv')
 @console_required
 def leads_csv():

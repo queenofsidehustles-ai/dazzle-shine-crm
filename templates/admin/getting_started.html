@@ -76,7 +76,20 @@
                   allowfullscreen loading="lazy"></iframe>
         </div>
         {% endif %}
+        {% if team_me %}
+        <form method="POST" action="{{ url_for('settings.getting_started_team') }}" id="teamStepForm"
+              style="display:grid;gap:10px;max-width:420px;margin:0 0 12px">
+          <label>Your name <input type="text" name="me_name" value="{{ team_me.name }}" required></label>
+          <label>Email <input type="email" name="me_email" value="{{ team_me.email }}"></label>
+          <label>Cell <input type="tel" name="me_phone" value="{{ team_me.phone }}"></label>
+          <label style="display:flex;gap:8px;align-items:center;font-weight:600">
+            <input type="checkbox" name="me_cleans" value="1" {{ 'checked' if team_me.cleans }} style="width:auto">
+            I clean jobs myself</label>
+          <button type="submit" class="btn-primary" style="justify-self:start">Save</button>
+        </form>
+        {% else %}
         <a href="{{ p.next.link }}" class="btn-primary">{{ p.next.cta }} →</a>
+        {% endif %}
         {% if p.next.secondary %}
         <a href="{{ p.next.secondary.link }}" style="margin-left:14px;color:var(--gold-deep);
                                                       font-size:0.88rem;font-weight:600">{{ p.next.secondary.label }}</a>
