@@ -124,9 +124,31 @@ def getting_started():
     # Opened as a focused window the first time, or when a pop-up sent them
     # here to use it. After that it sits on the page with the list.
     focus = bool(chat) and (request.args.get('focus') == '1' or not started)
+    # Step 2 without the chat. The team step is finished by pressing Save on
+    # the owner's own card, and that card lived only in the chat -- so with no
+    # API key, AI switched off, or the model down, nothing anywhere could
+    # finish it and setup stuck at 1 of 4 (25 Oct report, P0-03). The same
+    # card, as a plain form, on the list.
+    team_me = None
+    if (not chat and p.get('next') and p['next']['key'] == 'team'
+            and session.get('role') == 'owner'):
+        try:
+            team_me = setup_assistant.team_card()[0]['me']
+        except Exception:
+            team_me = None
     return render_template('admin/getting_started.html', p=p, chat=chat,
                            chat_focus=focus, chat_step=chat_step,
-                           assistant_name=setup_assistant.NAME)
+                           assistant_name=setup_assistant.NAME, team_me=team_me)
+
+
+@settings_bp.route('/getting-started/team', methods=['POST'])
+@owner_required
+def getting_started_team():
+    """Save step 2 from the list: the same save as the chat's team card."""
+    import setup_assistant
+    ok, msg = setup_assistant.save_owner(request.form)
+    flash(msg, 'success' if ok else 'error')
+    return redirect(url_for('settings.getting_started'))
 
 
 @settings_bp.route('/automations/save', methods=['POST'])

@@ -155,14 +155,14 @@ def journey():
     chooses a collection mode never charges a balance. Nothing errors. The
     money simply does not arrive.
 
-    Since 2026-10-24 the required steps are details, prices and payments.
-    The team is not one of them: the owner is the first cleaner
-    (owner_cleaner.py), created with the account, so a job can be given to
-    her before anyone is hired, and seeing her own name on the roster is
-    already the first thing setup gives back. Adding people is an optional
-    step for when she hires. Terms and balances moved out of the required
-    list: both already have a safe default, so they follow straight after as
-    go-live checks rather than standing between a new owner and her first win.
+    Since 2026-10-25 the required steps are four: details, the team (the
+    owner confirming herself as the first cleaner -- owner_cleaner.py creates
+    her row with the account, and pressing Save on it is the step), prices
+    and payments. Hiring other people is for later, on the Team page. Terms
+    and balances are not required: both already have a safe default, so they
+    follow straight after as go-live checks rather than standing between a
+    new owner and her first win. (On 2026-10-24 the team step was dropped by
+    a merge and this said three; a live walkthrough found it.)
 
     Optional steps are the business's own world -- a customer, a job. They
     used to be required, which asked somebody on their first evening to
