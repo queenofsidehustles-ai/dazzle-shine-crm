@@ -2051,6 +2051,11 @@ class CallLog(db.Model):
     duration = db.Column(db.Integer)                       # seconds the other side was on the line
     recording_sid = db.Column(db.String(64))
     recording_seconds = db.Column(db.Integer)
+    # What the person who answered said when asked to be recorded: 'yes' / 'no',
+    # or None if they were not asked (recording off) or did not answer.
+    # Migration 0039.
+    recording_consent = db.Column(db.String(10))
+    recording_deleted_at = db.Column(db.DateTime)   # deleted from Twilio, by the owner or the keep-days rule
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     ended_at = db.Column(db.DateTime)
 

@@ -61,7 +61,7 @@
     <p id="dialStatus" style="margin:8px 0 0;font-size:0.86rem;color:var(--softer)">
       {% if calling.block %}{{ calling.block }}{% else %}
       {{ calling.used }} of {{ calling.limit }} calls used this month.
-      {% if calling.recording %}Calls are recorded, and the person who answers is told.{% endif %}
+      {% if calling.recording %}The person who answers is asked first; only a yes (pressing 1) is recorded. Recordings are deleted after {{ calling.keep_days }} days.{% endif %}
       {% endif %}
     </p>
     {% if is_owner %}
@@ -89,10 +89,17 @@
       {{ c.created_at.strftime('%b %-d, %-I:%M %p') }} UTC
       · {{ c.status }}{% if c.duration %} · {{ c.duration // 60 }}:{{ '%02d' % (c.duration % 60) }}{% endif %}
       {% if c.agent %} · {{ c.agent }}{% endif %}
-      {% if c.recording_sid %}
+      {% if c.recording_consent == 'no' %} · not recorded (they said no){% endif %}
+      {% if c.recording_sid and (is_owner or c.user_id == session.get('user_id')) %}
       <audio controls preload="none" style="display:block;margin-top:4px;max-width:100%"
              src="{{ url_for('voice.recording', call_id=c.id) }}"></audio>
+      {% if is_owner %}
+      <form method="POST" action="{{ url_for('voice.delete_recording', call_id=c.id) }}" style="margin:4px 0 0"
+            onsubmit="return confirm('Delete this recording for good?')">
+        <button type="submit" class="btn btn-outline" style="font-size:0.75rem;padding:2px 8px">Delete recording</button>
+      </form>
       {% endif %}
+      {% elif c.recording_deleted_at %} · recording deleted{% endif %}
     </div>
     {% endfor %}
   </details>

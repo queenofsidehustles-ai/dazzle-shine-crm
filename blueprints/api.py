@@ -1071,6 +1071,21 @@ def trial_nudges():
     return jsonify({'ok': True, 'sent': sent, **counts})
 
 
+# ── Call recording retention (cron — run once daily) ────────────────────────
+# Deletes call recordings older than voice.RECORDING_KEEP_DAYS from Twilio, in
+# every company. The product's own job, like trial nudges.
+
+@api_bp.route('/recording-retention', methods=['POST'])
+def recording_retention():
+    if not _cron_key_ok():
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+    import voice
+    deleted, failed = voice.purge_everywhere()
+    _record_product_job('recording-retention', deleted, failed)
+    return jsonify({'ok': True, 'deleted': deleted, 'failed': failed,
+                    'keep_days': voice.RECORDING_KEEP_DAYS})
+
+
 # ── Lead nurture (cron — run once daily) ─────────────────────────────────────
 # Four useful emails over two weeks for somebody who started signing up, or
 # asked for early access, and did not open an account (lead_nurture.py). The

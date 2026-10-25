@@ -15,9 +15,15 @@ Four things are decided on the server, none of them by the page:
     caller's convenience: for the person picking up.
   * WHETHER. Not for anyone marked "don't call again", not while the Calling
     switch in the console is off, and not past MONTHLY_CALLS a company a month.
-  * RECORDING. On unless the company turned it off, and when it is on the
-    person who answers hears the notice before they are connected. The notice
-    is the consent: several states need everybody on the call to agree.
+  * RECORDING. Off unless the owner turns it on. When it is on, the person
+    who answers is asked before they are put through, and the call is only
+    recorded if they press 1. Silence, or 2, puts the call through unrecorded.
+    A notice that a call "may be recorded" is not consent everywhere: several
+    states need everybody on the call to agree, so the recording does not
+    start until they have (October 2026; it used to start on answer).
+    Recordings are kept RECORDING_KEEP_DAYS and then deleted from Twilio,
+    can be played by the owner or the person who made the call, and the
+    owner can delete one sooner.
 
 Twilio's reports (how it ended, how long, where the recording is) arrive on the
 product's host, not the company's, so each carries the signed ticket, which
@@ -34,7 +40,15 @@ TICKET_MAX_AGE = 600           # seconds from pressing Call to Twilio asking
 CALLBACK_MAX_AGE = 24 * 3600   # Twilio's later reports: a long call, a delayed or retried recording
 TOKEN_TTL = 600
 RING_SECONDS = 30
-NOTICE = 'This call may be recorded for quality and training purposes.'
+RECORDING_KEEP_DAYS = int(os.environ.get('VOICE_RECORDING_KEEP_DAYS') or 90)
+CONSENT_SECONDS = 6
+# Asked of the person who answers, before they are connected. Recording waits
+# for a 1; anything else, including saying nothing, goes ahead unrecorded.
+CONSENT_PROMPT = ('Hello. Before we connect you: we would like to record this call '
+                  'for quality and training. Press 1 if that is OK. Press 2, or just '
+                  'stay on the line, and the call will not be recorded.')
+NOT_RECORDED = 'Thank you. This call will not be recorded. Connecting you now.'
+RECORDED = 'Thank you. This call will be recorded. Connecting you now.'
 
 # A call that ended in one of these means somebody was not there, whatever
 # Twilio's own word for it is.
@@ -120,8 +134,9 @@ def local_hours_block(to_number, now_utc=None):
 
 
 def recording_on():
+    """Whether calls ask to be recorded. Off until the owner turns it on."""
     from models import BusinessSetting
-    return (BusinessSetting.get('call_recording') or '1') != '0'
+    return (BusinessSetting.get('call_recording') or '0') == '1'
 
 
 def refusal(prospect, now_utc=None):
@@ -167,21 +182,16 @@ def access_token(identity):
 def outbound_twiml(ticket_data, ticket, urls):
     """What Twilio does once the browser connects: ring the prospect.
 
-    `urls` is {'ended', 'recording', 'notice'}, each already carrying the
-    ticket. Recording starts when they answer and keeps the two sides on
-    separate channels, so a call can be reviewed one voice at a time."""
+    `urls` is {'ended', 'recording', 'notice', 'consent'}, each already
+    carrying the ticket. Nothing is recorded here: with recording on, the
+    person who answers is asked first (notice_twiml), and only a 1 starts it
+    (start_recording)."""
     import integrations
     from twilio.twiml.voice_response import VoiceResponse, Dial
     resp = VoiceResponse()
-    dial_args = dict(caller_id=integrations.twilio_phone(),
-                     timeout=RING_SECONDS, answer_on_bridge=True,
-                     action=urls['ended'], method='POST')
-    if ticket_data.get('rec'):
-        dial_args.update(record='record-from-answer-dual',
-                         recording_status_callback=urls['recording'],
-                         recording_status_callback_method='POST',
-                         recording_status_callback_event='completed')
-    dial = Dial(**dial_args)
+    dial = Dial(caller_id=integrations.twilio_phone(),
+                timeout=RING_SECONDS, answer_on_bridge=True,
+                action=urls['ended'], method='POST')
     if ticket_data.get('rec'):
         dial.number(ticket_data['to'], url=urls['notice'], method='POST')
     else:
@@ -190,11 +200,126 @@ def outbound_twiml(ticket_data, ticket, urls):
     return str(resp)
 
 
-def notice_twiml():
+def notice_twiml(consent_url):
+    """Said to the person who answers, before they are put through: may we
+    record? A key press goes to `consent_url`; no answer falls through to
+    connecting them unrecorded."""
+    from twilio.twiml.voice_response import VoiceResponse, Gather
+    resp = VoiceResponse()
+    ask = Gather(num_digits=1, timeout=CONSENT_SECONDS, action=consent_url, method='POST')
+    ask.say(CONSENT_PROMPT, voice='alice')
+    resp.append(ask)
+    resp.say(NOT_RECORDED, voice='alice')
+    return str(resp)
+
+
+def consent_twiml(agreed):
     from twilio.twiml.voice_response import VoiceResponse
     resp = VoiceResponse()
-    resp.say(NOTICE, voice='alice')
+    resp.say(RECORDED if agreed else NOT_RECORDED, voice='alice')
     return str(resp)
+
+
+def _twilio_auth():
+    import integrations
+    sid, token = integrations.twilio_account_sid(), integrations.twilio_auth_token()
+    return (sid, token) if sid and token else None
+
+
+def start_recording(call_sid, callback_url):
+    """Start recording the answered call, both sides on separate channels.
+    Only ever after the person who answered pressed 1. Returns (ok, detail);
+    never raises -- a recording that will not start is not a call that
+    should drop."""
+    import requests
+    auth = _twilio_auth()
+    if not auth or not call_sid:
+        return False, 'not configured'
+    try:
+        r = requests.post(
+            f'https://api.twilio.com/2010-04-01/Accounts/{auth[0]}/Calls/{call_sid}/Recordings.json',
+            data={'RecordingChannels': 'dual', 'RecordingTrack': 'both',
+                  'RecordingStatusCallback': callback_url,
+                  'RecordingStatusCallbackMethod': 'POST',
+                  'RecordingStatusCallbackEvent': 'completed'},
+            auth=auth, timeout=10)
+    except Exception as e:
+        return False, type(e).__name__
+    return (r.status_code in (200, 201)), f'HTTP {r.status_code}'
+
+
+def delete_recording(call, now=None):
+    """Delete a call's recording from Twilio and forget it here. A recording
+    Twilio no longer has (404) counts as deleted. Returns True when it is
+    gone; False leaves it to be tried again."""
+    import requests
+    if not call.recording_sid:
+        return True
+    auth = _twilio_auth()
+    if not auth:
+        return False
+    try:
+        r = requests.delete(
+            f'https://api.twilio.com/2010-04-01/Accounts/{auth[0]}/Recordings/'
+            f'{call.recording_sid}.json', auth=auth, timeout=10)
+    except Exception:
+        return False
+    if r.status_code not in (200, 204, 404):
+        return False
+    call.recording_sid = None
+    call.recording_deleted_at = now or datetime.utcnow()
+    return True
+
+
+def purge_old_recordings(now=None):
+    """Delete every recording in the current company older than
+    RECORDING_KEEP_DAYS. Returns (deleted, failed)."""
+    from datetime import timedelta
+    from extensions import db
+    from models import CallLog
+    now = now or datetime.utcnow()
+    cutoff = now - timedelta(days=RECORDING_KEEP_DAYS)
+    deleted = failed = 0
+    for call in CallLog.query.filter(CallLog.recording_sid.isnot(None),
+                                     CallLog.created_at < cutoff).all():
+        if delete_recording(call, now):
+            deleted += 1
+        else:
+            failed += 1
+    db.session.commit()
+    return deleted, failed
+
+
+def purge_everywhere(now=None):
+    """purge_old_recordings in every company, or the one business on a
+    single-company install. One company failing does not stop the rest."""
+    from extensions import db
+    deleted = failed = 0
+    try:
+        import control_plane
+        import provisioning
+        import tenancy
+        orgs = control_plane.all_orgs(provisioning._engine())
+    except Exception:
+        orgs = None
+    if not orgs:
+        return purge_old_recordings(now)
+    import console_data
+    for org in orgs:
+        slug = org.get('slug')
+        if not slug or not console_data.schema_ready(slug):
+            continue
+        db.session.remove()
+        try:
+            with tenancy.use_tenant(slug):
+                d, f = purge_old_recordings(now)
+            deleted, failed = deleted + d, failed + f
+        except Exception:
+            db.session.rollback()
+            failed += 1
+        finally:
+            db.session.remove()
+    return deleted, failed
 
 
 def hangup_twiml():

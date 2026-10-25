@@ -6,7 +6,11 @@ What is worth protecting:
     browser sent -- and a forged or stale ticket dials nothing
   * nobody is called outside 8am-9pm their time, after "don't call again", with
     the switch off, or past the monthly limit
-  * a recorded call tells the person who answers, before they are connected
+  * recording is off until the owner turns it on; with it on, the person who
+    answers is asked first and only a 1 starts a recording -- silence or 2
+    goes through unrecorded
+  * a recording is played only to the owner or the caller, can be deleted by
+    the owner, and is deleted from Twilio after RECORDING_KEEP_DAYS
   * Twilio's reports are signature-checked and land on the right call
   * a welcome text goes only to a plainly valid US number, goes at any hour,
     and a failure never raises into the signup
@@ -90,15 +94,20 @@ with app.app_context():
     check(voice.read_ticket(t[:-3] + 'xxx') is None, 'a tampered ticket is refused')
     check(voice.read_ticket('') is None and voice.read_ticket(None) is None, 'so is none at all')
     urls = {'ended': 'https://x/voice/ended?t=T', 'recording': 'https://x/voice/recording?t=T',
-            'notice': 'https://x/voice/notice?t=T'}
+            'notice': 'https://x/voice/notice?t=T', 'consent': 'https://x/voice/consent?t=T'}
     xml = voice.outbound_twiml(d, t, urls)
     check('+12565550142' in xml and 'callerId="+14075550100"' in xml, 'rings the prospect from our number')
-    check('record-from-answer-dual' in xml and '/voice/notice' in xml, 'recording is on and they hear the notice')
+    check('/voice/notice' in xml and 'record=' not in xml,
+          'with recording on they are asked first, and nothing records on answer')
     d2 = dict(d, rec=False)
     xml2 = voice.outbound_twiml(d2, t, urls)
     check('record' not in xml2.replace('recording', '') and '/voice/notice' not in xml2,
-          'with recording off there is neither')
-    check('recorded' in voice.notice_twiml(), 'the notice says the call is recorded')
+          'with recording off there is no question and no recording')
+    ask = voice.notice_twiml('https://x/voice/consent?t=T')
+    check('<Gather' in ask and 'numDigits="1"' in ask and '/voice/consent' in ask and 'Press 1' in ask,
+          'the question waits for one key and sends it to /voice/consent')
+    check(ask.index('</Gather>') < ask.index('will not be recorded. Connecting'),
+          'saying nothing falls through to "will not be recorded"')
 
     print('\n4. The page: start')
     c = app.test_client()
@@ -177,16 +186,97 @@ with app.app_context():
     r = c.post(f'/find-leads/{ak.id}/delete', headers={'Origin': 'http://localhost'})
     check(r.status_code in (200, 302) and Prospect.query.get(ak.id) is None, 'a prospect with a call can be removed')
     check(CallLog.query.get(cl.id) is not None and CallLog.query.get(cl.id).prospect_id is None, 'its call stays, pointing nowhere')
-    check(voice.recording_on(), 'recording is on by default')
-    r = c.post('/find-leads/call/recording-setting', data={'recording': '0'}, headers={'Origin': 'http://localhost'})
-    check(r.status_code == 302 and not voice.recording_on(), 'the owner can turn recording off')
+    BusinessSetting.query.filter_by(key='call_recording').delete(); db.session.commit()
+    check(not voice.recording_on(), 'recording is off until the owner turns it on')
     staff = app.test_client()
     with staff.session_transaction() as s:
         s.update(logged_in=True, role='cleaner', user_name='Sam')
     staff.post('/find-leads/call/recording-setting', data={'recording': '1'}, headers={'Origin': 'http://localhost'})
-    check(not voice.recording_on(), 'and nobody else can turn it back on')
+    check(not voice.recording_on(), 'nobody but the owner can turn it on')
     c.post('/find-leads/call/recording-setting', data={'recording': '1'}, headers={'Origin': 'http://localhost'})
     check(voice.recording_on(), 'the owner can')
+    r = c.post('/find-leads/call/recording-setting', data={'recording': '0'}, headers={'Origin': 'http://localhost'})
+    check(r.status_code == 302 and not voice.recording_on(), 'and can turn it off again')
+
+    print('\n5c. Consent: only a 1 records')
+    started = []
+    real_start = voice.start_recording
+    voice.start_recording = lambda sid, cb: (started.append((sid, cb)), (True, 'HTTP 201'))[1]
+    try:
+        yes = CallLog(prospect_id=p.id, user_id=11, to_number='+12565550142'); db.session.add(yes)
+        no = CallLog(prospect_id=p.id, user_id=11, to_number='+12565550142'); db.session.add(no)
+        db.session.commit()
+        ty = voice.make_ticket('', yes.id, yes.to_number, True)
+        tn = voice.make_ticket('', no.id, no.to_number, True)
+        r = signed_post(app.test_client(), f'/voice/notice?t={ty}', {'CallSid': 'CAchild'})
+        check(r.status_code == 200 and b'<Gather' in r.data and b'/voice/consent' in r.data,
+              'the person who answers is asked')
+        r = signed_post(app.test_client(), f'/voice/consent?t={ty}', {'Digits': '1', 'CallSid': 'CAchild'})
+        check(r.status_code == 200 and b'will be recorded' in r.data, 'pressing 1: told it is recorded')
+        check(started and started[0][0] == 'CAchild' and '/voice/recording' in started[0][1],
+              'and only now does the recording start, on the answered call')
+        check(CallLog.query.get(yes.id).recording_consent == 'yes', 'their yes is written down')
+        n = len(started)
+        r = signed_post(app.test_client(), f'/voice/consent?t={tn}', {'Digits': '2', 'CallSid': 'CAchild2'})
+        check(b'will not be recorded' in r.data and len(started) == n, 'pressing 2: no recording')
+        check(CallLog.query.get(no.id).recording_consent == 'no', 'and their no is written down')
+        r = signed_post(app.test_client(), '/voice/consent?t=junk', {'Digits': '1'})
+        check(r.status_code == 403 and len(started) == n, 'a forged consent is refused and records nothing')
+        r = app.test_client().post(f'/voice/consent?t={ty}', data={'Digits': '1'})
+        check(r.status_code == 403, 'an unsigned consent is refused')
+        off = voice.make_ticket('', no.id, no.to_number, False)
+        signed_post(app.test_client(), f'/voice/consent?t={off}', {'Digits': '1', 'CallSid': 'CAx'})
+        check(len(started) == n, 'a ticket made with recording off never starts one, whatever is pressed')
+    finally:
+        voice.start_recording = real_start
+
+    print('\n5d. Who hears a recording, and how long it is kept')
+    from datetime import timedelta
+    yes.recording_sid = 'RE1'; yes.created_at = datetime.utcnow() - timedelta(days=voice.RECORDING_KEEP_DAYS + 1)
+    no.recording_sid = 'RE2'; no.created_at = datetime.utcnow() - timedelta(days=3)
+    db.session.commit()
+    import requests as _rq
+    deletes = []
+
+    class _R:
+        def __init__(self, code, content=b''): self.status_code, self.content = code, content
+    real_get, real_delete = _rq.get, _rq.delete
+    _rq.get = lambda *a, **k: _R(200, b'ID3')
+    _rq.delete = lambda url, **k: (deletes.append(url), _R(204))[1]
+    try:
+        import auth
+        from models import User
+
+        def signed_in_as(uid, name):
+            u = User(id=uid, name=name, username=f'{name.lower()}@x.test', role='sales', active=True)
+            u.set_password('pw-long-enough-1') if hasattr(u, 'set_password') else None
+            u.password_hash = u.password_hash or 'x'
+            db.session.add(u); db.session.commit()
+            cl = app.test_client()
+            with cl.session_transaction() as s:
+                s.update(logged_in=True, role='sales', user_name=name, user_id=uid,
+                         auth_fingerprint=auth._auth_fingerprint(u.password_hash))
+            return cl
+        caller = signed_in_as(11, 'Vee')
+        other = signed_in_as(12, 'Kai')
+        check(c.get(f'/find-leads/call/{no.id}/recording').status_code == 200, 'the owner can play it')
+        check(caller.get(f'/find-leads/call/{no.id}/recording').status_code == 200, 'so can the caller')
+        check(other.get(f'/find-leads/call/{no.id}/recording').status_code == 403, 'another salesperson cannot')
+        deleted, failed = voice.purge_old_recordings()
+        check(deleted == 1 and failed == 0 and any('RE1' in u for u in deletes),
+              f'a recording past {voice.RECORDING_KEEP_DAYS} days is deleted from Twilio')
+        y = CallLog.query.get(yes.id)
+        check(y.recording_sid is None and y.recording_deleted_at, 'and forgotten here, with when')
+        check(CallLog.query.get(no.id).recording_sid == 'RE2', 'a recent one is kept')
+        caller.post(f'/find-leads/call/{no.id}/recording/delete', headers={'Origin': 'http://localhost'})
+        check(CallLog.query.get(no.id).recording_sid == 'RE2', 'the caller cannot delete it')
+        c.post(f'/find-leads/call/{no.id}/recording/delete', headers={'Origin': 'http://localhost'})
+        check(CallLog.query.get(no.id).recording_sid is None, 'the owner can, at once')
+        h = {'X-Api-Key': os.environ.get('REMINDER_API_KEY', '')}
+        r = app.test_client().post('/api/recording-retention')
+        check(r.status_code == 403, 'the retention job needs the cron key')
+    finally:
+        _rq.get, _rq.delete = real_get, real_delete
 
     print('\n6. The welcome text')
     import control_plane, twilio.rest

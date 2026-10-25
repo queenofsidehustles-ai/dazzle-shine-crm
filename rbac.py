@@ -130,6 +130,12 @@ ENDPOINT_PERMISSIONS = {
     ('places_finder.text_lead', 'POST'): 'prospect.work',
     ('places_finder.ready_to_quote', 'POST'): 'prospect.work',
     ('places_finder.my_numbers', 'GET'): 'prospect.work',
+    # Calling from the call sheet. Without these a Sales login -- the people
+    # the softphone is for -- was refused the Call button and its own
+    # recordings. Who may hear a recording is narrowed again in the route
+    # (voice.may_hear: the owner, or whoever made the call).
+    ('voice.start', 'POST'): 'prospect.work',
+    ('voice.recording', 'GET'): 'prospect.work',
 
     ('messages.sent_log', 'GET'): 'messages.read',
     ('messages.inbox', 'GET'): 'messages.read',
