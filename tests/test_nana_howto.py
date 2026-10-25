@@ -78,6 +78,21 @@ with app.app_context(), app.test_request_context():
           f'that opens the first page with the tour on ({link and link[1]})')
     check(howto.validate() == [], f'the guides are well formed: {howto.validate()}')
 
+print('\n3b. The answer carries the Show me button to the chat')
+turns = iter([
+    {'content': [{'type': 'tool_use', 'id': 't1', 'name': 'how_to',
+                  'input': {'question': 'How do I book a job?'}}], 'stop_reason': 'tool_use', 'usage': {}},
+    {'content': [{'type': 'text', 'text': '1. Open Bookings and press New Booking.\n2. Press Book it.'}],
+     'stop_reason': 'end_turn', 'usage': {}},
+])
+llm.post = lambda body, timeout=30: next(turns)
+with app.app_context(), app.test_request_context():
+    out = agent.run_claude('How do I book a job?')
+btn = out.get('link') or (out.get('proposal') or {}).get('link')
+check(btn and btn.get('label') == 'Show me' and 'tour=book-job' in btn.get('href', ''),
+      f'a Show me button comes back with the answer ({btn})')
+llm.post = fake_post
+
 print('\n4. The guide behind Show me needs a login')
 c = app.test_client()
 r = c.get('/help/tour/book-job.json')

@@ -109,7 +109,11 @@ def system_prompt(profile):
 
         'STYLE\n'
         'Plain text only: no markdown, no bold, no bullet symbols. '
-        'Short paragraphs, plain words, no headings, no numbered lists, no '
+        'One exception: when how_to returns a step-by-step guide, give its '
+        'steps as a numbered list, one step per line ("1. ...", "2. ..."), in '
+        'the guide\'s words, then one short line saying they can press Show me. '
+        'Otherwise: '
+        'short paragraphs, plain words, no headings, no numbered lists, no '
         'exclamation marks, no motivational filler. Name the actual customers, '
         'jobs and companies you found rather than talking in general terms. '
         'If you are giving advice, say what to do first and why it matters '
