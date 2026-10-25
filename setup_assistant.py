@@ -499,8 +499,14 @@ def price_card():
              'Every other size is worked out from this one.']
     fields = [_form_field('two_bed_two_bath', f'{anchor:.0f}', kind='number',
                           label='2-bed, 2-bath standard clean', prefix='$')]
+    # Honest about where the number comes from: it is the same starting price
+    # everywhere, NOT worked out from her ZIP -- an owner in an expensive city
+    # must not take it as local advice.
     card = _form_card('pricing', 'Your prices', fields, 'Save prices',
-                      note='Set this one price — every other size follows from it.',
+                      note='A typical starting price for a 2-bed, 2-bath standard '
+                           'clean — change it to what you charge. Every other size '
+                           'is filled in from it, and you can edit any of them '
+                           'later under Pricing.',
                       lines=lines)
     card['prefilled'] = True
     return lines, card
@@ -596,7 +602,7 @@ def _sheet_cell_text(c):
     return str(v).strip()
 
 
-def read_team_file(filename, data):
+def read_team_file(filename, data, max_rows=TEAM_FILE_MAX_ROWS):
     """Cleaners out of an uploaded CSV or Excel file. (rows, error).
 
     Saves nothing: the rows go back onto the team card for the owner to see,
@@ -664,10 +670,9 @@ def read_team_file(filename, data):
         rows = _parse_team_paste('\n'.join(', '.join(c for c in r if c) for r in table))
     if not rows:
         return None, 'No cleaners found in that file — it needs a name on each row.'
-    if len(rows) > TEAM_FILE_MAX_ROWS:
+    if len(rows) > max_rows:
         return None, (f'That file has {len(rows)} people. Upload up to '
-                      f'{TEAM_FILE_MAX_ROWS} here, or use the full importer on '
-                      f'the Team page for more.')
+                      f'{max_rows} at a time.')
     return rows, None
 
 
@@ -675,15 +680,21 @@ PAY_TYPES = {'percent': '% of the job', 'hourly': '$ per hour'}
 
 
 def _pay(row):
-    """(pay_type, rate, problem) for one row of the team card.
+    """(pay_type, rate, problem) for one person being added.
 
-    Required on every row. A blank box used to become the model's default --
-    half of every job -- which is somebody else's pay scale, quietly written
-    into payroll. Owners pay differently, so the owner says what it is. (The
-    owner herself is not a row here: she is the first cleaner, with no pay.)"""
+    A blank box used to become the model's default -- half of every job --
+    which is somebody else's pay scale, quietly written into payroll. So
+    blank stays blank: rate None, shown as "Pay not set" until the owner
+    sets it. Given, it is checked. 0 is allowed. (The owner herself is not a
+    row here: she is the first cleaner, with no pay.)"""
     kind = (row.get('pay_type') or '').strip().lower()
     text = str(row.get('pay_rate') or '').strip().replace('%', '').replace('$', '').replace(',', '')
     who = row.get('name') or 'Someone'
+    # Not given is allowed, and saved as "not set" -- never as a default.
+    # Pay is decided on the Team page, not in the first five minutes of
+    # setup, where it was a question a brand-new owner cannot answer yet.
+    if not kind and not text:
+        return 'percent', None, ''
     if kind not in PAY_TYPES:
         return None, None, f'{who} needs a pay type (% of the job or $ per hour)'
     if not text:
@@ -767,8 +778,14 @@ def save_team(fields):
             f' This card has {len(rows)}.')
     added = []
     for r in rows:
+        # sa.null(), not None: a plain None lets the ORM fall back to the
+        # column default -- 50% -- which is exactly what "not set" must not be.
+        import sqlalchemy as sa
         s = Staff(name=r['name'], phone=r['phone'], email=r['email'], is_active=True,
-                  pay_type=r['pay_type'], pay_rate=r['pay_rate'])
+                  pay_type=r['pay_type'],
+                  pay_rate=sa.null() if r['pay_rate'] is None else r['pay_rate'])
+        # Brought over, not hired: their checklist is the paperwork only.
+        s.mark_existing_team()
         db.session.add(s)
         added.append(r['name'])
     db.session.commit()

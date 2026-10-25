@@ -54,6 +54,13 @@ def transcript(catch_up=True):
     return chat
 
 
+DONE_LINES = {
+    'business': 'Your details', 'team': 'Your team', 'pricing': 'Your prices',
+    'payments': 'Payments connected', 'terms': 'Your customer terms',
+    'balance': 'How balances get paid',
+}
+
+
 def for_display(chat):
     """The conversation as the page shows it: finished steps as one ✓ line.
 
@@ -68,7 +75,9 @@ def for_display(chat):
     """
     import onboarding
     steps = onboarding.progress()['steps']
-    done = {s['key']: s['title'] for s in steps if s['done']}
+    # The same words the card collapsed to when it was saved, so a reload
+    # does not change what the ticks say.
+    done = {s['key']: DONE_LINES.get(s['key'], s['title']) for s in steps if s['done']}
     nxt = setup_assistant._next_step()
     current = nxt['key'] if nxt else 'done'
     last = max((i for i, m in enumerate(chat)

@@ -42,6 +42,9 @@ def ensure(owner, email=None):
                 user_id=owner.id, is_owner=True, is_active=True,
                 pay_type='percent', pay_rate=0,
                 agreement_token=secrets.token_urlsafe(32))
+    # She does not sign an agreement with her own business: every paperwork
+    # step on her row is done from the start (Staff.mark_existing_team).
+    row.mark_existing_team(owner=True)
     db.session.add(row)
     db.session.commit()
     return row

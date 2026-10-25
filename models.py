@@ -585,6 +585,17 @@ class Booking(db.Model):
         each person's share when she pays them."""
         return round(max(0.0, (self.tip_amount or 0) - self.tip_fee), 2)
 
+    def pay_unset_for(self, staff):
+        """Would this cleaner be offered $0 only because their pay is not set?
+
+        Cleaners can be saved with "Pay not set" (decided 2026-10-24: never a
+        default). Most jobs do not care -- the pay comes from the labor budget
+        or a typed amount -- but a job with no estimated hours falls back to
+        the cleaner's own rate, and with none that is $0. That must stop the
+        offer, not reach somebody's phone."""
+        return (staff is not None and staff.pay_rate is None
+                and (self.default_crew_pay(staff) or 0) <= 0)
+
     def pay_for(self, staff):
         """What this one cleaner earns on this job — the single answer every
         screen should use, so the offer, My Day, payroll and the payout can
@@ -1468,6 +1479,31 @@ class Staff(db.Model):
     EMPLOYEE_ONLY_STEPS = {'supply_kit'}
     UNIFORM_STEPS = {'uniform_size'}
 
+    # Somebody who already cleaned for this company before it came to Akye --
+    # added in setup or by the team import, not hired through it. Hiring steps
+    # (interview, background check, orientation, shadow shift...) happened
+    # before we existed or never will, and eleven unticked boxes on every
+    # long-serving cleaner is a checklist nobody finishes. What is left is the
+    # paperwork that pays and protects the business: the work agreement, the
+    # forms, payout details -- and the W-9 and ID in the documents card.
+    # Decided 2026-10-24. Kept as a marker in onboarding_steps, so no column.
+    EXISTING_TEAM = 'existing_team'
+    HIRING_STEPS = {'phone_interview', 'background_check', 'welcome_email',
+                    'uniform_size', 'orientation', 'supply_kit', 'shadow_job',
+                    'first_solo_job'}
+
+    @property
+    def is_existing_team(self):
+        return self.EXISTING_TEAM in self.get_onboarding()
+
+    def mark_existing_team(self, owner=False):
+        """Brought over, not hired. The owner's own row is marked fully done:
+        she does not sign an agreement with her own business."""
+        steps = set(self.get_onboarding()) | {self.EXISTING_TEAM}
+        if owner:
+            steps |= {k for k, _ in self.ONBOARDING_STEPS}
+        self.onboarding_steps = json.dumps(sorted(steps))
+
     def get_onboarding(self):
         try:
             return json.loads(self.onboarding_steps or '[]')
@@ -1487,9 +1523,16 @@ class Staff(db.Model):
                 skip |= self.UNIFORM_STEPS
         except Exception:
             pass
+        if self.is_existing_team:
+            skip |= self.HIRING_STEPS
         return [(k, v) for k, v in self.ONBOARDING_STEPS if k not in skip]
 
     def pay_label(self):
+        # No rate is a real state, not an error: cleaners added in setup or
+        # by import are saved without one rather than with somebody else's
+        # 50%, and the owner sets it when she is ready (decided 2026-10-24).
+        if self.pay_rate is None:
+            return 'Pay not set'
         if self.pay_type == 'hourly':
             return f'${self.pay_rate:.2f}/hr'
         return f'{self.pay_rate:.0f}% of job'

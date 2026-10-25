@@ -244,6 +244,21 @@
     box.appendChild(s);
   }
 
+  // A finished step gets out of the way: its card, the question above it and
+  // its Skip button become one ✓ line, so by the last step the screen is a
+  // short column of ticks and the one card still waiting (2026-10-24 -- a
+  // saved card left on screen read as a step still to do).
+  function collapse(box, title, said) {
+    const q = box.previousElementSibling;
+    if (q && q.classList.contains('sa-bot')) q.remove();
+    document.querySelectorAll('.sa-skip').forEach(function (x) { x.remove(); });
+    const d = document.createElement('div');
+    d.className = 'sa-tick';
+    d.textContent = '✓ ' + (title || 'Done');
+    if (said) d.title = said;
+    box.replaceWith(d);
+  }
+
   // An editable card: boxes prefilled, usually just tap Save, but every value
   // can be typed over. The server validates and saves what was typed.
   function formCard(c) {
@@ -313,10 +328,7 @@
         scroll();
         return;
       }
-      Object.keys(inputs).forEach(function (k) { inputs[k].disabled = true; });
-      btn.remove();
-      note.textContent = '✅ ' + (data.say || 'Saved.');
-      box.appendChild(note);
+      collapse(box, c.title, data.say);
       if (data.follow) { bubble(data.follow, 'assistant'); speak(data.follow); }
       (data.cards || []).forEach(render);
       updateProgress(data.progress);
@@ -372,13 +384,15 @@
         btn.textContent = c.label || 'Save';
         return;
       }
-      btn.remove();
-      if (sec) sec.remove();
-      const note = document.createElement('div');
-      note.className = 'sa-note';
-      note.textContent = (data.ok ? '✅ ' : '⚠️ ') + (data.say || '');
-      box.appendChild(note);
-      if (data.ok) {
+      if (!data.ok) {
+        btn.remove();
+        if (sec) sec.remove();
+        const note = document.createElement('div');
+        note.className = 'sa-note';
+        note.textContent = '⚠️ ' + (data.say || '');
+        box.appendChild(note);
+      } else {
+        collapse(box, c.title, data.say);
         if (data.follow) { bubble(data.follow, 'assistant'); speak(data.follow); }
         (data.cards || []).forEach(render);
         updateProgress(data.progress);
@@ -566,10 +580,7 @@
         scroll();
         return;
       }
-      // The win: the boxes give way to the roster itself.
-      while (box.children.length > 1) box.removeChild(box.lastChild);
-      note.textContent = '✅ ' + (data.say || 'Saved.');
-      box.appendChild(note);
+      collapse(box, c.title, data.say);
       if (data.follow) { bubble(data.follow, 'assistant'); speak(data.follow); }
       (data.cards || []).forEach(render);
       updateProgress(data.progress);
@@ -624,12 +635,14 @@
           btn.textContent = o.label || 'Choose';
           return;
         }
-        opts.remove();
-        const note = document.createElement('div');
-        note.className = 'sa-note';
-        note.textContent = (data.ok ? '✅ ' : '⚠️ ') + (data.say || '');
-        box.appendChild(note);
-        if (data.ok) {
+        if (!data.ok) {
+          opts.remove();
+          const note = document.createElement('div');
+          note.className = 'sa-note';
+          note.textContent = '⚠️ ' + (data.say || '');
+          box.appendChild(note);
+        } else {
+          collapse(box, 'How balances get paid', data.say);
           if (data.follow) { bubble(data.follow, 'assistant'); speak(data.follow); }
           (data.cards || []).forEach(render);
           updateProgress(data.progress);

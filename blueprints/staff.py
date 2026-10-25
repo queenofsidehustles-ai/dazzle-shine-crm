@@ -1,3 +1,4 @@
+import sqlalchemy as sa
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from auth import owner_required
 from models import Staff
@@ -86,7 +87,7 @@ def new():
             color=request.form.get('color', '#7c3aed'),
             is_active='is_active' in request.form,
             pay_type=request.form.get('pay_type', 'percent'),
-            pay_rate=_rate(request.form.get('pay_rate'), 50.0),
+            pay_rate=_rate(request.form.get('pay_rate'), None) if (request.form.get('pay_rate') or '').strip() else sa.null(),   # blank = not set, never 50
         )
         db.session.add(s)
         db.session.commit()

@@ -9,17 +9,20 @@
 {% if not results %}
 <div class="card">
   <p style="color:var(--softer);font-size:0.88rem;margin:0 0 16px">
-    A CSV with a header row and columns <code>name</code>, <code>email</code>, and
-    optionally <code>phone</code>. One row per person.
+    An Excel (.xlsx) or CSV file, one row per person, with a heading row:
+    <strong>Name</strong> (or First Name and Last Name), <strong>Email</strong>, and
+    optionally <strong>Phone</strong> and <strong>Pay</strong> — like “$20” an hour or
+    “45%” of the job. Leave pay out and you can set it on each person’s page.
+    Each person is emailed an invite to set up their sign-in and send their paperwork.
   </p>
   <form method="POST" enctype="multipart/form-data" id="import-form">
     <div id="dropzone" style="border:2px dashed var(--line);border-radius:12px;padding:36px 20px;
                 text-align:center;cursor:pointer;transition:border-color .15s,background .15s">
       <div style="font-size:2rem;margin-bottom:8px">📄</div>
       <div id="dropzone-label" style="font-weight:600;color:var(--muted)">
-        Drag a CSV here, or click to choose a file
+        Drag your spreadsheet here, or click to choose a file
       </div>
-      <input type="file" name="csv_file" id="csv_file" accept=".csv,text/csv" required
+      <input type="file" name="csv_file" id="csv_file" accept=".xlsx,.xlsm,.csv,text/csv" required
              style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden" />
     </div>
     <button type="submit" class="btn btn-gold" style="margin-top:16px">Import</button>
@@ -28,9 +31,9 @@
 
 <div class="card" style="margin-top:16px">
   <h2 style="font-size:0.9rem;font-weight:700;color:var(--softer);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:10px">Example</h2>
-  <pre style="background:var(--ground);border-radius:8px;padding:12px;font-size:0.82rem;overflow-x:auto;margin:0">name,email,phone
-Maria Gomez,maria@example.com,555-0101
-James Ortiz,james@example.com,555-0102</pre>
+  <pre style="background:var(--ground);border-radius:8px;padding:12px;font-size:0.82rem;overflow-x:auto;margin:0">Name          Email               Phone      Pay
+Maria Gomez   maria@example.com   555-0101   $20
+James Ortiz   james@example.com   555-0102   45%</pre>
 </div>
 
 <script>

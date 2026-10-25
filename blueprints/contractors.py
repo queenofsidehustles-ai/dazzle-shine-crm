@@ -857,6 +857,50 @@ def _carry_documents_to_staff(app_rec, staff):
         doc.application_id = None
 
 
+def _store_document(s, kind, filename, ctype, raw):
+    """Encrypt and file one document against a cleaner, replacing the one of
+    that kind already on file. Shared by the cleaner's own upload link and the
+    owner's upload on the cleaner's page, so the two cannot drift apart."""
+    blob = secure_docs.encrypt(raw)
+    existing = s.document(kind)
+    if existing:
+        existing.data = blob
+        existing.filename = (filename or '')[:200]
+        existing.content_type = ctype
+        existing.size_bytes = len(raw)
+        existing.uploaded_at = datetime.utcnow()
+    else:
+        db.session.add(ContractorDocument(
+            staff_id=s.id, kind=kind, filename=(filename or '')[:200],
+            content_type=ctype, size_bytes=len(raw), data=blob,
+        ))
+    if kind == 'w9':
+        s.w9_uploaded_at = datetime.utcnow()
+
+
+@contractors_bp.route('/team/<int:staff_id>/documents/<kind>', methods=['POST'])
+@owner_required
+def owner_upload_document(staff_id, kind):
+    """The owner files a document she already has -- a W-9 or ID from the
+    folder she kept before Akye, or a background check run elsewhere.
+
+    For a team she brought with her this is most of the paperwork: asking a
+    cleaner of five years to send a W-9 the owner already holds is a chore
+    for both of them. Same encrypted store as the cleaner's own upload."""
+    if kind not in dict(ContractorDocument.KINDS):
+        abort(404)
+    s = Staff.query.get_or_404(staff_id)
+    ok, err, ctype, raw = secure_docs.check_upload(request.files.get('document'))
+    if not ok:
+        flash(err, 'error')
+        return redirect(url_for('contractors.staff_detail', staff_id=s.id))
+    _store_document(s, kind, request.files['document'].filename, ctype, raw)
+    db.session.commit()
+    label = dict(ContractorDocument.KINDS)[kind]
+    flash(f'{label} saved to {s.name}’s profile.', 'success')
+    return redirect(url_for('contractors.staff_detail', staff_id=s.id))
+
+
 @contractors_bp.route('/documents/<token>/<kind>', methods=['GET', 'POST'])
 def upload_document(token, kind):
     """Where a contractor sends a photo ID or a W-9.
@@ -878,21 +922,7 @@ def upload_document(token, kind):
             flash(err, 'error')
             return redirect(url_for('contractors.upload_document', token=token, kind=kind))
 
-        blob = secure_docs.encrypt(raw)
-        if existing:
-            existing.data = blob
-            existing.filename = request.files['document'].filename[:200]
-            existing.content_type = ctype
-            existing.size_bytes = len(raw)
-            existing.uploaded_at = datetime.utcnow()
-        else:
-            db.session.add(ContractorDocument(
-                staff_id=s.id, kind=kind,
-                filename=request.files['document'].filename[:200],
-                content_type=ctype, size_bytes=len(raw), data=blob,
-            ))
-        if kind == 'w9':
-            s.w9_uploaded_at = datetime.utcnow()
+        _store_document(s, kind, request.files['document'].filename, ctype, raw)
         db.session.commit()
 
         label = dict(ContractorDocument.KINDS).get(kind, kind)

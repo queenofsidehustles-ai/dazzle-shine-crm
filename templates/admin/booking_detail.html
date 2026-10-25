@@ -540,7 +540,7 @@
           <select id="assignTo" name="assign_to" style="width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:8px">
             <option value="">— Pick a cleaner —</option>
             {% for s in staff %}
-              {% if not booking.crew_row_for(s) %}<option value="{{ s.id }}">{{ s.name }}</option>{% endif %}
+              {% if not booking.crew_row_for(s) %}<option value="{{ s.id }}">{{ s.name }}{% if booking.pay_unset_for(s) %} — pay not set, type the pay{% endif %}</option>{% endif %}
             {% endfor %}
             <option value="team">— Offer it to the whole team —</option>
           </select>
