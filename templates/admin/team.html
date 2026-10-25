@@ -10,8 +10,8 @@
   {# The only way onto this list used to be the full application pipeline. For
      someone already known — a referral, a rehire — that is a lot of process
      between meeting them and being able to put them on a job. #}
-  <a href="{{ url_for('migration.team') }}" class="btn btn-outline" style="padding:7px 16px;font-size:0.88rem;margin-left:8px">⬆ Import my team (Excel or CSV)</a>
-  <a href="{{ url_for('staff.new') }}" class="btn btn-gold" style="padding:7px 16px;font-size:0.88rem;margin-left:8px">+ Add someone directly</a>
+  <a href="{{ url_for('migration.team') }}" data-tour="import-team" class="btn btn-outline" style="padding:7px 16px;font-size:0.88rem;margin-left:8px">⬆ Import my team (Excel or CSV)</a>
+  <a href="{{ url_for('staff.new') }}" data-tour="add-cleaner" class="btn btn-gold" style="padding:7px 16px;font-size:0.88rem;margin-left:8px">+ Add someone directly</a>
 {% endblock %}
 
 {% block content %}
@@ -26,7 +26,7 @@
   <p style="font-size:0.88rem"><a href="{{ url_for('contractors.team') }}">Clear search</a></p>
 </div>
 {% elif staff %}
-<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px">
+<div data-tour="team-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px">
   {% for s in staff %}
   <div style="position:relative">
   <form method="POST" action="{{ url_for('contractors.delete_staff', staff_id=s.id) }}"

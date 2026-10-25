@@ -81,8 +81,40 @@ def search(question, limit=3):
     return [t for _s, _i, t in scored[:limit]]
 
 
+def guide_for(question):
+    """The step-by-step guide (howto.py) this asks for, or None.
+
+    A guide wins over a topic when it matches at least as well: steps in the
+    words on the buttons are what somebody asking "how do I" wants, and only
+    a guide can offer "Show me"."""
+    import howto
+    words = _words(question)
+    if not words:
+        return None
+    best, best_score = None, 0
+    for g in howto.GUIDES:
+        sc = _score({'keywords': g['keywords'], 'title': g['title'],
+                     'answer': ' '.join(s['say'] for s in g['steps'])}, words)
+        if sc > best_score:
+            best, best_score = g, sc
+    if best is None:
+        return None
+    top = search(question, limit=1)
+    if top and _score(top[0], words) > best_score:
+        return None
+    return best
+
+
 def answer(question):
-    """(text for the model, the best topic's link or None)."""
+    """(text for the model, a (label, href) button or None)."""
+    import howto
+    g = guide_for(question)
+    if g is not None:
+        text = ('From the Akye step-by-step guide. Give these steps as a numbered '
+                'list, in these words, and say they can press Show me to have the '
+                'screen point at each button. Do not add steps that are not '
+                'here:\n\n' + howto.as_text(g))
+        return text, ('Show me', howto.start_url(g))
     found = search(question)
     if not found:
         return ('Nothing in the Akye help guide matches that. Say you are not '

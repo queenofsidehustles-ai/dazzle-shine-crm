@@ -26,6 +26,9 @@ API_VERSION = '2023-06-01'
 
 FAST_MODEL = os.environ.get('CLAUDE_FAST_MODEL', 'claude-haiku-4-5')
 SMART_MODEL = os.environ.get('NANA_MODEL', 'claude-haiku-4-5')
+# "How do I..." questions (agent.is_howto). Set NANA_HOWTO_MODEL to change it,
+# or to claude-haiku-4-5 to put them back on the everyday model.
+HOWTO_MODEL = os.environ.get('NANA_HOWTO_MODEL', 'claude-sonnet-5-5')
 
 
 class ClaudeError(Exception):

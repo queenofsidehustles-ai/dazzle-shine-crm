@@ -26,7 +26,7 @@
   </p>
 </div>
 
-<div class="card" style="max-width:760px;margin-bottom:18px">
+<div class="card" data-tour="booking-link" style="max-width:760px;margin-bottom:18px">
   <h2 style="margin:0 0 4px;font-size:1.15rem">Your link</h2>
   <p style="color:var(--softer);font-size:0.88rem;margin:0 0 12px">
     This is yours. It works today, on any phone.
@@ -40,7 +40,7 @@
   </div>
 
   <h3 style="margin:22px 0 8px;font-size:0.98rem">Where to put it</h3>
-  <ul style="color:var(--muted);line-height:1.9;margin:0;padding-left:20px">
+  <ul data-tour="booking-where" style="color:var(--muted);line-height:1.9;margin:0;padding-left:20px">
     <li><strong>Your Facebook or Instagram bio</strong> — the "link" field. This
       is usually the one that brings the most bookings.</li>
     <li><strong>Your Google Business Profile</strong> — as the appointment link.</li>
@@ -118,7 +118,7 @@
 {# The tick. An explicit action, not a page view — see settings.booking_page
    for why the old one was a lie. #}
 <div class="card" style="max-width:760px">
-  <label style="display:flex;gap:11px;align-items:flex-start;cursor:pointer">
+  <label data-tour="booking-shared" style="display:flex;gap:11px;align-items:flex-start;cursor:pointer">
     <input type="checkbox" id="sharedbox" {{ 'checked' if shared }}
            style="margin-top:4px;width:18px;height:18px;flex:none">
     <span>

@@ -398,6 +398,8 @@
   <script type="application/json" id="menuTips">{{ MENU_TIPS | tojson }}</script>
   <div id="menuTip" class="menu-tip" role="tooltip" hidden></div>
   <script src="{{ url_for('static', filename='tips.js') }}" defer></script>
+  {# "Show me" walkthroughs from Nana's step-by-step guides (howto.py). #}
+  {% if session.get('logged_in') %}<script src="{{ url_for('static', filename='tour.js') }}" defer></script>{% endif %}
   {# On every screen, deliberately. A beta tester who has to go and find
      somewhere to report a problem mostly does not. #}
   {% if session.get('logged_in') %}{% include '_feedback.html' %}{% endif %}

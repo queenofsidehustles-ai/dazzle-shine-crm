@@ -83,7 +83,7 @@
 
 <form method="POST">
   <!-- Stripe -->
-  <div class="card" style="margin-top:20px">
+  <div class="card" data-tour="stripe-keys" style="margin-top:20px">
     <h2 style="font-size:1rem;font-weight:700;margin-bottom:6px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Stripe — taking payments</h2>
     <p style="color:var(--softer);font-size:0.85rem;margin-bottom:18px">
       This is how your customers pay you by card. It is your own Stripe
@@ -124,7 +124,7 @@
       <strong>Check this once:</strong> after saving, press <em>Test Stripe connection</em> below. It will tell you
       which business the key belongs to. If that isn't your business name, the money would go to the wrong account.
     </div>
-    <button type="submit" class="btn btn-gold">Save Stripe Keys</button>
+    <button type="submit" class="btn btn-gold" data-tour="stripe-save">Save Stripe Keys</button>
   </div>
 
   {% if not managed %}
@@ -308,7 +308,7 @@
   <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Check it works</h2>
   <div style="display:flex;gap:10px;flex-wrap:wrap">
     <form method="POST" action="{{ url_for('settings.test_stripe') }}" style="margin:0">
-      <button type="submit" class="btn btn-outline">💳 Test Stripe connection</button>
+      <button type="submit" class="btn btn-outline" data-tour="stripe-test">💳 Test Stripe connection</button>
     </form>
     <a href="{{ url_for('contractors.sms_test') }}" class="btn btn-outline">💬 Send a test text</a>
     <a href="{{ url_for('contractors.email_test') }}" class="btn btn-outline">✉️ Send a test email</a>

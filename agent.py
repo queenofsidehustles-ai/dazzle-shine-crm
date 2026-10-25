@@ -162,7 +162,7 @@ def run(question, history=None, api_key=None):
                               'the number out, or make plain that it is a '
                               'target rather than something from my books. '
                               'Everything else in your answer was fine — keep '
-                              'it.')}]})
+                              'it. ' + RETRY_ONLY_ANSWER)}]})
             p2 = r2.json()
             return (p2['choices'][0]['message'].get('content') or '').strip()
         except Exception:
@@ -290,6 +290,16 @@ def _alternate(history):
     return msgs
 
 
+_HOWTO = re.compile(r"^\s*(how\s+(do|can|would|should)\s+(i|we|you)|how\s+to\b|where\s+(do|can)\s+i\b|"
+                    r"(can|could)\s+you\s+(show|walk|tell)\s+me\s+how|show\s+me\s+how|walk\s+me\s+through|"
+                    r"what\s+happens\s+(if|when)|is\s+there\s+a\s+way\s+to)", re.I)
+
+
+def is_howto(question):
+    """Is this a question about how to use Akye, not about the business?"""
+    return bool(_HOWTO.search(question or ''))
+
+
 def run_claude(question, history=None):
     import time
     import llm
@@ -305,6 +315,13 @@ def run_claude(question, history=None):
     messages = _alternate(history)
     messages.append({'role': 'user', 'content': question[:1000]})
     tools = claude_tools()
+    # "How do I..." goes to the stronger model at its lowest thinking level:
+    # measured 2026-10-25 on 20 real questions, it looked every one up where
+    # the smaller model skipped three and guessed, for about 10% more
+    # (0.67c an answer against 0.60c). Everything else stays where it was.
+    model, how = llm.SMART_MODEL, {}
+    if is_howto(question):
+        model, how = llm.HOWTO_MODEL, {'output_config': {'effort': 'low'}}
     seen = []
     final = ''         # what she wrote on the turn that ended the loop
     proposal = None
@@ -318,15 +335,15 @@ def run_claude(question, history=None):
                 'gave you: "' + bad_line + '". Say the same thing again without '
                 'it. Either leave the number out, or make plain that it is a '
                 'target rather than something from my books. Everything else '
-                'in your answer was fine — keep it.')}]
+                'in your answer was fine — keep it. ' + RETRY_ONLY_ANSWER)}]
             left = deadline - time.monotonic()
             if left < 5:
                 return ''
             # Tools must be declared whenever tool_use blocks are in the
             # history, even when she is not allowed to call one.
-            reply = llm.post({'model': llm.SMART_MODEL, 'max_tokens': MAX_TOKENS,
+            reply = llm.post(dict(how, **{'model': model, 'max_tokens': MAX_TOKENS,
                               'system': system, 'tools': tools,
-                              'tool_choice': {'type': 'none'}, 'messages': fix},
+                              'tool_choice': {'type': 'none'}, 'messages': fix}),
                              timeout=min(25, left))
             return llm.text_of(reply)
         except Exception:
@@ -338,12 +355,12 @@ def run_claude(question, history=None):
         if left < 5:
             return ''
         try:
-            reply = llm.post({'model': llm.SMART_MODEL, 'max_tokens': MAX_TOKENS,
+            reply = llm.post(dict(how, **{'model': model, 'max_tokens': MAX_TOKENS,
                               'system': system, 'tools': tools,
                               'tool_choice': {'type': 'none'},
                               'messages': messages + ([{'role': 'user', 'content':
                                   'Answer my question now with what you found.'}]
-                                  if messages[-1]['role'] == 'assistant' else [])},
+                                  if messages[-1]['role'] == 'assistant' else [])}),
                              timeout=min(25, left))
             return llm.text_of(reply)
         except Exception:
@@ -354,9 +371,9 @@ def run_claude(question, history=None):
         if left < 5:
             break
         try:
-            reply = llm.post({'model': llm.SMART_MODEL, 'max_tokens': MAX_TOKENS,
+            reply = llm.post(dict(how, **{'model': model, 'max_tokens': MAX_TOKENS,
                               'system': system, 'tools': tools,
-                              'messages': messages}, timeout=min(30, left))
+                              'messages': messages}), timeout=min(30, left))
         except llm.ClaudeError as e:
             assistant._record(f'agent (Claude): {e}')
             if seen:
@@ -518,6 +535,28 @@ def _unbacked(said, sources):
     return ''
 
 
+# Said with every request to rewrite an answer. Without it a stronger model
+# would sometimes argue with the check before answering -- "That sentence
+# doesn't contain a figure about your business..." -- and that argument went
+# straight to the owner as part of the answer (found 2026-10-25, Sonnet 5.5).
+RETRY_ONLY_ANSWER = ('Reply with only the corrected answer, written to me. Do '
+                     'not mention this request, the sentence, figures or any '
+                     'check.')
+
+# A paragraph that talks about the check rather than answering the question.
+_META = re.compile(
+    r"(\b(that|this|the) sentence\b|\bhere is (the|my) answer again\b|"
+    r"\b(say|said) the same thing again\b|\bwithout (it|that figure|the figure)\b|"
+    r"\bfigure about (my|your) business\b|\bno tool gave\b)", re.I)
+
+
+def _strip_meta(text):
+    """The rewritten answer, minus any paragraph about the rewrite itself."""
+    paras = [p for p in re.split(r'\n\s*\n', text or '') if p.strip()]
+    kept = [p for p in paras if not _META.search(p)]
+    return '\n\n'.join(kept).strip()
+
+
 def _finish(said, seen, question, proposal, retry=None):
     """Check the figures, then hand it over.
 
@@ -534,7 +573,7 @@ def _finish(said, seen, question, proposal, retry=None):
 
     bad = _unbacked(said, sources)
     if retry:
-        fixed = retry(bad)
+        fixed = _strip_meta(retry(bad))
         if fixed and _figures_ok(fixed, sources):
             # Caught and corrected: the check doing its job, not a fault. It
             # used to be recorded as an error anyway, which filled the owner's

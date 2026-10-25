@@ -370,7 +370,7 @@
         </form>
       </details>
       {% else %}
-      <details id="serviceBox" style="margin-top:12px;border:1px solid var(--line);border-radius:10px;background:var(--ground)">
+      <details id="serviceBox" data-tour="change-job" style="margin-top:12px;border:1px solid var(--line);border-radius:10px;background:var(--ground)">
         <summary style="cursor:pointer;padding:10px 13px;font-size:0.85rem;font-weight:700;color:var(--muted)">
           ✎ Change the job, date or time
         </summary>
@@ -467,7 +467,7 @@
               </span>
             </label>
           </div>
-          <button type="submit" class="btn btn-gold" style="width:100%;padding:10px;font-size:0.9rem">Save</button>
+          <button type="submit" class="btn btn-gold" style="width:100%;padding:10px;font-size:0.9rem" data-tour="change-job-save">Save</button>
         </form>
       </details>
       {% endif %}
@@ -484,7 +484,7 @@
         <button type="submit" class="btn btn-outline btn-sm">✅ Mark complete (no photos needed)</button>
       </form>
       {% endif %}
-      <form method="POST" id="statusNotesForm" action="{{ url_for('bookings.detail', booking_id=booking.id) }}">
+      <form method="POST" id="statusNotesForm" data-tour="booking-status" action="{{ url_for('bookings.detail', booking_id=booking.id) }}">
         <div class="form-group">
           <label>Status</label>
           <select name="status">
@@ -522,7 +522,7 @@
     <form method="POST" id="adCostForm" action="{{ url_for('bookings.log_ad_cost', booking_id=booking.id) }}"></form>
 
     <!-- Crew — big houses that need more than one cleaner -->
-    <div class="card" data-card-key="who" style="margin-bottom:18px">
+    <div class="card" data-card-key="who" data-tour="assign-card" style="margin-bottom:18px">
     <h2 style="font-size:1rem;font-weight:700;margin:0 0 12px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Who's doing it
       {% if booking.needs_cleaner %}<span style="font-size:0.72rem;letter-spacing:0;text-transform:none;background:var(--warn-soft);color:var(--warn);padding:2px 9px;border-radius:999px;margin-left:6px">Nobody yet</span>{% endif %}</h2>
     {# One card, one way to put somebody on a job. It used to open with a
@@ -537,7 +537,7 @@
             {% if booking.crew %}style="padding:0 13px 14px"{% endif %}>
         <div class="form-group" style="margin-bottom:10px">
           <label for="assignTo" style="font-size:0.84rem">{{ 'Add another cleaner' if booking.crew else 'Assign to' }}</label>
-          <select id="assignTo" name="assign_to" style="width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:8px">
+          <select id="assignTo" name="assign_to" data-tour="assign-to" style="width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:8px">
             <option value="">— Pick a cleaner —</option>
             {% for s in staff %}
               {% if not booking.crew_row_for(s) %}<option value="{{ s.id }}">{{ s.name }}{% if booking.pay_unset_for(s) %} — pay not set, type the pay{% endif %}</option>{% endif %}
@@ -549,7 +549,7 @@
           <label for="assignPay" style="font-size:0.84rem">She gets paid</label>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <span style="color:var(--softer)">$</span>
-            <input id="assignPay" type="number" step="0.01" min="0" name="add_pay"
+            <input id="assignPay" data-tour="assign-pay" type="number" step="0.01" min="0" name="add_pay"
                    placeholder="{{ '%.2f' % booking.default_crew_pay(staff[0]) if staff else '' }}"
                    style="width:120px;margin:0" />
             <span style="font-size:0.85rem;color:var(--softer)">flat for the job</span>
@@ -599,7 +599,7 @@
           The team sees the date, service, size, area and pay — <strong>not the address</strong>.
           Whoever claims it gets the full work order automatically.
         </p>
-        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">Assign &amp; send</button>
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center" data-tour="assign-send">Assign &amp; send</button>
       </form>
       {% endif %}
     {% endset %}
@@ -885,7 +885,7 @@
     </div>
 
 
-  <div class="card" data-card-key="money">
+  <div class="card" data-card-key="money" data-tour="money-card">
     <h2 style="font-size:1rem;font-weight:700;margin:0 0 4px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">The money</h2>
     {# ── Money ──────────────────────────────────────────────────────────────
        What the customer owes and the ways to collect it, and nothing else.
@@ -1000,10 +1000,10 @@
       {% endif %}
 
       <!-- Take payment on-site -->
-      <a href="{{ pay_url }}" target="_blank" class="btn {{ 'btn-outline' if booking.stripe_payment_method_id else 'btn-gold' }}" style="width:100%;justify-content:center;margin-top:10px">💳 Take a card payment</a>
+      <a href="{{ pay_url }}" target="_blank" data-tour="take-card-payment" class="btn {{ 'btn-outline' if booking.stripe_payment_method_id else 'btn-gold' }}" style="width:100%;justify-content:center;margin-top:10px">💳 Take a card payment</a>
 
       <!-- Mark as paid manually (cash / Zelle / etc.) -->
-      <form method="POST" action="{{ url_for('bookings.mark_paid_route', booking_id=booking.id) }}"
+      <form method="POST" action="{{ url_for('bookings.mark_paid_route', booking_id=booking.id) }}" data-tour="mark-paid"
             style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"
             onsubmit="return confirm('Mark this booking as paid in full?')">
         <select name="method" style="flex:1;min-width:110px;padding:9px 12px;border:1px solid var(--border);border-radius:8px">
@@ -1239,7 +1239,7 @@
          dropdown there was no reason to open. It leads now, and says so. #}
       <div class="form-group" style="margin:12px 0 14px">
         <label for="sendKind" style="font-size:0.82rem">What do you want to send?</label>
-        <select id="sendKind" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px">
+        <select id="sendKind" data-tour="send-kind" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px">
           {% if not settled %}
           <option value="confirmation" selected>The booking confirmation — and the deposit, if you want it</option>
           {% endif %}
@@ -1335,7 +1335,7 @@
         <a href="{{ url_for('bookings.confirmation_preview', booking_id=booking.id) }}"
            target="_blank" class="btn btn-outline"
            style="width:100%;justify-content:center;margin-bottom:9px;background:#fff">👁 Preview the email &amp; text</a>
-        <form method="POST" action="{{ url_for('bookings.send_confirmation', booking_id=booking.id) }}"
+        <form method="POST" action="{{ url_for('bookings.send_confirmation', booking_id=booking.id) }}" data-tour="confirm-send"
               style="display:flex;gap:7px;flex-wrap:wrap;align-items:center">
           <select name="pay_kind" style="flex:1;min-width:150px;padding:8px 10px;border:1px solid var(--good-soft);border-radius:8px;margin:0">
             <option value="none" selected>Confirmation only</option>
@@ -1363,7 +1363,7 @@
       <div class="send-panel" data-kind="invoice">
       <!-- Real invoice -->
       <form method="POST" action="{{ url_for('bookings.send_invoice', booking_id=booking.id) }}" style="margin-top:10px">
-        <button type="submit" class="btn btn-dark" style="width:100%;justify-content:center">🧾 {{ 'Resend invoice ' + booking.invoice_number if booking.invoice_number else 'Send invoice' }}</button>
+        <button type="submit" class="btn btn-dark" data-tour="send-invoice" style="width:100%;justify-content:center">🧾 {{ 'Resend invoice ' + booking.invoice_number if booking.invoice_number else 'Send invoice' }}</button>
       </form>
       {% if booking.invoice_number %}
       <p style="text-align:center;font-size:0.78rem;color:var(--softer);margin-top:6px">
@@ -1416,13 +1416,13 @@
 
     {% if plan_suggestion %}
     <!-- Recurring cleaning after a one-off job -->
-      <details style="border-top:1px solid var(--line);padding-top:6px;margin-top:6px">
+      <details data-tour="recurring-setup" style="border-top:1px solid var(--line);padding-top:6px;margin-top:6px">
         <summary style="cursor:pointer;font-size:0.9rem;font-weight:650;color:var(--ink);padding:7px 0">🔁 Recurring Cleaning</summary>
       <p style="font-size:0.85rem;color:var(--muted);margin:0 0 14px">
         Is this the first clean before a regular schedule? Set the recurring visits up here.
         They get their own service and price — this job stays exactly as it is.
       </p>
-      <form method="POST" action="{{ url_for('bookings.start_plan', booking_id=booking.id) }}">
+      <form method="POST" action="{{ url_for('bookings.start_plan', booking_id=booking.id) }}" data-tour="recurring-form">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <div class="form-group" style="margin-bottom:10px">
             <label style="font-size:0.82rem">How often</label>
@@ -1459,7 +1459,7 @@
                  style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px" />
           <span style="font-size:0.75rem;color:var(--softer)">Cards are charged when this time comes round, so nobody pays before you arrive.</span>
         </div>
-        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center">📅 Set up recurring cleaning</button>
+        <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center" data-tour="recurring-save">📅 Set up recurring cleaning</button>
       </form>
       </details>
     {% endif %}

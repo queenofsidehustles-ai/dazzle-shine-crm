@@ -3,7 +3,7 @@
 
 {% block content %}
 <!-- Period picker -->
-<div class="card" style="margin-bottom:18px">
+<div class="card" data-tour="pnl-period" style="margin-bottom:18px">
   <form method="GET" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
     <div class="form-group" style="margin:0">
       <label style="font-size:0.82rem">Show</label>
@@ -34,7 +34,7 @@
 </div>
 
 <!-- Headline -->
-<div class="stat-grid" style="margin-bottom:22px">
+<div class="stat-grid" data-tour="pnl-headline" style="margin-bottom:22px">
   <div class="stat-card">
     <div class="label">Money in</div>
     <div class="value" style="color:var(--good)">${{ '%.2f' % p.revenue }}</div>
