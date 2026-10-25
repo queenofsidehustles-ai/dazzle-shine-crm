@@ -109,7 +109,7 @@
         {# Three answers, not two. "Off" is two different businesses: one that
            wants telling when money is owed, and one that collects it in cash
            and does not want the card touched at all. #}
-        <form method="POST" action="{{ url_for('settings.save_automation') }}"
+        <form method="POST" action="{{ url_for('settings.save_automation') }}" data-tour="balance-mode"
               style="margin-top:12px;display:flex;flex-direction:column;gap:7px">
           <input type="hidden" name="job" value="charge-balances" />
           {% for value, title, note in [

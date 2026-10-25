@@ -27,7 +27,7 @@
 <form id="booking-form" method="POST" action="{{ url_for('bookings.new') }}">
   <div class="card" style="max-width:640px">
 
-    <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px">1. Who</h2>
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px" data-tour="booking-who">1. Who</h2>
     <div class="form-group">
       <label>Name *</label>
       <input type="text" name="name" required placeholder="Jane Smith" value="{{ client.name if client else '' }}" />
@@ -66,7 +66,7 @@
     </div>
 
     <hr style="border:none;border-top:1px solid var(--info-soft);margin:18px 0">
-    <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px">2. What</h2>
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px" data-tour="booking-what">2. What</h2>
 
     <div class="form-group">
       <label>Type of cleaning</label>
@@ -126,7 +126,7 @@
     </div>
 
     <hr style="border:none;border-top:1px solid var(--info-soft);margin:18px 0">
-    <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px">3. When</h2>
+    <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px" data-tour="booking-when">3. When</h2>
     <div class="detail-grid" style="gap:14px">
       <div class="form-group">
         <label for="preferred-date">Date</label>
@@ -162,7 +162,7 @@
       📩 Text + email the customer their confirmation{% if ask_deposit and deposit %} and the ${{ ('%.0f'|format(deposit)) if deposit == deposit|int else ('%.2f'|format(deposit)) }} deposit link{% endif %}
     </label>
 
-    <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:6px">✅ Book it</button>
+    <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:6px" data-tour="booking-save">✅ Book it</button>
   </div>
 </form>
 

@@ -18,7 +18,7 @@
   <div class="card" style="margin-bottom:16px">
     <h2 class="sec">What you charge</h2>
 
-    <div class="anchor">
+    <div class="anchor" data-tour="price-anchor">
       <label for="anchor_price">
         What do you charge for a standard clean of a
         <strong>{{ anchor[0] }} bed / {{ anchor[1] }} bath</strong> house?
@@ -37,7 +37,7 @@
       </span>
     </div>
 
-    <table class="grid">
+    <table class="grid" data-tour="price-grid">
       <thead>
         <tr>
           <th>House size</th>
@@ -68,7 +68,7 @@
       Deep and move-out are worked out from the standard price, so you keep one
       list rather than three.
     </p>
-    <div class="mults">
+    <div class="mults" data-tour="price-multipliers">
       <div class="form-group">
         <label for="deep_multiplier">Deep clean is this much of a standard clean</label>
         <input type="number" id="deep_multiplier" name="deep_multiplier" step="0.05" min="1"
@@ -87,7 +87,7 @@
   {# Everything past the price list. On a first visit this is folded:
      the question above fills the whole grid, and forty fields arguing
      with it is how somebody decides this is not for them. #}
-  <details class="more"{% if not first_time %} open{% endif %}>
+  <details class="more" data-tour="price-more"{% if not first_time %} open{% endif %}>
     <summary>Deposit, cleaner pay, bigger homes and add-ons</summary>
   <div class="card" style="margin-bottom:20px">
     <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Deposit</h2>
@@ -235,7 +235,7 @@
 
   </details>
 
-  <button type="submit" class="btn btn-gold">Save Pricing</button>
+  <button type="submit" class="btn btn-gold" data-tour="price-save">Save Pricing</button>
 </form>
 
 <style>

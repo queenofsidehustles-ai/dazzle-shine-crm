@@ -31,6 +31,7 @@ from blueprints.sops import sops_bp
 from blueprints.faq import faq_bp
 from blueprints.assistant_routes import assistant_bp
 from blueprints.setup_assistant_routes import setup_assistant_bp
+from blueprints.tours import tours_bp
 from blueprints.email_templates import email_templates_bp
 from blueprints.interviews import interviews_bp
 from blueprints.pricing_public import pricing_public_bp
@@ -236,6 +237,7 @@ def create_app():
     app.register_blueprint(faq_bp)
     app.register_blueprint(assistant_bp)
     app.register_blueprint(setup_assistant_bp)
+    app.register_blueprint(tours_bp)
     app.register_blueprint(email_templates_bp)
     app.register_blueprint(interviews_bp)
     app.register_blueprint(pricing_public_bp)

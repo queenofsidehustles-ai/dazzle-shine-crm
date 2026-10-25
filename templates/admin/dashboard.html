@@ -130,7 +130,7 @@
    Cards rather than one joined strip: four boxes with air between them read
    as four separate facts, which is what they are. #}
 {% if money %}
-<div class="stat-grid">
+<div class="stat-grid" data-tour="dash-money">
   <a href="{{ url_for('money.pnl') }}" class="stat-card pos">
     <div class="label">Money in — {{ this_month }}</div>
     <div class="value">${{ '%.2f' % money.revenue }}</div>

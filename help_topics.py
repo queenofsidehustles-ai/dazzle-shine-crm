@@ -102,8 +102,10 @@ TOPICS = [
                    'all use that amount. It goes toward the total, it is not an extra charge. When a '
                    'customer books through your booking page, the booking stays pending and they are emailed'
                    ' and texted a link to pay the deposit; paying it confirms the booking and saves their '
-                   'card for the balance. When you create a booking yourself you can choose to send a '
-                   'deposit link, a full payment link, or nothing.'),
+                   'card for the balance. When you book a job yourself, the confirmation carries the '
+                   'deposit link if "Ask for the deposit in the booking confirmation" is ticked on Pricing, '
+                   'under Phone bookings. From a booking\'s page you can send the confirmation again with '
+                   '"+ ask for the deposit" or "+ ask for the full amount".'),
         'link': ('Pricing', '/settings/pricing'),
     },
     {
@@ -145,12 +147,12 @@ TOPICS = [
         'title': 'Creating a booking yourself',
         'keywords': ['create booking', 'new booking', 'add booking', 'book a job', 'schedule a job',
                      'phone booking', 'add a job'],
-        'answer': ('Press New booking for customers who book by phone, text or in person. Fill in the customer, '
-                   'service, house size, extras, date and time; the price fills in from your price list unless '
-                   'you type your own. Choose whether to send a deposit link, a full payment link, or collect '
-                   'later, and whether to send a booking confirmation. After saving, assign a cleaner on the '
-                   'job page. To book someone you already clean for, press Book again on their client page so '
-                   'their details come with them.'),
+        'answer': ('On Bookings, press ➕ New Booking for customers who book by phone, text or in person. Fill in '
+                   'who, what and when; the price fills in from your price list unless you type your own. Keep '
+                   '"Text + email the customer their confirmation" ticked to send it, and press ✅ Book it. '
+                   'Whether that confirmation asks for the deposit is set once on Pricing, under Phone bookings. '
+                   'After saving, assign a cleaner on the job page. To book someone you already clean for, '
+                   'press Book again on their client page so their details come with them.'),
         'link': ('New booking', '/bookings/new'),
     },
     {
@@ -180,8 +182,9 @@ TOPICS = [
         'title': 'Recurring cleans',
         'keywords': ['recurring', 'repeat', 'regular', 'weekly', 'every two weeks', 'biweekly', 'monthly',
                      'series', 'plan', 'standing appointment', 'stop recurring'],
-        'answer': ('On a job\'s page, use the Recurring Cleaning card to choose every week, every 2 weeks or once '
-                   'a month, then schedule it. Future visits are added to your calendar ahead of time and kept '
+        'answer': ('On a job\'s page, in the Less often card, open 🔁 Recurring Cleaning to choose every week, '
+                   'every 2 weeks or every month and press 📅 Set up recurring cleaning. A job already set to '
+                   'repeat shows 🔁 Recurring Plan instead, with 📅 Schedule recurring visits. Future visits are added to your calendar ahead of time and kept '
                    'topped up. A monthly plan can repeat on the same date or on the same weekday, like the 2nd '
                    'Wednesday. For a deep clean followed by regular cleans, start a separate plan from the '
                    'one-off job with its own service, price and start date. You can stop a plan, or move every '
@@ -194,7 +197,9 @@ TOPICS = [
         'keywords': ['calendar', 'schedule', 'reschedule', 'move a job', 'change date', 'drag', 'month view'],
         'answer': ('The Calendar shows the month with each day\'s jobs in time order. Drag a job to another day '
                    'to move it. Moving a job does not text anyone by itself, so you can rearrange a week freely; '
-                   'when the job has a cleaner you are offered a one-click way to tell them the new date.'),
+                   'when the job has a cleaner you are offered a one-click way to tell them the new date. You '
+                   'can also change the date on the job page under ✎ Change the job, date or time; that tells '
+                   'nobody either.'),
         'link': ('Calendar', '/bookings/calendar'),
     },
     {
@@ -204,7 +209,8 @@ TOPICS = [
         'answer': ('If a customer needs to move but does not know when, use "Put this on hold" on the job page '
                    'instead of cancelling. A held job is taken off every reminder and automatic charge, its money '
                    'is left untouched, and the assigned cleaner is texted not to go. When there is a new date, put '
-                   'it back on from the same card. To cancel for good, change the status to Cancelled.'),
+                   'it back on from the same card. To cancel for good, change the status to Cancelled and press '
+                   'Save. Cancelling does not message the customer or the cleaner, so tell them yourself.'),
         'link': ('Bookings', '/bookings/'),
     },
 
@@ -239,8 +245,10 @@ TOPICS = [
         'title': 'Adding cleaners to your team',
         'keywords': ['add cleaner', 'new cleaner', 'team member', 'staff', 'employee', 'contractor',
                      'deactivate', 'remove cleaner', 'team'],
-        'answer': ('Use Add a cleaner to enter their name, phone and email. Give each person a different name, '
-                   'adding a surname or initial if two share a first name, because pay is matched by name. '
+        'answer': ('On Team, press + Add someone directly to enter their name, phone, email and pay. You can '
+                   'leave the pay empty and set it later; until then they show as Pay not set. Give each person '
+                   'a different name, adding a surname or initial if two share a first name, because pay is '
+                   'matched by name. Got a whole team? ⬆ Import my team (Excel or CSV) adds them in one go. '
                    'Cleaners do not need a login to work: they get texted and emailed links to their jobs, '
                    'their day and their checklists. Deactivating someone stops all job offers and notifications '
                    'to them without telling them.'),
@@ -262,10 +270,13 @@ TOPICS = [
     {
         'key': 'import',
         'title': 'Importing your team or customer list',
-        'keywords': ['import', 'migration', 'csv', 'spreadsheet', 'upload list', 'move from', 'switch from',
-                     'bring my customers', 'transfer'],
-        'answer': ('The Migration Toolbox takes a CSV file. For your team, use columns name, email and phone; '
-                   'each person is added and emailed a link to set up their own sign-in. For customers, use '
+        'keywords': ['import', 'migration', 'csv', 'excel', 'xlsx', 'spreadsheet', 'upload list', 'move from',
+                     'switch from', 'bring my customers', 'bring my team', 'transfer'],
+        'answer': ('For your team, press ⬆ Import my team (Excel or CSV) on the Team page. The file needs a '
+                   'heading row with Name (or First Name and Last Name) and Email, plus Phone and Pay (like "$20" '
+                   'an hour or "45%") if you have them; leave pay out and it shows as Pay not set. Each person is '
+                   'added and emailed a link to set up their own sign-in. Customers are imported from a CSV in '
+                   'the Migration Toolbox: use '
                    'name and email, plus phone, address, city, zip and notes if you have them. Add frequency '
                    '(weekly, biweekly or monthly) and next_date (written like 2026-11-03) and a recurring plan '
                    'is put on the calendar as pending for you to review. Rows missing a name or email, or '
@@ -367,9 +378,11 @@ TOPICS = [
         'answer': ("Set what you pay per hour on Pricing, under Cleaner Pay. A job's pay is its hours times "
                    "that rate, shared between whoever is on it, so a discount never cuts your cleaner's pay."
                    ' On the job page, the "Who\'s doing it" card shows each person\'s pay, which you can type '
-                   'over and save with Save pay; the number of cleaners and the hours are under "How this '
-                   'pay is worked out". Each job keeps the rate it was quoted at; unpaid jobs offer a Re-'
-                   'rate button if you change your rate.'),
+                   'over and save with Save pay; the number of cleaners is "Cleaners needed", and the hours '
+                   'are under "Pay details — hours, rate, pay per cleaner". Each job keeps the rate it was '
+                   'quoted at; unpaid jobs offer a Re-rate button if you change your rate. A cleaner\'s own '
+                   'rate, on her page under Pay Settings, is used on jobs with no hours; it can be left as '
+                   'Pay not set.'),
         'link': ('Pricing', '/settings/pricing'),
     },
     {
@@ -413,10 +426,11 @@ TOPICS = [
         'keywords': ['payment', 'take payment', 'payment link', 'invoice', 'invoices', 'qr code', 'mark paid',
                      'collect', 'balance', 'receipt'],
         'answer': ('On the job page, the "Talk to the customer" card is where you choose what to send: a '
-                   'payment link goes by email and text, an invoice by email. The Money card has Take '
-                   'Payment, which opens the card page with a QR code the customer can scan, and Mark paid '
-                   'for cash or other payments, with the date the money arrived and an optional receipt. You'
-                   ' can also record a deposit paid outside Stripe. Paid jobs have a receipt you can print '
+                   'payment link goes by email and text, an invoice by email. The Money card has 💳 Take a '
+                   'card payment, which opens the card page, and ✓ Mark paid for cash, Zelle or Venmo, with '
+                   'the date the money arrived and an optional receipt. Under More ways to get paid are a QR '
+                   'code the customer can scan and a way to record a deposit paid outside Stripe. Paid jobs '
+                   'have a receipt you can print '
                    'or save. Tips added on the payment page are kept separate for the cleaner.'),
         'link': ('Invoices', '/invoices/'),
     },

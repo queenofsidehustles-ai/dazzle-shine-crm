@@ -7,7 +7,7 @@
 
 {% block content %}
 {% if not s.user_id and s.agreement_token %}
-<div class="card" style="margin-bottom:18px;background:var(--gold-soft);border:1px solid var(--amber-line)">
+<div class="card" data-tour="join-invite" style="margin-bottom:18px;background:var(--gold-soft);border:1px solid var(--amber-line)">
   <p style="font-weight:700;margin:0 0 6px">No sign-in set up yet</p>
   <p style="font-size:0.86rem;color:var(--muted);margin:0 0 10px">
     Share this link, or resend the invite email — either one lets {{ s.name.split()[0] }} set up their own login.
@@ -92,7 +92,7 @@
 
     <!-- Pay Settings — owner-only, same boundary as payroll and the team-page payout buttons -->
     {% if session.get('role', 'owner') == 'owner' %}
-    <div class="card">
+    <div class="card" data-tour="pay-settings">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Pay Settings</h2>
       <form method="POST">
         <input type="hidden" name="action" value="update" />
@@ -117,7 +117,7 @@
           <input type="number" name="pay_rate" step="0.5" value="{{ s.pay_rate if s.pay_rate is not none else '' }}" placeholder="Not set yet" />
           <span style="font-size:0.78rem;color:var(--softer)">Current: <strong>{{ s.pay_label() }}</strong></span>
         </div>
-        <button type="submit" class="btn btn-dark" style="width:100%;justify-content:center">Update Pay</button>
+        <button type="submit" class="btn btn-dark" style="width:100%;justify-content:center" data-tour="pay-update">Update Pay</button>
       </form>
     </div>
     {% endif %}

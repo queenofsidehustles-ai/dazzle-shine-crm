@@ -16,7 +16,7 @@
     Each person is emailed an invite to set up their sign-in and send their paperwork.
   </p>
   <form method="POST" enctype="multipart/form-data" id="import-form">
-    <div id="dropzone" style="border:2px dashed var(--line);border-radius:12px;padding:36px 20px;
+    <div id="dropzone" data-tour="import-file" style="border:2px dashed var(--line);border-radius:12px;padding:36px 20px;
                 text-align:center;cursor:pointer;transition:border-color .15s,background .15s">
       <div style="font-size:2rem;margin-bottom:8px">📄</div>
       <div id="dropzone-label" style="font-weight:600;color:var(--muted)">
@@ -25,7 +25,7 @@
       <input type="file" name="csv_file" id="csv_file" accept=".xlsx,.xlsm,.csv,text/csv" required
              style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden" />
     </div>
-    <button type="submit" class="btn btn-gold" style="margin-top:16px">Import</button>
+    <button type="submit" class="btn btn-gold" data-tour="import-submit" style="margin-top:16px">Import</button>
   </form>
 </div>
 

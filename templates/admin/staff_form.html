@@ -11,7 +11,7 @@
     <form method="POST">
       <div class="form-group">
         <label>Full Name *</label>
-        <input type="text" name="name" required value="{{ staff.name if staff else '' }}" placeholder="e.g. Maria Rodriguez" />
+        <input type="text" name="name" data-tour="staff-name" required value="{{ staff.name if staff else '' }}" placeholder="e.g. Maria Rodriguez" />
       </div>
       <div class="form-group">
         <label>Phone</label>
@@ -38,7 +38,7 @@
              href="{{ url_for('assistant.page', q='Should I pay a cleaner hourly or a percentage of the job?') }}">?</a>
         </label>
         <div style="display:flex;gap:10px">
-          <select name="pay_type" style="flex:1">
+          <select name="pay_type" data-tour="staff-pay" style="flex:1">
             <option value="percent" {{ 'selected' if not staff or staff.pay_type == 'percent' }}>% of the job</option>
             <option value="hourly" {{ 'selected' if staff and staff.pay_type == 'hourly' }}>Per hour</option>
           </select>
@@ -65,7 +65,7 @@
         afterwards.
       </div>
       {% endif %}
-      <button type="submit" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:8px">
+      <button type="submit" class="btn btn-gold" data-tour="staff-save" style="width:100%;justify-content:center;margin-top:8px">
         {{ 'Save Changes' if staff else 'Add Team Member' }}
       </button>
     </form>

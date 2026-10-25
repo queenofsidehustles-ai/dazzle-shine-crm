@@ -4,7 +4,7 @@
 
 {% block content %}
 <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
-  <a href="{{ url_for('bookings.new') }}" class="btn btn-gold">➕ New Booking</a>
+  <a href="{{ url_for('bookings.new') }}" class="btn btn-gold" data-tour="new-booking">➕ New Booking</a>
 </div>
 <form method="GET" action="{{ url_for('bookings.index') }}" style="margin-bottom:14px">
   {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
@@ -25,7 +25,7 @@
   {% endif %}
 </div>
 
-<div class="card">
+<div class="card" data-tour="bookings-list">
   {% if bookings %}
   <div class="table-wrap">
     {% if series and series != 'all' %}
