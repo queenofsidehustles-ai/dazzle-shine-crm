@@ -93,6 +93,19 @@ check(btn and btn.get('label') == 'Show me' and 'tour=book-job' in btn.get('href
       f'a Show me button comes back with the answer ({btn})')
 llm.post = fake_post
 
+print('\n3c. Asked again, answered from the chat without a lookup: the button still comes')
+llm.post = fake_post   # answers straight away, never calls how_to
+with app.app_context(), app.test_request_context():
+    again = agent.run_claude('How do I book a job?',
+                             history=[{'role': 'user', 'content': 'How do I book a job?'},
+                                      {'role': 'assistant', 'content': '1. Open Bookings...'}])
+btn = again.get('link') or {}
+check(btn.get('label') == 'Show me' and 'tour=book-job' in btn.get('href', ''),
+      f'Show me is on the repeat answer too ({btn})')
+with app.app_context(), app.test_request_context():
+    other = agent.run_claude('What did I make this month?')
+check(not other.get('link'), 'and a question about the business gets no Show me')
+
 print('\n4. The guide behind Show me needs a login')
 c = app.test_client()
 r = c.get('/help/tour/book-job.json')
