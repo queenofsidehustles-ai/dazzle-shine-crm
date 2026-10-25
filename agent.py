@@ -569,8 +569,10 @@ def _with_show_me(question, proposal):
     conversation without looking it up, and the button was gone (found by
     Monica, 2026-10-25). Which guide a question is about is decided here, from
     Akye's own guide list -- no call to Claude, so it costs nothing."""
-    if (proposal or {}).get('link') or not is_howto(question):
+    if not is_howto(question):
         return proposal
+    if 'tour=' in ((proposal or {}).get('link') or {}).get('href', ''):
+        return proposal          # a Show me button is already on it
     try:
         import help_guide
         import howto
@@ -581,6 +583,8 @@ def _with_show_me(question, proposal):
         # "What happens if..." asks for an explanation, not steps: no note.
         if re.match(r'\s*what\s+happens', question or '', re.I):
             return proposal
+        # Noted even when the help text offered a page to open: that page is
+        # not a walkthrough, and the question is still a guide to write.
         _note_miss(question)
         return dict(proposal or {}, no_walkthrough=True)
     return dict(proposal or {}, link={'label': 'Show me', 'href': howto.start_url(g)})

@@ -122,6 +122,15 @@ check(agent.NO_WALKTHROUGH in none['say'] and not none.get('link'),
 check('no_walkthrough' not in none, 'the internal flag never reaches the page')
 check(noted == ['How do I make a birthday card for a customer?'],
       f'and only that question was noted for the console ({noted})')
+noted.clear()
+control_plane.record_howto_miss = lambda engine, slug, q: noted.append(q)
+with app.app_context(), app.test_request_context():
+    page_only = agent._finish('Discounts are on Pricing.', [], 'How do I set up a birthday discount?',
+                              {'link': {'label': 'Open Pricing', 'href': '/settings/pricing'}})
+control_plane.record_howto_miss = real_note
+check(agent.NO_WALKTHROUGH in page_only['say'] and page_only['link']['href'] == '/settings/pricing',
+      'a plain page link from the help text keeps its button, and still says there is no walkthrough')
+check(noted == ['How do I set up a birthday discount?'], 'and that question is noted too')
 check(agent.NO_WALKTHROUGH not in expl['say'] and agent.NO_WALKTHROUGH not in biz['say'],
       '"what happens if" and business questions get no such note')
 
