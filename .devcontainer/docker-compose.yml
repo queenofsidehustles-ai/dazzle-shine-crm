@@ -1,0 +1,32 @@
+# The same two things the "Every test suite" job in .github/workflows/full-suite.yml
+# has: Python 3.12 (what customers run) and Postgres 16 with the same user,
+# password and database. The app shares the database container's network, so
+# localhost:5432 is Postgres, exactly as it is in CI.
+services:
+  app:
+    image: mcr.microsoft.com/devcontainers/python:3.12
+    volumes:
+      - ../..:/workspaces:cached
+    command: sleep infinity
+    network_mode: service:db
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: akye_full_suite
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d akye_full_suite"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
