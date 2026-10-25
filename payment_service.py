@@ -11,14 +11,21 @@ def charge_key(kind, booking, cents, payment_method):
     result back instead of a second charge -- so a retried request, a second
     clock, or a button pressed while the hourly run is mid-way cannot take the
     same balance twice, whatever the lock in the API did. Built from what makes
-    it the same charge: which company, which job, how much, which card. A
-    different amount (the price was corrected) or a new card is a new charge."""
+    it the same charge: which company, which job, how much has been collected
+    on it so far, how much this takes, which card. The amount already collected
+    is what tells a retry from a new balance: a $100 balance charged, the price
+    then raised by $100, is a second $100 owed on the same job and card -- the
+    same key without it, which Stripe would answer with the first charge while
+    the job was marked paid in full. A retry of a charge that never recorded
+    has the same collected figure, so it still gets the first result."""
+    from blueprints.payments import collected
     try:
         import tenancy
         where = tenancy.current_schema() or 'public'
     except Exception:
         where = 'public'
-    return f'akye-{kind}-{where}-{booking.id}-{cents}-{payment_method}'[:255]
+    have = int(round((collected(booking) or 0) * 100))
+    return f'akye-{kind}-{where}-{booking.id}-{have}-{cents}-{payment_method}'[:255]
 
 
 def charge_balance(booking) -> tuple:

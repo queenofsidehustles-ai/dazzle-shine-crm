@@ -197,6 +197,13 @@ with app.app_context():
     import threading
     import time as _time
     due = [make_booking() for _ in range(5)]
+    # The keys a retry would send for each, before anything is collected.
+    from models import Booking
+    db.session.remove()
+    with tenancy.use_tenant(SLUG):
+        before = {str(b): payment_service.charge_key('balance', db.session.get(Booking, b), 40000, 'pm_x')
+                  for b in due}
+    db.session.remove()
     CHARGES.clear()
     slow = _PI.create
 
@@ -237,17 +244,33 @@ with app.app_context():
           'each charge carries its own idempotency key, naming the company')
     check(sorted(charged_ids) == sorted(str(b) for b in due),
           'and the booking it is for, for reconciling against Stripe')
-    from models import Booking
+    sent = dict(zip(map(str, charged_ids), keys))
+    check(all(sent.get(b) == k for b, k in before.items()),
+          'a retry before the charge is recorded sends the same key, so Stripe returns the first result')
     db.session.remove()
     with tenancy.use_tenant(SLUG):
         b0 = db.session.get(Booking, due[0])
-        again = payment_service.charge_key('balance', b0, 40000, 'pm_x')
         moved = payment_service.charge_key('balance', b0, 45000, 'pm_x')
         card = payment_service.charge_key('balance', b0, 40000, 'pm_new')
     db.session.remove()
-    check(again == keys[[str(x) for x in charged_ids].index(str(due[0]))],
-          'retrying the same charge sends the same key, so Stripe returns the first result')
-    check(len({again, moved, card}) == 3, 'a corrected price or a new card is a new charge')
+    check(len({sent[str(due[0])], moved, card}) == 3, 'a corrected price or a new card is a new charge')
+    # Codex on #169: $400 collected, then the price goes up by $400. The new
+    # $400 balance is the same amount on the same card -- it must not be the
+    # first charge's key, or Stripe answers with that charge and the job is
+    # marked paid while $400 is still owed.
+    db.session.remove()
+    with tenancy.use_tenant(SLUG):
+        b0 = db.session.get(Booking, due[0])
+        settled_key = sent[str(due[0])]
+        b0.price = 800.0
+        db.session.commit()
+        CHARGES.clear()
+        ok, why = payment_service.charge_balance(b0)
+        second = CHARGES[-1] if CHARGES else {}
+    db.session.remove()
+    check(ok and second.get('amount') == 40000, f'the new $400 balance is charged ({why or "ok"})')
+    check(second.get('idempotency_key') and second['idempotency_key'] != settled_key,
+          'under a new key: what was already collected is part of it')
 
 if failures:
     print(f'\n❌ {len(failures)} failed:')
