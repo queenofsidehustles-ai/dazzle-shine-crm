@@ -561,6 +561,27 @@ def _strip_meta(text):
     return '\n\n'.join(kept).strip()
 
 
+def _with_show_me(question, proposal):
+    """A how-to answer always carries its Show me button.
+
+    The button used to arrive only when she looked the answer up this turn.
+    Asked the same thing again in the same chat, she could answer from the
+    conversation without looking it up, and the button was gone (found by
+    Monica, 2026-10-25). Which guide a question is about is decided here, from
+    Akye's own guide list -- no call to Claude, so it costs nothing."""
+    if (proposal or {}).get('link') or not is_howto(question):
+        return proposal
+    try:
+        import help_guide
+        import howto
+        g = help_guide.guide_for(question)
+    except Exception:
+        g = None
+    if g is None:
+        return proposal
+    return dict(proposal or {}, link={'label': 'Show me', 'href': howto.start_url(g)})
+
+
 def _finish(said, seen, question, proposal, retry=None):
     """Check the figures, then hand it over.
 
@@ -571,6 +592,7 @@ def _finish(said, seen, question, proposal, retry=None):
     given to read. An owner asking for a game plan got her own phone number
     read back at her, which is worse than any wrong figure would have been.
     """
+    proposal = _with_show_me(question, proposal)
     sources = seen + [question]
     if _figures_ok(said, sources):
         return _wrap(said, proposal)
