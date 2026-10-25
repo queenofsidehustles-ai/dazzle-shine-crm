@@ -35,7 +35,7 @@
         </select></div>
     </div>
 
-    <div class="form-group">
+    <div class="form-group" data-tour="cbook-scope">
       <label>Scope of work <span style="font-weight:400;color:var(--softer)">— the customer and the cleaner both see this</span></label>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:6px 16px;margin-top:4px">
         {% for item in scope_items %}
@@ -48,7 +48,7 @@
       {% if agreed and agreed.scope %}<p style="font-size:0.8rem;color:var(--softer);margin:4px 0 0">From the signed agreement{% if agreed.effective_on %} in force since {{ agreed.effective_on }}{% endif %}. Change it here for this job only.</p>{% endif %}
     </div>
 
-    <div class="detail-grid" style="gap:14px">
+    <div class="detail-grid" data-tour="cbook-price" style="gap:14px">
       <div class="form-group"><label>Price per visit ($) *</label>
         <input type="text" name="price" id="cb-price" required value="{{ '%.2f' % default_price if default_price else '' }}">
         {% if agreed and agreed.price %}<span style="font-size:0.78rem;color:var(--softer)">The agreed price per visit{% if agreed.first_visit %}, plus the ${{ '%.2f' % agreed.first_visit }} first-visit charge{% endif %}.</span>{% endif %}</div>
@@ -62,7 +62,7 @@
 
     <hr style="border:none;border-top:1px solid var(--info-soft);margin:18px 0">
     <h2 style="font-size:1rem;font-weight:700;margin-bottom:14px">📅 Schedule</h2>
-    <div class="detail-grid" style="gap:14px">
+    <div class="detail-grid" data-tour="cbook-when" style="gap:14px">
       <div class="form-group"><label>Date</label><input type="date" name="preferred_date"></div>
       <div class="form-group"><label>Time</label><input type="text" name="preferred_time" placeholder="6:00 PM"></div>
     </div>
@@ -76,7 +76,7 @@
     <hr style="border:none;border-top:1px solid var(--info-soft);margin:18px 0">
     <h2 style="font-size:1rem;font-weight:700;margin-bottom:10px">💳 Payment</h2>
     <p style="font-size:0.82rem;color:var(--softer);margin:0 0 10px">Card or invoice — whichever this customer prefers. Either way they can pay by card from the link.</p>
-    <div class="form-group" style="margin-bottom:10px">
+    <div class="form-group" data-tour="cbook-pay" style="margin-bottom:10px">
       <label class="cb-opt"><input type="radio" name="payment_option" value="deposit" style="width:auto"> Card — send a ${{ '%.0f'|format(deposit) }} deposit link now</label>
       <label class="cb-opt"><input type="radio" name="payment_option" value="full" style="width:auto"> Card — send a full-payment link now</label>
       <label class="cb-opt"><input type="radio" name="payment_option" value="invoice_now" checked style="width:auto"> Invoice — send it now, due in

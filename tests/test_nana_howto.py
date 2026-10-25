@@ -106,6 +106,34 @@ with app.app_context(), app.test_request_context():
     other = agent.run_claude('What did I make this month?')
 check(not other.get('link'), 'and a question about the business gets no Show me')
 
+print('\n3d. A how-to with no guide says so, and is noted for the console')
+import control_plane
+noted = []
+real_note = control_plane.record_howto_miss
+control_plane.record_howto_miss = lambda engine, slug, q: noted.append(q)
+llm.post = fake_post
+with app.app_context(), app.test_request_context():
+    none = agent.run_claude('How do I make a birthday card for a customer?')
+    expl = agent.run_claude('What happens if it rains on the day?')
+    biz = agent.run_claude('Who is free tomorrow?')
+control_plane.record_howto_miss = real_note
+check(agent.NO_WALKTHROUGH in none['say'] and not none.get('link'),
+      'no guide: the answer says there is no walkthrough, and has no button')
+check('no_walkthrough' not in none, 'the internal flag never reaches the page')
+check(noted == ['How do I make a birthday card for a customer?'],
+      f'and only that question was noted for the console ({noted})')
+noted.clear()
+control_plane.record_howto_miss = lambda engine, slug, q: noted.append(q)
+with app.app_context(), app.test_request_context():
+    page_only = agent._finish('Discounts are on Pricing.', [], 'How do I set up a birthday discount?',
+                              {'link': {'label': 'Open Pricing', 'href': '/settings/pricing'}})
+control_plane.record_howto_miss = real_note
+check(agent.NO_WALKTHROUGH in page_only['say'] and page_only['link']['href'] == '/settings/pricing',
+      'a plain page link from the help text keeps its button, and still says there is no walkthrough')
+check(noted == ['How do I set up a birthday discount?'], 'and that question is noted too')
+check(agent.NO_WALKTHROUGH not in expl['say'] and agent.NO_WALKTHROUGH not in biz['say'],
+      '"what happens if" and business questions get no such note')
+
 print('\n4. The guide behind Show me needs a login')
 c = app.test_client()
 r = c.get('/help/tour/book-job.json')

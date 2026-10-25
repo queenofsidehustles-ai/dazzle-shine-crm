@@ -14,7 +14,7 @@
     {{ a.category_label }} · {{ a.frequency_label }}<br>
     {% if a.source == 'find_leads' %}📞 closed from Find Leads{% else %}✍️ added by hand{% endif %}
   </div>
-  <a href="{{ url_for('commercial.book', account_id=a.id) }}" class="btn btn-gold" style="padding:10px 20px">📅 Book a job</a>
+  <a href="{{ url_for('commercial.book', account_id=a.id) }}" data-tour="account-book" class="btn btn-gold" style="padding:10px 20px">📅 Book a job</a>
 </div>
 
 {% if jobs %}

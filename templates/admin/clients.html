@@ -3,7 +3,7 @@
 {% block page_title %}Clients{% endblock %}
 
 {% block topbar_right %}
-  <a href="{{ url_for('bookings.new_client') }}" class="btn btn-primary btn-sm">+ Add customer</a>
+  <a href="{{ url_for('bookings.new_client') }}" data-tour="add-customer" class="btn btn-primary btn-sm">+ Add customer</a>
 {% endblock %}
 
 {% block content %}

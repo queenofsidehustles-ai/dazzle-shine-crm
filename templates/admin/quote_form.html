@@ -95,7 +95,7 @@
 
   <!-- Left column -->
   <div style="display:flex;flex-direction:column;gap:18px">
-    <div class="card">
+    <div class="card" data-tour="cq-contact">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Contact Info</h2>
       <div class="form-group">
         <label>Company / Property Name *</label>
@@ -196,7 +196,7 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" data-tour="cq-pricing">
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--softer);text-transform:uppercase;letter-spacing:0.12em">Pricing & Schedule</h2>
       <div class="form-group">
         <label>Service Frequency</label>
@@ -263,7 +263,7 @@
     </button>
     {% endif %}
     {% if not quote %}
-    <button type="submit" name="next" value="review" class="btn btn-dark" style="width:100%;justify-content:center;padding:13px">
+    <button type="submit" name="next" value="review" data-tour="cq-review" class="btn btn-dark" style="width:100%;justify-content:center;padding:13px">
       👁 Save &amp; review before sending →
     </button>
     {% endif %}

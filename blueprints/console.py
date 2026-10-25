@@ -2131,8 +2131,19 @@ def nana_proposals():
                 stat['pressed'] += 1
 
     rows.sort(key=lambda r: r['created_at'], reverse=True)
+    # The how-to questions no guide answered (howto.py), most asked first:
+    # which step-by-step guide to write next, from what owners really ask.
+    names = {o['slug']: (o.get('name') or o['slug']) for o in orgs}
+    asked = {}
+    for m in control_plane.recent_howto_misses(engine):
+        key = ' '.join((m['question'] or '').lower().rstrip('?. ').split())
+        a = asked.setdefault(key, {'question': m['question'], 'times': 0,
+                                   'companies': set(), 'last': m['created_at']})
+        a['times'] += 1
+        a['companies'].add(names.get(m['org_slug'], m['org_slug'] or '?'))
+    misses = sorted(asked.values(), key=lambda a: (-a['times'], a['question'] or ''))
     return render_template('console/nana.html', rows=rows[:300],
-                           by_action=sorted(by_action.items()),
+                           by_action=sorted(by_action.items()), misses=misses[:100],
                            me=request.console_user, counts=_counts(engine))
 
 

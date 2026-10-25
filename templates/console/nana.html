@@ -1,6 +1,26 @@
 {% extends "console/_shell.html" %}
 {% block title %}Nana{% endblock %}
 {% block body %}
+{# How-to questions with no step-by-step guide yet (howto.py), most asked
+   first: the next guides to write. The owner was told there is no walkthrough
+   for it. Deleted with a company when it is purged. #}
+<h2 style="font-size:1.05rem;margin:0 0 var(--s3)">Asked "how do I…" with no walkthrough yet</h2>
+{% if misses %}
+<table class="con" style="margin-bottom:var(--s6)">
+  <tr><th>Question</th><th>Times</th><th>Companies</th><th>Last asked</th></tr>
+  {% for m in misses %}
+  <tr>
+    <td>{{ m.question }}</td>
+    <td>{{ m.times }}</td>
+    <td>{{ m.companies | sort | join(', ') }}</td>
+    <td>{{ m.last.strftime('%d %b') if m.last }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<div class="con-empty" style="margin-bottom:var(--s6)">Every "how do I" question so far had a walkthrough.</div>
+{% endif %}
+
 <h2 style="font-size:1.05rem;margin:0 0 var(--s3)">What Nana has offered, across every company</h2>
 
 {% if by_action %}

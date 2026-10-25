@@ -46,7 +46,7 @@ data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
   {# What the reps have handed over to price -- the owner's queue. #}
   {% if is_owner and (ready_count or view == 'ready') %}{% set views = views + [('ready', '📝 Ready to quote', ready_count)] %}{% endif %}
   {% for key, label, n in views %}
-  <a href="{{ url_for('places_finder.dashboard', view=key) }}"
+  <a href="{{ url_for('places_finder.dashboard', view=key) }}" data-tour="leads-tab-{{ key }}"
      class="filter-tab {{ 'active' if view == key }}">
     {{ label }}{% if n is not none %} ({{ n }}){% endif %}
   </a>
@@ -151,7 +151,7 @@ data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
         Log every call — the next step gets set for you.
       </p>
       <p style="margin:10px 0 0">
-        <a href="{{ url_for('places_finder.call_sheet') }}" class="btn btn-gold" style="padding:11px 22px">
+        <a href="{{ url_for('places_finder.call_sheet') }}" data-tour="start-calling" class="btn btn-gold" style="padding:11px 22px">
           {% if waiting > 20 %}Call the next 20 →{% else %}Start calling →{% endif %}
         </a>
       </p>
@@ -256,7 +256,7 @@ data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
 </div>
 {% endif %}
 
-<div class="card">
+<div class="card" data-tour="leads-everyone">
   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
     <div>
       {% if view == 'ready' %}
@@ -375,7 +375,7 @@ data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
     list as a first call due today, and from there it works like any other lead:
     log calls, email, text, and quote them.
   </p>
-  <form method="POST" action="{{ url_for('places_finder.add_by_hand') }}"
+  <form method="POST" action="{{ url_for('places_finder.add_by_hand') }}" data-tour="add-lead-form"
         style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px 14px">
     <div style="grid-column:1/-1">
       <label for="addName" style="{{ lbl }}">Business name *</label>
@@ -461,7 +461,7 @@ data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
 {# ── FIND NEW ──────────────────────────────────────────────────────────── #}
 {% if view == 'find' %}
 <div class="card" style="margin-bottom:18px">
-  <form method="POST" action="{{ url_for('places_finder.search') }}"
+  <form method="POST" action="{{ url_for('places_finder.search') }}" data-tour="find-form"
         style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
     <div style="flex:1;min-width:180px">
       <label style="display:block;font-size:0.8rem;color:var(--softer);margin-bottom:4px">Who do you want to call?</label>

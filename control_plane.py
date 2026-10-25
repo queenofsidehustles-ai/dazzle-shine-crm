@@ -588,6 +588,20 @@ support_requests = Table(
 )
 
 
+# "How do I..." questions Nana had no step-by-step guide for (agent.py), so
+# the next guides written are the ones owners actually ask for rather than
+# guesses (Monica, 2026-10-25). The question only, trimmed; nothing about who
+# asked beyond the company, and deleted with the company when it is purged
+# (tenant_data_lifecycle.purge_tenant) -- an owner may name a customer in it.
+howto_misses = Table(
+    'howto_misses', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('org_slug', String(80), index=True),
+    Column('question', String(300)),
+    Column('created_at', DateTime, default=datetime.utcnow, index=True),
+)
+
+
 # Reference material that is the product's own, not any one company's -- a
 # growth plan, a launch runbook, anything that used to live as a link pasted
 # into somebody's inbox and should survive the person who pasted it there.
@@ -737,7 +751,7 @@ def ensure_table(engine):
                         product_messages, product_switches,
                         affiliates, affiliate_logins, affiliate_clicks,
                         affiliate_commissions, affiliate_payouts,
-                        platform_runs])
+                        platform_runs, howto_misses])
     ensure_columns(engine)
 
 
@@ -1429,6 +1443,30 @@ def set_promo_active(engine, code, active):
 
 # --------------------------------------------------------------------------
 # Feedback
+
+
+def record_howto_miss(engine, org_slug, question):
+    """Note a how-to question no guide answered. Never raises: Nana has
+    already answered, and a note that could not be written must not stop it."""
+    q = ' '.join((question or '').split())[:300]
+    if not q:
+        return
+    try:
+        with engine.begin() as conn:
+            conn.execute(insert(howto_misses).values(org_slug=org_slug, question=q))
+    except Exception:
+        pass
+
+
+def recent_howto_misses(engine, limit=300):
+    """Newest first: the questions owners asked that had no guide yet."""
+    try:
+        with engine.connect() as conn:
+            return [dict(r) for r in conn.execute(
+                select(howto_misses).order_by(howto_misses.c.created_at.desc())
+                .limit(limit)).mappings()]
+    except Exception:
+        return []
 
 
 def add_feedback(engine, **fields):

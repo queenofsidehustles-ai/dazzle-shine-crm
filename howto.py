@@ -37,6 +37,13 @@ _BOOKINGS = r'^/bookings/?$'
 _BOOKING = r'^/bookings/\d+$'
 _TEAM = r'^/contractors/team/?$'
 _CLEANER = r'^/contractors/team/\d+$'
+_LEADS = r'^/find-leads/?$'
+_LEAD = r'^/find-leads/\d+$'
+_CALL = r'^/find-leads/call(/\d+)?$'
+_ACCOUNTS = r'^/commercial/?$'
+_ACCOUNT = r'^/commercial/\d+$'
+_APPS = r'^/contractors/applications/?$'
+_APP = r'^/contractors/applications/\d+$'
 
 
 def _open_booking(say='Open Bookings and press the customer\'s name (or View) to open the booking.'):
@@ -45,6 +52,14 @@ def _open_booking(say='Open Bookings and press the customer\'s name (or View) to
 
 def _open_cleaner(say='Open Team and press the cleaner\'s card.'):
     return {'say': say, 'page': _TEAM, 'start': '/contractors/team', 'target': 'team-cards'}
+
+
+def _open_lead(say='Open Commercial, press 🏢 Everyone and press the business\'s name.'):
+    return {'say': say, 'page': _LEADS, 'start': '/find-leads/?view=everyone', 'target': 'leads-everyone'}
+
+
+def _open_application(say='Open Hiring and press Review next to the applicant.'):
+    return {'say': say, 'page': _APPS, 'start': '/contractors/applications', 'target': 'applications-list'}
 
 
 GUIDES = [
@@ -371,11 +386,256 @@ GUIDES = [
                      'log in', 'login for cleaners', 'see their jobs', 'their schedule', 'app for cleaners'],
         'steps': [
             _open_cleaner(),
-            {'say': 'Under No sign-in set up yet, press Resend invite email, or copy the link and text it to her.',
+            # The box needs her agreement_token, which import, Hiring and the
+            # offer give her and + Add someone directly does not (2026-10-25).
+            {'say': 'Under No sign-in set up yet, press Resend invite email, or copy the link and text it to her. '
+                    'That box is on cleaners you imported or hired through Hiring; one added with + Add someone '
+                    'directly does not have it yet, so ask Akye support to send hers.',
              'page': _CLEANER, 'start': '/contractors/team', 'target': 'join-invite'},
             {'say': 'She opens it, chooses a password and sees her schedule and job offers. Cleaners you '
                     'import are emailed this invite for you.',
              'page': _CLEANER, 'start': '/contractors/team'},
+        ],
+    },
+
+    # ── Commercial ─────────────────────────────────────────────────────────
+    # Find leads -> call sheet -> walkthrough -> quote -> account -> jobs.
+    # There is no spreadsheet import for commercial leads: Find new searches
+    # Google, and Add one types a business in. (Leads, then Missed contacts,
+    # imports a Google Ads export, but those are residential follow-up texts.)
+    {
+        'key': 'find-commercial-leads',
+        'title': 'Find commercial leads (businesses to call)',
+        'keywords': ['find businesses', 'find commercial leads', 'commercial leads', 'find leads',
+                     'businesses to clean', 'offices to clean', 'search for businesses', 'lead finder',
+                     'find new', 'prospects', 'prospecting', 'property managers', 'b2b leads',
+                     'add a business', 'add a lead', 'janitorial leads', 'commercial'],
+        'steps': [
+            {'say': 'Open Commercial, then Find leads, and press 🎯 Find new.',
+             'page': _LEADS, 'start': '/find-leads/', 'target': 'leads-tab-find'},
+            {'say': 'Pick Who do you want to call?, leave Calling for which brand? on "Work it out from the '
+                    'kind of business", type Where? as a city and state, and press 🎯 Find Businesses.',
+             'page': _LEADS, 'start': '/find-leads/?view=find', 'target': 'find-form'},
+            {'say': 'Untick any you do not want and press ➕ Add selected to call list. They land in Calls '
+                    'as a first call due today. Ones already on your list show ✓ added.',
+             'page': _LEADS, 'start': '/find-leads/?view=find'},
+            {'say': 'Met one yourself or got a referral? Press ➕ Add one, type the business name and what you '
+                    'know, and press ➕ Add to my call list.',
+             'page': _LEADS, 'start': '/find-leads/?view=add', 'target': 'add-lead-form'},
+        ],
+    },
+    {
+        'key': 'call-sheet',
+        'title': 'Call your commercial leads (the call sheet)',
+        'keywords': ['call sheet', 'call list', 'calling', 'cold call', 'cold calling', 'start calling',
+                     'call the next', 'log a call', 'log the call', 'follow-up date',
+                     'follow up date', 'callback', 'outcome', 'todays calls', "today's calls"],
+        'steps': [
+            {'say': 'Open Commercial. On 📞 Calls, press Start calling → (or Call the next 20 →).',
+             'page': _LEADS, 'start': '/find-leads/', 'target': 'start-calling'},
+            {'say': 'The next business due is on screen, with your call script under it. Press the 📞 button to '
+                    'ring them.',
+             'page': _CALL, 'start': '/find-leads/call', 'target': 'call-phone'},
+            {'say': 'No answer or Left a message? Press it. The next try is put on your calls for you and the '
+                    'next business opens.',
+             'page': _CALL, 'start': '/find-leads/call', 'target': 'call-quick'},
+            {'say': 'Spoke to someone? Press Spoke to someone and fill in who it was, their email, when their '
+                    'contract ends and what they said.',
+             'page': _CALL, 'start': '/find-leads/call', 'target': 'call-spoke'},
+            {'say': 'Press what they said: Booked a walkthrough 🎉 (put its date in "If they agreed to a '
+                    'walkthrough, when?"), They asked for info, Call me back, We\'re under contract, Use us as '
+                    'backup or Don\'t call again. The follow-up and its date are set for you.',
+             'page': _CALL, 'start': '/find-leads/call', 'target': 'call-outcomes'},
+            {'say': 'To pick the follow-up date yourself, open "Set the follow-up date yourself" and fill in What '
+                    'needs doing next and When before you press what they said.',
+             'page': _CALL, 'start': '/find-leads/call', 'target': 'call-followup'},
+        ],
+    },
+    {
+        'key': 'commercial-walkthrough',
+        'title': 'Record a walkthrough of a business',
+        'keywords': ['walkthrough', 'walk through', 'walk-through', 'site visit', 'site walk',
+                     'measure the building', 'book a walkthrough', 'walkthrough checklist',
+                     'ready to quote', 'hand to the owner'],
+        'steps': [
+            _open_lead(),
+            {'say': 'In 🚶 Walkthrough, choose the day under Book it for and the Time, and press 📅 Book '
+                    'walkthrough. It becomes their next step and shows on your Calendar.',
+             'page': _LEAD, 'start': '/find-leads/?view=everyone', 'target': 'walk-book'},
+            {'say': 'On site, open "Fill in the checklist on site": square feet, restrooms, how often, hours a '
+                    'visit, what they want cleaned, and one row per surface under Work areas.',
+             'page': _LEAD, 'start': '/find-leads/?view=everyone', 'target': 'walk-checklist'},
+            {'say': 'Press 💾 Save the walkthrough. Their next step becomes "Write and send the quote", due '
+                    'today, and the Walkthrough card shows a starting price once there is enough to price it.',
+             'page': _LEAD, 'start': '/find-leads/?view=everyone', 'target': 'walk-checklist'},
+            {'say': 'When a Sales login saves the walkthrough, or presses ✅ Ready to quote — hand to the owner, '
+                    'it is handed to you: you are emailed and it shows under 📝 Ready to quote on Commercial. '
+                    'Press 📝 Write the quote from this walkthrough to price it.',
+             'page': _LEAD, 'start': '/find-leads/?view=everyone'},
+        ],
+    },
+    {
+        'key': 'commercial-quote',
+        'title': 'Send a commercial quote',
+        'keywords': ['commercial quote', 'send a commercial quote', 'contract quote', 'proposal',
+                     'send a proposal', 'bid', 'office quote', 'quote a business', 'janitorial quote',
+                     'commercial proposal'],
+        'steps': [
+            _open_lead('Open Commercial, press 🏢 Everyone and press the business\'s name. (No lead? Open '
+                       'Commercial, then Quotes, and press + New Quote.)'),
+            {'say': 'Press 📝 Contract quote. What you know about them and their walkthrough is filled in.',
+             'page': _LEAD, 'start': '/find-leads/?view=everyone', 'target': 'lead-contract-quote'},
+            {'say': 'Check Contact Info. Contact Person and Email are needed to send it.',
+             'page': r'^/quotes/new$', 'start': '/quotes/new', 'target': 'cq-contact'},
+            {'say': 'Under Work Areas & Line Items, add each area and its lines, or under Pricing & Schedule '
+                    'set Service Frequency, Contract Term and the Price per Visit or Monthly Total.',
+             'page': r'^/quotes/new$', 'start': '/quotes/new', 'target': 'cq-pricing'},
+            {'say': 'Press 👁 Save & review before sending →. Nothing is sent yet.',
+             'page': r'^/quotes/new$', 'start': '/quotes/new', 'target': 'cq-review'},
+            {'say': 'Read the email they will get and fix anything under Before it goes out, then press 📨 Looks '
+                    'right — send. They accept or decline online; accepted, they become a commercial account.',
+             'page': r'^/quotes/\d+/review$', 'start': '/quotes/', 'target': 'cq-send'},
+        ],
+    },
+    {
+        'key': 'commercial-account',
+        'title': 'Turn a business into a commercial account',
+        'keywords': ['commercial account', 'make them an account', 'convert to account', 'won the contract',
+                     'they said yes', 'new commercial customer', 'add a commercial account',
+                     'commercial customer', 'turn a lead into a customer', 'convert a lead'],
+        'steps': [
+            _open_lead(),
+            {'say': 'Press 🎉 Make them an account.',
+             'page': _LEAD, 'start': '/find-leads/?view=everyone', 'target': 'lead-make-account'},
+            {'say': 'Fill in what you agreed: Contact person, Email (for invoices), How often, Billing per month '
+                    'or per visit, and the Amount.',
+             'page': r'^/commercial/convert/\d+$', 'start': '/find-leads/?view=everyone', 'target': 'convert-form'},
+            {'say': 'Press 🎉 Create commercial account. The business is marked won on your calls, with nothing '
+                    'left due.',
+             'page': r'^/commercial/convert/\d+$', 'start': '/find-leads/?view=everyone', 'target': 'convert-save'},
+            {'say': 'A quote they accept online makes the account for you. A business that was never on your '
+                    'calls? Open Commercial, then Accounts, and use ➕ Add a commercial account by hand.',
+             'page': _ACCOUNTS, 'start': '/commercial/', 'target': 'account-add'},
+        ],
+    },
+    {
+        'key': 'commercial-booking',
+        'title': 'Book a job for a commercial account',
+        # No "book" or "job" in these: those words are book-job's, and "how do
+        # I book a job" has to stay there. The title and steps carry them.
+        'keywords': ['commercial account', 'office clean', 'clean an office', 'commercial clean',
+                     'schedule a commercial clean', 'invoice a business', 'commercial invoice',
+                     'net 30', 'scope of work', 'account visit'],
+        'steps': [
+            {'say': 'Open Commercial, then Accounts, and press Open on the business.',
+             'page': _ACCOUNTS, 'start': '/commercial/', 'target': 'accounts-list'},
+            {'say': 'Press 📅 Book a job. The contact and address are filled in from the account.',
+             'page': _ACCOUNT, 'start': '/commercial/', 'target': 'account-book'},
+            {'say': 'Under The Job, check the square footage and How often, and tick the Scope of work. The '
+                    'customer and the cleaner both see it.',
+             'page': r'^/commercial/\d+/book$', 'start': '/commercial/', 'target': 'cbook-scope'},
+            {'say': 'Type the Price per visit, or press 💡 Suggest a price from the square footage. Estimated '
+                    'hours is what the cleaner\'s pay is built from.',
+             'page': r'^/commercial/\d+/book$', 'start': '/commercial/', 'target': 'cbook-price'},
+            {'say': 'Under Schedule, choose the Date and Time.',
+             'page': r'^/commercial/\d+/book$', 'start': '/commercial/', 'target': 'cbook-when'},
+            {'say': 'Under Payment, pick a card link (deposit or full payment) or an invoice (sent now, or the '
+                    'morning of the job), and press ✅ Book this job. Then give it to a cleaner.',
+             'page': r'^/commercial/\d+/book$', 'start': '/commercial/', 'target': 'cbook-pay'},
+        ],
+    },
+
+    # ── Hiring ─────────────────────────────────────────────────────────────
+    # Two guides: getting applicants in, then interview to hire. One would be
+    # nine steps. The order is the app's: video interview, approve (which
+    # sends the conditional offer and the background check link), they
+    # accept and join Team, then clearing the check marks them Hired.
+    {
+        'key': 'hiring',
+        'title': 'Hire cleaners: get them to apply',
+        'keywords': ['hire a cleaner', 'hire cleaners', 'hiring', 'hire', 'apply link', 'application link',
+                     'hiring page', 'job application', 'applications', 'applicants', 'recruit',
+                     'find cleaners', 'post a job', 'indeed', 'job ad'],
+        'steps': [
+            {'say': 'Open Hiring. Press Copy on "Your public application link" and post it with your job ad on '
+                    'Indeed (as the external apply link), Facebook, Nextdoor or Craigslist, or text it to someone. '
+                    'Job adverts to post, under Hiring, has adverts written for you.',
+             'page': _APPS, 'start': '/contractors/applications', 'target': 'apply-link'},
+            {'say': 'Applications land in this list. Anyone without cleaning experience or their own '
+                    'transportation is turned down politely for you; everyone else is emailed a video '
+                    'interview link about ten minutes later.',
+             'page': _APPS, 'start': '/contractors/applications', 'target': 'applications-list'},
+            {'say': 'Press Review to open an application. The box at the top says what to do next.',
+             'page': _APPS, 'start': '/contractors/applications', 'target': 'applications-list'},
+            {'say': 'Added someone by hand with + Add Applicant? Press 🎥 Send Interview Link (English & Spanish) '
+                    'on their application.',
+             'page': _APP, 'start': '/contractors/applications', 'target': 'app-send-interview'},
+        ],
+    },
+    {
+        'key': 'hire-cleaner',
+        'title': 'Interview, background check and hire an applicant',
+        'keywords': ['interview', 'video interview', 'watch interview', 'approve applicant', 'hire applicant',
+                     'make an offer', 'conditional offer', 'offer letter', 'background check',
+                     'bg check', 'clear background check', 'onboard'],
+        'steps': [
+            {'say': 'Open Hiring, then Interviews, and press ▶ Review next to someone whose interview is completed.',
+             'page': r'^/admin/interviews/?$', 'start': '/admin/interviews', 'target': 'interviews-list'},
+            {'say': 'Watch their answers. If you want them, press ✓ Approve Video — Request Background Check. '
+                    'They are emailed your conditional offer with a link for their background check.',
+             'page': r'^/admin/interviews/\d+$', 'start': '/admin/interviews', 'target': 'interview-approve'},
+            {'say': 'When they accept the offer, they are added to your Team and get their onboarding page: the '
+                    'work agreement, payment setup and start date.',
+             'page': r'^/admin/interviews/\d+$', 'start': '/admin/interviews'},
+            {'say': 'When their background check comes in, open their application. In Background Check, set '
+                    'Status to ✅ Cleared and press Save Background Check. They are marked Hired.',
+             'page': _APP, 'start': '/contractors/applications', 'target': 'app-bgcheck'},
+            {'say': 'Skipping the video for someone you trust? Press 💌 Send Conditional Offer Email on their '
+                    'application instead.',
+             'page': _APP, 'start': '/contractors/applications', 'target': 'app-send-offer'},
+        ],
+    },
+
+    # ── Getting set up ─────────────────────────────────────────────────────
+    {
+        'key': 'import-customers',
+        'title': 'Import your customers from a spreadsheet',
+        'keywords': ['import customers', 'import clients', 'import my customers', 'import my clients',
+                     'bring my clients', 'bring my customers', 'bring my clients over', 'move my customers',
+                     'customer list', 'client list', 'upload customers', 'upload clients',
+                     'migration toolbox', 'migration', 'switch from', 'move from', 'transfer my customers'],
+        'steps': [
+            {'say': 'Open Settings, then Migration Toolbox, and press Import clients.',
+             'page': r'^/migration/?$', 'start': '/migration/', 'target': 'import-clients'},
+            {'say': 'Save your list as a CSV with a heading row: name and email are needed; phone, address, city, '
+                    'zip and notes are optional. A history column is kept as a note, not turned into jobs.',
+             'page': r'^/migration/clients$', 'start': '/migration/clients', 'target': 'clients-example'},
+            {'say': 'For a recurring customer, add frequency (weekly, biweekly or monthly) and next_date written '
+                    'like 2026-11-03. Their visits go on your calendar as pending, with no price or cleaner yet.',
+             'page': r'^/migration/clients$', 'start': '/migration/clients', 'target': 'clients-example'},
+            {'say': 'Drag the file in, or click to choose it, and press Import.',
+             'page': r'^/migration/clients$', 'start': '/migration/clients', 'target': 'clients-file'},
+            {'say': 'Each customer is added. Rows with no name or email, or already a customer, are skipped and '
+                    'listed with the reason. Past jobs are not brought over.',
+             'page': r'^/migration/clients$', 'start': '/migration/clients'},
+        ],
+    },
+    {
+        'key': 'add-customer',
+        'title': 'Add a customer',
+        'keywords': ['add a customer', 'add customer', 'new customer', 'add a client', 'add client',
+                     'new client', 'create a customer', 'add someone i clean for',
+                     # Without these, "find a client" went to the commercial lead finder.
+                     'find a customer', 'find a client', 'look up a customer'],
+        'steps': [
+            {'say': 'Open Clients. Looking for one you have? Type in the search box. To add one, press '
+                    '+ Add customer.',
+             'page': r'^/bookings/clients/?$', 'start': '/bookings/clients', 'target': 'add-customer'},
+            {'say': 'Type their Name. Phone, email, address and notes can wait; email is needed to send them '
+                    'an invoice or receipt.',
+             'page': r'^/bookings/clients/new$', 'start': '/bookings/clients/new', 'target': 'customer-name'},
+            {'say': 'Press Add customer. Their page opens, ready to book them a job.',
+             'page': r'^/bookings/clients/new$', 'start': '/bookings/clients/new', 'target': 'customer-save'},
         ],
     },
 ]
