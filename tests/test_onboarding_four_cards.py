@@ -1,4 +1,4 @@
-"""Three cards and two go-live checks, one tap each, and the software does the rest.
+"""Four cards, one tap each, and the software does the rest.
 
 Setup used to be six steps, 217 words of prompts before a single answer, a
 1,339-word terms document presented as required reading, and two steps that
@@ -14,17 +14,18 @@ So setup is not filling in blanks. It is confirming the handful of defaults
 that are wrong for this particular business, and the software fills in
 everything it can work out by itself.
 
-Since 2026-10-24 the required three are details, prices and payments -- the
-owner is already the first cleaner, so there is no team step to do first. Terms
-and balances keep their one-tap cards, straight after, as go-live checks.
+Since 2026-10-24 the four are details, team, prices and payments. The team
+step is the owner setting herself up as a cleaner: signup already made her row
+(owner_cleaner.py), so the row alone does not tick it -- confirming it does.
+Terms and balances keep their one-tap cards, straight after, as go-live checks.
 
 What this holds:
-- Three required steps, and the timezone is not one of them: the ZIP decides.
+- Four required steps, and the timezone is not one of them: the ZIP decides.
 - Every required step arrives with its card already built, with no model call
   -- except payments, which is a link to Connections: bank details are never
   typed into the chat.
 - Payments is required but skippable -- amber, then red on a clock that
-  starts when the other two are done, never blocking the rest.
+  starts when the other three are done, never blocking the rest.
 - A business too new for a Google listing gets the same card, not a failure.
 """
 import os, sys, tempfile
@@ -38,8 +39,8 @@ sys.path.insert(0, ROOT)
 
 from app import create_app
 from extensions import db
-from models import BusinessSetting
-import onboarding, setup_assistant, zip_zones, business_lookup, automations
+from models import BusinessSetting, Staff, User
+import onboarding, owner_cleaner, setup_assistant, zip_zones, business_lookup, automations
 
 app = create_app()
 failures = []
@@ -60,14 +61,21 @@ with app.app_context():
     BusinessSetting.set('zip_code', '78751')
     BusinessSetting.set('timezone', zip_zones.zone_for_zip('78751'))
     db.session.commit()
+    # And, since #158, the owner's own cleaner row, made at signup.
+    owner = User(name='Dana Owner', username='dana@sparkle.test',
+                 password_hash='x', role='owner')
+    db.session.add(owner)
+    db.session.commit()
+    OWNER_ID = owner.id
+    owner_cleaner.ensure(owner, 'dana@sparkle.test')
 
 print('\n1. The timezone was never a question')
 check(zip_zones.zone_for_zip('78751') == 'America/Chicago',
       'an Austin ZIP is Central, worked out rather than asked')
 with app.app_context():
     keys = [s['key'] for s in onboarding.journey() if s.get('required')]
-check(keys == ['business', 'pricing', 'payments'],
-      f'three required steps, and timezone is not one of them: {keys}')
+check(keys == ['business', 'team', 'pricing', 'payments'],
+      f'four required steps, and timezone is not one of them: {keys}')
 with app.app_context():
     check(BusinessSetting.get('timezone') == 'America/Chicago',
           'and it is already set before the owner sees anything')
@@ -76,7 +84,7 @@ print('\n2. Every step arrives with its card, built without the model')
 with app.test_request_context():
     from flask import session
     session['role'] = 'owner'
-    # The required steps, the optional team and the two go-live checks. Payments'
+    # The four required steps and the two go-live checks after them. Payments'
     # prompt is longer -- it carries the "skip it for tonight" way out -- so it
     # is held to two short sentences' worth rather than one line.
     for key in ('business', 'team', 'pricing', 'terms', 'balance'):
@@ -102,12 +110,16 @@ with app.app_context(), app.test_request_context():
     team = setup_assistant.team_card()
     check(len(team) == 1 and team[0]['kind'] == 'team' and team[0]['step'] == 'team',
           'the team comes up as one card, not one per cleaner')
-    check('me' not in team[0],
-          'with no row for the owner: she is already the first cleaner')
-    check('already on the team' in team[0]['note'],
-          'and the card says so')
-    check('emailed' in team[0]['note'],
-          'and it says nobody is emailed until the owner chooses')
+    check(team[0]['me']['cleans'] is True and team[0]['me']['name'] == 'Dana Owner'
+          and team[0]['me']['email'] == 'dana@sparkle.test',
+          'with the owner already on it from her signup row, ticked as cleaning, so a solo owner just taps Save')
+    check(team[0]['label'] == 'Save' and 'Team page' in team[0]['note'],
+          'one Save, and hiring is pointed at the Team page, not asked here')
+    check(team[0]['team_link']['href'] == '/migration/team',
+          'with a way to the Team import for an owner who already has cleaners')
+    team_step = [s for s in onboarding.journey() if s['key'] == 'team'][0]
+    check(team_step['done'] is False,
+          'the row signup made does not tick the step: she has not looked at it yet')
     pay_link = setup_assistant.STEP_LINKS.get('payments')
     check(pay_link and pay_link[1] == '/settings/connections',
           'payments is a link to Connections, never a card asking for bank details')
@@ -178,21 +190,30 @@ with app.app_context():
     check(onboarding.payments_state() == 'red',
           'and red once it has been put off for three days')
 
-print('\n5. Finishing the three is being able to trade')
+print('\n5. Finishing the four is being able to trade')
 with app.app_context(), app.test_request_context():
     from flask import session
     session['role'] = 'owner'
+    session['user_id'] = OWNER_ID
     # Start the payments clock afresh: it is stamped by the other three.
     BusinessSetting.set('ready_at', '')
     BusinessSetting.set('phone', '(512) 555-0133')
     BusinessSetting.set('pricing_reviewed', '1')
     db.session.commit()
+    ok, _said = setup_assistant.save_form('team', {'me_cleans': '1', 'me_name': 'Dana Owner',
+                                                   'me_email': 'dana@sparkle.test',
+                                                   'me_phone': '(512) 555-0133'})
+    check(ok, f'the team card saves the owner as a cleaner ({_said})')
+    me = Staff.query.filter_by(is_owner=True).first()
+    check(Staff.query.count() == 1 and me.is_active and me.phone == '(512) 555-0133'
+          and not me.pay_rate,
+          'on the row signup made: no second row, active, her cell added, still not paid')
     p = onboarding.progress()
-    check(p['done'] == 2 and p['complete'] is False
+    check(p['done'] == 3 and p['complete'] is False
           and p['next_required']['key'] == 'payments',
-          f"two of three, and payments is what is left ({p['done']}/{p['total']})")
+          f"three of four, and payments is what is left ({p['done']}/{p['total']})")
     check((BusinessSetting.get('ready_at') or '').strip() != '',
-          'the payments clock starts once the other two are done')
+          'the payments clock starts once the other three are done')
     check(p['payments'] in ('amber', 'red'),
           'with payments being asked for, because it is not done')
     ok, _said = setup_assistant.accept_terms({'accepted': '1'})
@@ -206,8 +227,8 @@ with app.app_context(), app.test_request_context():
     integrations.set('stripe_secret_key', 'sk_live_fourcards')
     db.session.commit()
     p = onboarding.progress()
-check(p['complete'] is True and p['done'] == p['total'] == 3,
-      f"three of three, and able to trade ({p['done']}/{p['total']})")
+check(p['complete'] is True and p['done'] == p['total'] == 4,
+      f"four of four, and able to trade ({p['done']}/{p['total']})")
 check(p['payments'] == '', 'and the payments bar goes quiet once it is connected')
 check(p['next'] is not None, 'and something left to offer, one at a time')
 

@@ -125,7 +125,7 @@ STEP_PROMPTS = {
                  'details stay with you. No bank details to hand? Skip it for '
                  'tonight and it will be first on your list tomorrow.'),
     'booking_page': 'Want to put your booking page where customers can find it?',
-    'team': 'You’re already on the team, so you can give jobs to yourself. Add someone else whenever you hire.',
+    'team': 'Next, you. Check your details and tap Save.',
     'client': 'Add a customer you already clean for?',
     'job': 'Book a job and give it to yourself or a cleaner — that’s the whole loop.',
 }
@@ -520,22 +520,82 @@ def _owner_name():
     return ((u.name if u else '') or session.get('user_name') or '').strip()
 
 
-def team_card():
-    """The people she hires: a row per cleaner, typed or uploaded.
+def _owner_row():
+    from models import Staff
+    return Staff.query.filter_by(is_owner=True).first()
 
-    One card, not one per cleaner. The owner is already the first cleaner
-    (owner_cleaner.py), created with the account and given no pay, so there is
-    no row for her here: jobs can be given to herself without anybody being
-    added. This card is for the day she hires. Nothing here emails anybody:
-    inviting is done from each cleaner's page on the Team tab, when the owner
-    has told them (decided 2026-10-24 -- an invite card in the middle of setup
-    read as out of place).
+
+def team_card():
+    """Step 2 of 4: the owner, set up as her own first cleaner.
+
+    Signup already made her row (owner_cleaner.py); this is where she sees it
+    and says yes. Name, email and cell, already filled in, and "I clean jobs
+    myself" ticked -- a solo owner taps Save and is done. Unticked, her row is
+    kept off jobs and the button takes her to the Team import instead. Pay
+    and hiring live on the Team page, not here (decided 2026-10-24: each was a
+    question a brand-new owner may not be able to answer yet).
     """
-    return [{'kind': 'team', 'step': 'team', 'title': 'Your team',
-             'note': 'You’re already on the team. Add the people who clean for '
-                     'you — type them in, or upload a spreadsheet. Nobody is '
-                     'emailed.',
-             'label': 'Save my team'}]
+    row = _owner_row()
+    me = {'name': (row.name if row else '') or _owner_name(),
+          'email': (row.email if row else '') or _setting('email'),
+          'phone': (row.phone if row else '') or _setting('phone'),
+          'cleans': bool(row.is_active) if row else True}
+    card = {'kind': 'team', 'step': 'team', 'title': 'Your team',
+            'note': 'Start with you. Already have cleaners? You can add them, or '
+                    'upload your list, on the Team page once setup is done.',
+            'me': me, 'label': 'Save',
+            'team_link': {'label': 'Save and add my cleaners',
+                          'href': '/migration/team'}}
+    card['prefilled'] = bool(me['name'])
+    return [card]
+
+
+def save_owner(fields):
+    """Save step 2: the owner's own cleaner row, confirmed.
+
+    Ticked: her details on her row (made now if signup did not), active, so
+    jobs can go to her. Unticked: she does not clean, so her row stays but is
+    kept off jobs. Either way the step is done -- she has answered it."""
+    import owner_cleaner
+    from flask import session
+    from extensions import db
+    from models import BusinessSetting, User
+    cleans = str(fields.get('me_cleans') or '') in ('1', 'true', 'on', 'yes')
+    name = _clean(fields.get('me_name'), 100)
+    email = _clean(fields.get('me_email'), 120).lower()
+    phone = _clean(fields.get('me_phone'), 20)
+    if cleans:
+        if not name:
+            return False, 'Add your name.'
+        if email and not _email_ok(email):
+            return False, f'"{email}" does not look like a complete email address.'
+        if phone and not _phone_ok(phone):
+            return False, f'"{phone}" does not look like a full phone number.'
+        from blueprints.staff import _name_taken
+        clash = _name_taken(name)
+    row = _owner_row()
+    if row is None:
+        uid = session.get('user_id')
+        owner = User.query.get(uid) if uid else None
+        if owner is None:
+            return False, 'Sign in again, then press Save.'
+        row = owner_cleaner.ensure(owner, email)
+    if cleans:
+        if clash and clash.id != row.id:
+            return False, (f'You already have a team member called {clash.name}. '
+                           f'Add a surname or initial to tell you apart.')
+        row.name, row.is_active = name, True
+        if email:
+            row.email = email
+        if phone:
+            row.phone = phone
+    else:
+        row.is_active = False
+    BusinessSetting.set('team_confirmed', '1')
+    db.session.commit()
+    if cleans:
+        return True, f'You’re on your team as a cleaner, {name.split()[0]}.'
+    return True, 'Got it — you won’t be sent jobs. Add your cleaners on the Team page.'
 
 
 _EMAIL_IN = re.compile(r'[^\s,;<>]+@[^\s,;<>]+\.[^\s,;<>]+')
@@ -1376,6 +1436,10 @@ def save_form(step, fields):
             return False, 'Add at least one detail before saving.'
         return save_business(payload)
     if step == 'team':
+        # The setup card is the owner's own row; a list of other cleaners
+        # (from Nana, or an older page) still goes through save_team.
+        if 'me_cleans' in fields or 'me_name' in fields:
+            return save_owner(fields)
         return save_team(fields)
     if step == 'pricing':
         try:

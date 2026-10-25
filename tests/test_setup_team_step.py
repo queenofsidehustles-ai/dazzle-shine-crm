@@ -1,23 +1,23 @@
-"""The team step of setup: the people she hires, optional, after the first job.
+"""Step 2 of setup: the owner sets herself up as a cleaner.
 
-The owner is already the first cleaner (owner_cleaner.py), created with the
-account and given no pay, so a job can be given to herself before anybody is
-added and the team is not something setup makes her do first. This step is
-for the day she hires.
+Agreed with William on 2026-10-24 and restored 2026-10-25, after a merge had
+made the team an optional last step. Signup already creates the owner's own
+cleaner row (owner_cleaner.py, #158); this step is where she sees it and says
+yes, and it is the first thing setup gives back.
 
 What this holds:
-- Team is an optional step, last on the list, and arrives as one 'team' card
-  with no row for the owner.
-- One Save writes every cleaner on the card, typed or pasted.
-- One bad row saves nobody, so fixing it and pressing Save again works.
-- Names must be distinct -- a solo job pays the cleaner it names.
-- Pay is what the owner typed, never a default.
-- Saving emails nobody, and setup offers no invite card: inviting is done
-  from each cleaner's page on the Team tab.
-- An uploaded Excel or CSV file fills in rows to check and saves nothing.
-- Saving a card shows the next step's card once, not twice, and on reload a
-  finished step is a single ✓ line rather than its old card.
-- The plan's cleaner limit is checked before anything is written.
+- Team is required, second of four, and an auto-created owner row alone does
+  not finish it -- pressing Save does.
+- The card is just her: name, email, cell from her row, "I clean jobs myself"
+  ticked. No pay, no spreadsheet, no rows for anybody else.
+- Save updates her row (no second row is made) and finishes the step.
+  Unticked, her row is kept off jobs, and the step is still answered.
+- Hired cleaners added as a list (Nana, older pages) still go through one
+  all-or-nothing Save: distinct names, pay as typed or "not set", nobody
+  emailed, plan limit checked first.
+- The Team page import takes Excel or CSV.
+- Saving a card shows the next step's card once, and a finished step is one
+  ✓ line rather than its old card.
 """
 import os, sys, tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -75,27 +75,67 @@ def save(client, fields):
                        json={'step': 'team', 'fields': fields}, headers=H)
 
 
-print('\n1. Team is optional, and last')
+import owner_cleaner
+with app.app_context():
+    # What signup does now: the owner's own cleaner row, made for her.
+    owner_cleaner.ensure(User.query.get(OWNER_ID), 'mo@sparkle.test')
+
+print('\n1. Team is required, second of four, and not done just by signing up')
 with app.app_context():
     steps = onboarding.journey()
     keys = [s['key'] for s in steps if s.get('required')]
     team_step = next(s for s in steps if s['key'] == 'team')
-check(keys == ['business', 'pricing', 'payments'], f'the required steps have no team: {keys}')
-check(team_step.get('required') is False and steps[-1]['key'] == 'team',
-      'the team step is optional and comes last')
-check(team_step['done'] is False, 'and nobody hired yet means it is not done')
+    check(Staff.query.filter_by(is_owner=True).count() == 1, 'signup made her row')
+check(keys == ['business', 'team', 'pricing', 'payments'], f'details, team, prices, payments: {keys}')
+check(team_step['done'] is False, 'her row existing does not finish the step')
+check([s['key'] for s in steps].count('team') == 1, 'and there is no second, optional team step')
 
-print('\n2. It arrives as one team card, with no row for the owner')
+print('\n2. It arrives as one card about her, already filled in')
 with app.app_context(), app.test_request_context():
     from flask import session
     session['user_id'] = OWNER_ID
-    cards = setup_assistant.team_card()
-team = cards[0]
-check(len(cards) == 1 and team['kind'] == 'team' and team['step'] == 'team',
-      'one team card, not one per cleaner')
-check('me' not in team, 'there is no owner row: she is already the first cleaner')
-check('already on the team' in team['note'] and 'emailed' in team['note'],
-      'it says she is on the team, and that nobody is emailed')
+    _t, cards, key = setup_assistant.next_message()
+team = next((x for x in cards if x.get('kind') == 'team'), None)
+check(key == 'team', f'after details, the chat is on the team ({key})')
+check(team is not None and team.get('step_no') == 2 and team.get('step_total') == 4,
+      'Step 2 of 4')
+check(team and team['me']['name'] == 'Mo Lewis' and team['me']['email'] == 'mo@sparkle.test',
+      'her name and email are filled in from her row')
+check(team and team['me']['cleans'] is True, '"I clean jobs myself" is ticked')
+import json as _json
+blob = _json.dumps(team).lower()
+check('pay' not in blob and not team.get('upload'), 'nothing about pay, no spreadsheet')
+check(team and team.get('team_link', {}).get('href') == '/migration/team',
+      'and a way to the Team import for an owner who does not clean')
+
+print('\n2a. Save finishes it, on her own row')
+c = owner()
+r = save(c, {'me_cleans': '1', 'me_name': 'Mo Lewis', 'me_email': 'mo@sparkle.test',
+             'me_phone': '(407) 555-0100'})
+j = r.get_json()
+check(j['ok'], f'saved: {j["say"]}')
+with app.app_context():
+    rows = Staff.query.all()
+    me = Staff.query.filter_by(is_owner=True).one()
+    check(len(rows) == 1, f'no second row was made ({len(rows)})')
+    check(me.phone == '(407) 555-0100' and me.is_active, 'her row has her cell and is on jobs')
+    check(next(s for s in onboarding.journey() if s['key'] == 'team')['done'],
+          'the team step is done')
+nxt = [x for x in j['cards'] if x.get('kind') == 'form' and x.get('step') == 'pricing']
+check(len(nxt) == 1, 'and prices is next')
+
+print('\n2c. Unticked: she is kept off jobs, and the step is still answered')
+with app.app_context():
+    BusinessSetting.set('team_confirmed', '')
+    db.session.commit()
+r = save(c, {'me_cleans': '', 'me_name': 'Mo Lewis'})
+check(r.get_json()['ok'] and 'Team page' in r.get_json()['say'], f'saved: {r.get_json()["say"]}')
+with app.app_context():
+    check(not Staff.query.filter_by(is_owner=True).one().is_active, 'her row is off jobs')
+    check(next(s for s in onboarding.journey() if s['key'] == 'team')['done'], 'and the step is done')
+r = save(c, {'me_cleans': '1', 'me_name': 'Mo Lewis', 'me_email': 'mo@sparkle.test'})
+with app.app_context():
+    check(Staff.query.filter_by(is_owner=True).one().is_active, 'ticking it again puts her back on jobs')
 
 print('\n2b. The price card')
 with app.app_context(), app.test_request_context():
@@ -266,6 +306,7 @@ with app.app_context():
     for st in Staff.query.all():
         db.session.delete(st)
     BusinessSetting.set(f'setup_chat_{OWNER_ID}', '')
+    BusinessSetting.set('team_confirmed', '')
     BusinessSetting.set('phone', '')
     db.session.commit()
 c2 = owner()
@@ -278,9 +319,8 @@ with app.app_context(), app.test_request_context():
     session['user_id'] = OWNER_ID
     stored = setup_assistant.load_chat()
     shown = routes.for_display(stored)
-price_cards = sum(1 for m in shown for x in (m.get('cards') or [])
-                  if x.get('kind') == 'form' and x.get('step') == 'pricing')
-check(price_cards == 1, f'the next card, prices, is on screen once ({price_cards})')
+team_cards = sum(1 for m in shown for x in (m.get('cards') or []) if x.get('kind') == 'team')
+check(team_cards == 1, f'the next card, the team, is on screen once ({team_cards})')
 check(any(m.get('tick') == '✓ Your details' for m in shown),
       'the finished details step is one ✓ line')
 check(not any(x.get('kind') == 'form' and x.get('step') == 'business'
