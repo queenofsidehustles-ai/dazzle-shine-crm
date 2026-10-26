@@ -83,15 +83,16 @@ with app.app_context():
     sent.clear()
     page = press_send(c, b)
     check(len(emails()) == 2 and not texts(), 'the confirmation and deposit emails went; no texts')
-    check('text' in page.lower() and ('could not' in page.lower() or "didn't" in page.lower()),
+    check("text didn't go" in page.lower(),
           'she is told the text did not go, so she knows the customer has email only')
 
     print('\n2. The text goes, the email does not')
     state.update(email_ok=False, sms_ok=True)
+    b = a_booking()
     sent.clear()
     page = press_send(c, b)
     check(len(texts()) == 2 and not emails(), 'both texts went; no emails')
-    check('email' in page.lower() and 'could not' in page.lower(),
+    check("email didn't go" in page.lower(),
           'she is told the email did not go')
 
     print('\n3. A double-click')
@@ -109,6 +110,18 @@ with app.app_context():
         if f'/bookings/{b2.id}/send-confirmation' in page else ''
     check('onsubmit' in form or 'data-once' in form,
           'the Send button cannot be pressed twice while the first send is going')
+
+    print('\n3b. A send that reached nobody can be retried at once')
+    state.update(email_ok=False, sms_ok=False)
+    b5 = a_booking()
+    sent.clear()
+    press_send(c, b5)
+    state.update(email_ok=True, sms_ok=True)
+    press_send(c, b5)
+    check(len(sent) == 4, f'once the cause is fixed, pressing again sends it (got {len(sent)})')
+    sent.clear()
+    press_send(c, b5, kind='none')
+    check(len(sent) == 2, 'and a different send straight after is not mistaken for a double-click')
 
     print('\n4. The amount she is told is the amount the deposit page charges')
     from pricing import get_deposit

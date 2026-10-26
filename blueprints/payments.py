@@ -35,6 +35,12 @@ def send_payment_link(booking, kind='full'):
     return send_payment_link_detail(booking, kind)[0]
 
 
+def channel_detail(misses):
+    """[('email', why), ('text', why)] -> "the email didn't go (why); ...".
+    Empty when nothing failed."""
+    return '; '.join(f"the {ch} didn't go ({why.rstrip('.')})" for ch, why in misses)
+
+
 def send_payment_link_detail(booking, kind='full'):
     """As send_payment_link, but returns (ok, detail) so the owner can be told
     *why* nothing went out.
@@ -54,7 +60,7 @@ def send_payment_link_detail(booking, kind='full'):
     else:
         amt_text = f"${amount_due(booking):.2f}"
         sms_line = f"here's your invoice for {amt_text} — tap to pay securely"
-    sent, detail = False, ''
+    sent, misses = False, []
     if booking.email:
         try:
             ok, why = send_email(
@@ -73,19 +79,19 @@ def send_payment_link_detail(booking, kind='full'):
             )
             sent = sent or bool(ok)
             if not ok:
-                detail = why or 'the email was refused'
+                misses.append(('email', why or 'the email was refused'))
         except Exception as e:
-            detail = str(e)
+            misses.append(('email', str(e)))
     if booking.phone:
         try:
             ok, why = send_sms(booking.phone,
                                f"Hi {first}! {sms_line}: {url} — {_biz()}. Reply STOP to opt out.")
             sent = sent or bool(ok)
-            if not ok and not detail:
-                detail = why or 'the text was refused'
+            if not ok:
+                misses.append(('text', why or 'the text was refused'))
         except Exception as e:
-            if not detail:
-                detail = str(e)
+            misses.append(('text', str(e)))
+    detail = channel_detail(misses)
     if not sent and not detail:
         detail = 'no email address or phone number on this booking'
     return sent, detail

@@ -533,6 +533,8 @@
          style="width:100%;justify-content:center;margin-bottom:9px">👁 Preview the email &amp; text</a>
       <form method="POST" action="{{ url_for('bookings.send_confirmation', booking_id=booking.id) }}"
             data-tour="confirm-send"
+            {# One press, one send: a double-click would message the customer twice. #}
+            onsubmit="var s=this.querySelector('button[type=submit]');if(s){s.disabled=true;s.textContent='Sending…';}"
             style="display:flex;gap:7px;flex-wrap:wrap;align-items:center">
         <select name="pay_kind" aria-label="What to ask for with the confirmation"
                 style="flex:1;min-width:150px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;margin:0">
