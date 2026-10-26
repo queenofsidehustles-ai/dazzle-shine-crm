@@ -214,6 +214,9 @@ GUIDES = [
         'steps': [
             {'say': 'Open Team and press + Add someone directly.',
              'page': _TEAM, 'start': '/contractors/team', 'target': 'add-cleaner'},
+            {'say': 'Press Add a cleaner. (Office and sales people are added on this page too, '
+                    'as logins, not cleaners.)',
+             'page': r'^/staff/choose$', 'start': '/staff/choose', 'target': 'staff-choose-cleaner'},
             {'say': 'Type their full name, phone and email. Give each person a different name.',
              'page': r'^/staff/new$', 'start': '/staff/new', 'target': 'staff-name'},
             {'say': 'Under How they\'re paid, pick % of the job or Per hour and type the rate. Leave the '
