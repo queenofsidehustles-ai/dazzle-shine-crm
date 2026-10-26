@@ -134,27 +134,71 @@ with app.app_context():
     check(not ok and 'declined' in err.lower(), 'the owner sees the decline')
     check(len(failed_texts()) == 1, 'and the customer is told, as before')
 
-    print('\nCharged at Stripe, never recorded here: the webhook settles it')
-    b = booking()
-    CHARGES.clear()
-    MODE['next'] = 'timeout_after_charge'
-    payment_service.charge_balance(b)
-    pi_id = STRIPE[CHARGES[0]['idempotency_key']].id
     import blueprints.api as api
     api.integrations.stripe_webhook_secret = lambda *a, **k: 'whsec_test'
-    event = {'type': 'payment_intent.succeeded',
-             'data': {'object': {'id': pi_id, 'amount_received': 40000,
-                                 'metadata': {'booking_id': str(b.id), 'kind': 'balance'}}}}
     keep_ce = api.stripe.Webhook.construct_event
-    api.stripe.Webhook.construct_event = lambda *a, **k: event
-    try:
-        app.test_client().post('/api/stripe-webhook', data='{}',
-                               headers={'Stripe-Signature': 't=1,v1=x'})
-    finally:
-        api.stripe.Webhook.construct_event = keep_ce
+    RECEIPTS = []
+    import blueprints.payments as pay
+    pay._send_receipt = lambda b, m, amt: RECEIPTS.append((b.id, amt))
+
+    def deliver(pi):
+        event = {'type': 'payment_intent.succeeded', 'data': {'object': pi}}
+        api.stripe.Webhook.construct_event = lambda *a, **k: event
+        try:
+            return app.test_client().post('/api/stripe-webhook', data='{}',
+                                          headers={'Stripe-Signature': 't=1,v1=x'})
+        finally:
+            api.stripe.Webhook.construct_event = keep_ce
+
+    def timed_out_charge(b):
+        CHARGES.clear()
+        MODE['next'] = 'timeout_after_charge'
+        payment_service.charge_balance(b)
+        return {'id': STRIPE[CHARGES[0]['idempotency_key']].id, 'status': 'succeeded',
+                'amount_received': CHARGES[0]['amount'], 'currency': 'usd',
+                'customer': 'cus_x', 'metadata': CHARGES[0]['metadata']}
+
+    print('\nCharged at Stripe, never recorded here: the webhook settles it')
+    b = booking()
+    SMS.clear(); EMAILS.clear()
+    pi = timed_out_charge(b)
+    check(any(s.startswith('Charge not confirmed') for s in EMAILS),
+          'the owner is told the charge is unconfirmed and not to collect it')
+    r = deliver(pi)
     db.session.expire_all()
-    check(Booking.query.get(b.id).paid_at is not None,
-          'a succeeded off-session balance charge marks the job paid from the webhook')
+    check(r.status_code == 200 and Booking.query.get(b.id).paid_at is not None,
+          'the succeeded balance charge marks the job paid from the webhook')
+    check(Booking.query.get(b.id).stripe_payment_intent == pi['id'], 'with its intent id recorded')
+    check(RECEIPTS.count((b.id, 400.0)) == 1, 'and one receipt for $400')
+    deliver(pi)
+    check(RECEIPTS.count((b.id, 400.0)) == 1, 'Stripe sending it again records nothing more')
+    CHARGES.clear()
+    ok, err = payment_service.charge_balance(Booking.query.get(b.id))
+    check(not ok and not CHARGES, 'and the next hourly run finds nothing owed')
+
+    print('\nA webhook that does not belong to this booking is ignored')
+    b = booking()
+    pi = timed_out_charge(b)
+    deliver(dict(pi, customer='cus_someone_else'))
+    db.session.expire_all()
+    check(Booking.query.get(b.id).paid_at is None, 'a different Stripe customer does not settle it')
+    deliver(dict(pi, currency='eur'))
+    db.session.expire_all()
+    check(Booking.query.get(b.id).paid_at is None, 'nor does another currency')
+
+    print('\nThe price moved after the charge')
+    b = booking()
+    pi = timed_out_charge(b)
+    bb = Booking.query.get(b.id)
+    bb.price = 450
+    db.session.commit()
+    deliver(pi)
+    db.session.expire_all()
+    from blueprints.payments import amount_due
+    bb = Booking.query.get(b.id)
+    check(bb.paid_at is None and bb.amount_collected == 400.0,
+          f'the $400 that arrived is credited (collected {bb.amount_collected})')
+    check(amount_due(bb) == 50.0, f'and $50 still shows owed (got {amount_due(bb)})')
 
 if failures:
     print(f'\n❌ {len(failures)} failed:')

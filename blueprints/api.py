@@ -1466,6 +1466,20 @@ def stripe_webhook():
 
     if event['type'] == 'payment_intent.succeeded':
         pi = event['data']['object']
+        metadata = pi.get('metadata') or {}
+        if metadata.get('kind') in ('balance', 'autopay'):
+            # An off-session charge from payment_service. Normally it was
+            # recorded when Stripe answered; this is for when that answer never
+            # arrived. It is found by the booking id it carries, because a
+            # charge that timed out never had its intent id written down.
+            try:
+                target = Booking.query.get(int(metadata.get('booking_id') or 0))
+            except (TypeError, ValueError):
+                target = None
+            if target:
+                import payment_service
+                payment_service.record_offsession_success(target, pi)
+            return jsonify({'ok': True}), 200
         booking = Booking.query.filter_by(stripe_payment_intent=pi['id']).first()
         if booking:
             # Confirming the booking and saying nothing to the customer is how

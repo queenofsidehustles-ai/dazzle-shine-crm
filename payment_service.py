@@ -102,9 +102,25 @@ def charge_balance(booking) -> tuple:
         err = e.user_message or str(e)
         _notify_failed(booking, notify_email, err)
         return False, err
+    except UNKNOWN_OUTCOME as e:
+        # Stripe may well have taken the money; nobody here knows yet. This
+        # used to text the customer that her payment failed and tell the owner
+        # to collect it by hand -- the road to taking it twice. The next attempt
+        # sends the same idempotency key and gets the first answer back, and
+        # the payment_intent.succeeded webhook records it if it did go through.
+        _notify_unknown(booking, notify_email, str(e))
+        return False, ('Stripe did not answer, so this charge may or may not have '
+                       'gone through. Do not collect it another way; it will '
+                       'settle automatically.')
     except stripe.error.StripeError as e:
         _notify_failed(booking, notify_email, str(e))
         return False, str(e)
+
+
+# A timeout, a dropped connection, Stripe's own 5xx, or a 429: the request may
+# have been processed, or may be processed on a retry. Not a decline.
+UNKNOWN_OUTCOME = (stripe.error.APIConnectionError, stripe.error.APIError,
+                   stripe.error.RateLimitError)
 
 
 def autocharge(booking) -> tuple:
@@ -155,6 +171,68 @@ def autocharge(booking) -> tuple:
         return False, (e.user_message or str(e))
     except stripe.error.StripeError as e:
         return False, str(e)
+
+
+def record_offsession_success(booking, pi):
+    """Record a balance or auto-pay charge Stripe says succeeded, from the
+    payment_intent.succeeded webhook. This is the charge whose answer never
+    reached charge_balance/autocharge -- a timeout, or the process dying after
+    Stripe took the money -- so nothing here has recorded it.
+
+    Returns True if it recorded something. Safe to receive twice: an intent
+    already on the booking has been recorded, by this or by the charge itself."""
+    from blueprints.payments import amount_due, collected, mark_paid, sync_balance
+    from extensions import db
+    if pi.get('status', 'succeeded') != 'succeeded':
+        return False
+    if (pi.get('currency') or 'usd').lower() != 'usd':
+        return False
+    client = getattr(booking, 'client', None)
+    customers = {booking.stripe_customer_id,
+                 client.stripe_customer_id if client else None} - {None, ''}
+    if pi.get('customer') not in customers:
+        return False
+    if booking.stripe_payment_intent == pi.get('id'):
+        return False
+    received = int(pi.get('amount_received') or 0)
+    if received <= 0:
+        return False
+    booking.stripe_payment_intent = pi.get('id')
+    if received == int(round(amount_due(booking) * 100)):
+        if not mark_paid(booking, method='card'):
+            db.session.commit()
+        return True
+    # The price moved between the charge and now: credit what actually arrived
+    # rather than calling the job settled, so any difference still shows owed.
+    booking.amount_collected = round(collected(booking) + received / 100, 2)
+    sync_balance(booking)
+    db.session.commit()
+    return True
+
+
+def _notify_unknown(booking, notify_email, error_msg):
+    """Owner only. The customer is told nothing until there is something true
+    to tell her."""
+    amt = booking.balance_due if booking.balance_due else (booking.price or 0)
+    send_email(
+        to_email=notify_email,
+        to_name=branding.biz_name(),
+        from_name=f'{branding.biz_name()} Payments',
+        subject=f'Charge not confirmed yet: {booking.name} — ${amt:.2f}',
+        html=f"""
+<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
+  <h2 style="color:#d97706">Waiting on Stripe</h2>
+  <p>We asked Stripe to charge this balance and did not get an answer back, so it
+  may or may not have gone through.</p>
+  <p><strong>Customer:</strong> {booking.name}</p>
+  <p><strong>Booking #:</strong> {booking.id}</p>
+  <p><strong>Amount:</strong> ${amt:.2f}</p>
+  <p><strong>Detail:</strong> {error_msg}</p>
+  <p><strong>Please don't collect this another way yet.</strong> If Stripe took it, the
+  booking will be marked paid automatically. If it didn't, the next attempt will try
+  again without charging twice. The customer has not been told anything.</p>
+</div>""",
+    )
 
 
 def _notify_failed(booking, notify_email, error_msg):
