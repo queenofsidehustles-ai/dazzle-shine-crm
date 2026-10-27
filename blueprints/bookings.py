@@ -663,7 +663,7 @@ def _notify_customer(b, confirmation=True, pay_kind='none'):
     if not reachable:
         return ' ⚠️ No email or phone on this booking, so the customer was told nothing.'
 
-    sent, failed = [], []
+    sent, failed, partial = [], [], []
     # Both sends report by returning, not by raising. Calling them bare inside a
     # try and then appending to `sent` on the next line was the whole bug: a
     # confirmation and a deposit request that reached nobody still produced
@@ -674,6 +674,8 @@ def _notify_customer(b, confirmation=True, pay_kind='none'):
             ok, why = _send_booking_confirmation(b)
             if ok:
                 sent.append('confirmation 📩')
+                if why:
+                    partial.append(('confirmation', why))
             else:
                 failed.append(f'confirmation ({why})')
         except Exception as e:
@@ -686,6 +688,8 @@ def _notify_customer(b, confirmation=True, pay_kind='none'):
             ok, why = send_payment_link_detail(b, kind=pay_kind)
             if ok:
                 sent.append(label)
+                if why:
+                    partial.append((label.rstrip(' 💳'), why))
             else:
                 failed.append(f'{label} ({why})')
         except Exception as e:
@@ -702,8 +706,17 @@ def _notify_customer(b, confirmation=True, pay_kind='none'):
     for f in failed:
         flash(f'⚠️ Could not send the {f} to {b.name or "the customer"}. '
               f'Check the Sent Log for details.', 'warning')
+    # Went one way and not the other: she needs to know the customer has the
+    # email but not the text, or the reverse, before assuming she has both.
+    for what, why in partial:
+        flash(f'⚠️ Only part of the {what} reached {b.name or "the customer"}: {why}. '
+              f'Check the Sent Log for details.', 'warning')
 
     return (' Sent the ' + ' and '.join(sent) + '.') if sent else ''
+
+
+# A second identical press of Send within this long is a double-click.
+SEND_GUARD_SECONDS = 60
 
 
 @bookings_bp.route('/<int:booking_id>/send-confirmation', methods=['POST'])
@@ -716,8 +729,37 @@ def send_confirmation(booking_id):
     created — so if it didn't go out then, there was no way to send it at all
     short of writing the whole email by hand."""
     b = Booking.query.get_or_404(booking_id)
-    note = _notify_customer(b, confirmation=True,
-                            pay_kind=request.form.get('pay_kind', 'none'))
+    pay_kind = request.form.get('pay_kind', 'none')
+    if pay_kind not in ('deposit', 'full'):
+        pay_kind = 'none'
+    # A deposit already paid is not asked for again: the link would only tell
+    # her it has been paid. The confirmation still goes.
+    if pay_kind == 'deposit' and b.deposit_paid:
+        pay_kind = 'none'
+        flash('The deposit is already paid, so no deposit request was sent.', 'info')
+    # A double-click is not a resend. Claimed with one conditional UPDATE, so
+    # two presses landing together cannot both get through.
+    now = datetime.utcnow()
+    since = now - timedelta(seconds=SEND_GUARD_SECONDS)
+    claimed = (Booking.query
+               .filter(Booking.id == b.id,
+                       db.or_(Booking.customer_send_at.is_(None),
+                              Booking.customer_send_at < since,
+                              Booking.customer_send_kind != pay_kind,
+                              Booking.customer_send_kind.is_(None)))
+               .update({'customer_send_at': now, 'customer_send_kind': pay_kind},
+                       synchronize_session=False))
+    db.session.commit()
+    if claimed != 1:
+        flash(f'Already sent to {b.name or "the customer"} a moment ago, so it was not '
+              f'sent again. Wait a minute if you do mean to send it twice.', 'info')
+        return redirect(url_for('bookings.detail', booking_id=booking_id))
+    note = _notify_customer(b, confirmation=True, pay_kind=pay_kind)
+    if not note.strip():
+        # Nothing reached her, so pressing again once the cause is fixed is a
+        # retry, not a double-click.
+        b.customer_send_at = None
+        db.session.commit()
     flash(f'{b.name or "Customer"} —{note}' if note.strip()
           else 'Nothing was sent — check the Sent Log for why.',
           'success' if note.strip() else 'warning')
@@ -3280,10 +3322,14 @@ def _send_booking_confirmation(booking):
     Returns (ok, detail): ok is True when the email or the text actually went.
     It used to return nothing at all, and send_email reports a refusal by
     returning (False, detail) rather than raising, so the caller's try/except
-    could only ever conclude the confirmation had been sent."""
+    could only ever conclude the confirmation had been sent.
+
+    detail names each channel that did not go, even when the other did -- so a
+    True with a detail is a partial send. Nothing to send to at all is ok=False
+    with that said."""
     from notifications import send_email, send_sms
     subject, html, sms = confirmation_content(booking)
-    ok, detail = False, ''
+    ok, misses = False, []
 
     if booking.email:
         try:
@@ -3291,20 +3337,21 @@ def _send_booking_confirmation(booking):
                                      subject=subject, html=html, cc=booking.cc_email)
             ok = ok or bool(mailed)
             if not mailed:
-                detail = why or 'the email was refused'
+                misses.append(('email', why or 'the email was refused'))
         except Exception as e:
-            detail = str(e)
+            misses.append(('email', str(e)))
 
     if booking.phone:
         try:
             texted, why = send_sms(booking.phone, sms)
             ok = ok or bool(texted)
-            if not texted and not detail:
-                detail = why or 'the text was refused'
+            if not texted:
+                misses.append(('text', why or 'the text was refused'))
         except Exception as e:
-            if not detail:
-                detail = str(e)
+            misses.append(('text', str(e)))
 
+    from blueprints.payments import channel_detail
+    detail = channel_detail(misses)
     if not ok and not detail:
         detail = 'no email address or phone number on this booking'
     return ok, detail

@@ -155,6 +155,11 @@ class Booking(db.Model):
     # set and stay silent — including when it was the only one that would have
     # sent the receipt.
     deposit_notified_at = db.Column(db.DateTime)
+    # The last press of the booking page's Send button, and what it asked for.
+    # A second identical press within SEND_GUARD_SECONDS is a double-click, not
+    # a resend. Migration 0040.
+    customer_send_at = db.Column(db.DateTime)
+    customer_send_kind = db.Column(db.String(10))
     deposit_method = db.Column(db.String(20))  # card, cash, zelle, venmo, check, other
     deposit_token = db.Column(db.String(64))   # unique link for paying deposit after a tentative booking
     tip_amount = db.Column(Money, default=0)  # customer's tip — belongs to the cleaner, never revenue
