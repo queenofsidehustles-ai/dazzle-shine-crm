@@ -60,6 +60,22 @@ def index():
     return render_template('admin/staff.html', staff=staff)
 
 
+@staff_bp.route('/choose')
+@owner_required
+def choose():
+    """Add a team member: a cleaner, or somebody in the office?
+
+    A cleaner is a Staff row (pay, agreement, W-9, a seat on the job list).
+    Everybody else -- an office admin, a dispatcher, somebody who finds new
+    business -- is a login with a role, made on the Team logins page. This only
+    asks first, because the Add button used to open the cleaner form for
+    everybody and nothing on this page said the other kind existed."""
+    import entitlements
+    return render_template(
+        'admin/staff_choose.html',
+        logins_locked=not entitlements.can('team_logins'))
+
+
 @staff_bp.route('/new', methods=['GET', 'POST'])
 @owner_required
 def new():

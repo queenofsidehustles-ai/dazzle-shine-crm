@@ -2383,6 +2383,9 @@ class User(db.Model):
     # Calls a day the owner expects of a Sales rep. Empty: the company's
     # default (BusinessSetting 'sales_daily_calls').
     daily_call_target = db.Column(db.Integer)
+    # 'employee' or 'contractor' for an office or sales login (a cleaner's own
+    # Staff row has its own). NULL on every login made before this was asked.
+    worker_model = db.Column(db.String(20))
     totp_backup_codes = db.Column(db.Text)  # JSON list of hashed one-time codes
 
     def set_password(self, pw):

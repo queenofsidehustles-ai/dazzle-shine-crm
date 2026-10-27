@@ -50,8 +50,11 @@ with app.app_context():
 
     print('\n1. The team page offers a way on that is not the hiring pipeline')
     page = c.get('/contractors/team').get_data(as_text=True)
-    check('/staff/new' in page,
+    check('/staff/choose' in page,
           'there is a link to add someone directly — there was no link at all before')
+    choose = c.get('/staff/choose').get_data(as_text=True)
+    check('/staff/new' in choose,
+          'and the page it opens still leads to the cleaner form')
 
     print('\n2. Adding someone takes their pay rather than assuming it')
     form = c.get('/staff/new').get_data(as_text=True)

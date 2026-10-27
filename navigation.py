@@ -191,6 +191,7 @@ BELONGS_TO = {
     'interviews.offer_preview': 'interviews.admin_interviews',
     'staff.index': 'contractors.team',
     'staff.new': 'contractors.team',
+    'staff.choose': 'contractors.team',
     'staff.edit': 'contractors.team',
     'scripts.new': 'scripts.index',
     'scripts.edit': 'scripts.index',

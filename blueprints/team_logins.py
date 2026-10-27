@@ -37,18 +37,32 @@ def add():
     name = (request.form.get('name') or '').strip()
     email = (request.form.get('email') or '').strip().lower()
     role = rbac.canonical_role(request.form.get('role'))
+    back = 'team_logins.index'
     if not role:
         flash('Choose a valid account role.', 'error')
-        return redirect(url_for('team_logins.index'))
+        return redirect(url_for(back))
+    # Employee or contractor. Optional, so a login made without it is unchanged.
+    worker_model = (request.form.get('worker_model') or '').strip().lower() or None
+    if worker_model not in (None, 'employee', 'contractor'):
+        flash('Choose employee or contractor.', 'error')
+        return redirect(url_for(back))
+    # Checked here, not only where the button is hidden: the plan's limit on
+    # office logins is a fact about the account, and this URL is reachable
+    # without the button.
+    import entitlements
+    ok, why = entitlements.check_limit('office_logins')
+    if not ok:
+        flash(why, 'error')
+        return redirect(url_for('billing.upgrade', feature='office_logins'))
     if not name or not email:
         flash('Please fill in name and email address.', 'error')
-        return redirect(url_for('team_logins.index'))
+        return redirect(url_for(back))
     if not looks_like_email(email):
         flash('That does not look like an email address.', 'error')
-        return redirect(url_for('team_logins.index'))
+        return redirect(url_for(back))
     if User.query.filter_by(username=email).first():
         flash(f'"{email}" already has a login.', 'error')
-        return redirect(url_for('team_logins.index'))
+        return redirect(url_for(back))
     # A Sales rep's leads and commission are filed under their name, so two
     # reps -- or a rep and anybody else -- sharing one would share a call
     # list and each other's credit. Asked for here, once, rather than
@@ -60,10 +74,11 @@ def add():
     if same.first():
         flash(f'There is already a login called "{name}". Add a surname or an '
               'initial, so each Sales rep\'s leads and commission stay their own.', 'error')
-        return redirect(url_for('team_logins.index'))
+        return redirect(url_for(back))
 
     import secrets
-    u = User(name=name, username=email, role=role, active=True)
+    u = User(name=name, username=email, role=role, active=True,
+             worker_model=worker_model)
     # Nobody is ever told this -- it exists only because the column can't be
     # empty. She sets the password that actually works on the invite link
     # below, same as everyone else's now does.
@@ -84,9 +99,9 @@ def add():
     raw, _tok = LoginToken.issue(u, 'invite', email=email)
     _send_invite(u, _invite_url(raw))
 
-    flash(f'Invited {name} as {rbac.role_label(role)} — she chooses her own '
-          f'password when she opens the link. ✅', 'success')
-    return redirect(url_for('team_logins.index'))
+    flash(f'Invited {name} as {rbac.role_label(role)} — they choose their own '
+          f'password when they open the link. ✅', 'success')
+    return redirect(url_for(back))
 
 
 @team_logins_bp.route('/<int:user_id>/toggle', methods=['POST'])

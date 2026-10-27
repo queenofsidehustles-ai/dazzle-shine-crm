@@ -35,6 +35,14 @@
         {% endfor %}
       </select>
     </div>
+    <div style="min-width:180px">
+      <label style="display:block;font-size:0.8rem;color:var(--softer);margin-bottom:4px">Works as</label>
+      <select name="worker_model" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px">
+        <option value="">Not recorded</option>
+        <option value="employee">Employee</option>
+        <option value="contractor">Independent contractor</option>
+      </select>
+    </div>
     <button type="submit" class="btn" style="padding:11px 22px">Create login</button>
   </form>
 </div>
@@ -44,13 +52,14 @@
   {% if users %}
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last login</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Works as</th><th>Status</th><th>Last login</th><th>Actions</th></tr></thead>
       <tbody>
         {% for u in users %}
         <tr>
           <td><strong>{{ u.name }}</strong></td>
           <td>{{ u.username }}</td>
           <td>{{ role_label(u.role) }}</td>
+          <td style="font-size:0.85rem">{{ {'employee': 'Employee', 'contractor': 'Contractor'}.get(u.worker_model, '—') }}</td>
           <td>
             {% if u.active %}<span class="status status-completed">Active</span>
             {% else %}<span class="status status-cancelled">Disabled</span>{% endif %}

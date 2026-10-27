@@ -1,0 +1,32 @@
+{% extends "base_admin.html" %}
+{% block title %}Add Team Member — {{ BIZ }} CRM{% endblock %}
+{% block page_title %}Add Team Member{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('contractors.team') }}" class="btn btn-outline" style="padding:7px 16px;font-size:0.88rem">← Back to Team</a>
+{% endblock %}
+
+{% block content %}
+<div class="card" style="margin-bottom:18px">
+  <h3 style="margin:0 0 4px">🧹 A cleaner</h3>
+  <p style="color:var(--softer);font-size:0.88rem;margin:0 0 14px">
+    Does the cleaning jobs. Goes on the job list, is paid per job, and can have
+    an agreement, W-9 and payouts set up.
+  </p>
+  <a href="{{ url_for('staff.new') }}" data-tour="staff-choose-cleaner" class="btn btn-gold">Add a cleaner →</a>
+</div>
+
+<div class="card">
+  <h3 style="margin:0 0 4px">🗂️ Someone in the office, or who finds new business</h3>
+  <p style="color:var(--softer);font-size:0.88rem;margin:0 0 14px">
+    An office admin, a dispatcher, or a sales / business-development person gets their
+    own login and sees only what their role needs. They are not on the cleaner list and
+    do not use up a cleaner seat.
+  </p>
+  {% if logins_locked %}
+  <p style="margin:0">Logins for office and sales people are on the Pro plan.
+    <a href="{{ url_for('billing.upgrade', feature='team_logins') }}" style="color:var(--amber)">See plans →</a></p>
+  {% else %}
+  <a href="{{ url_for('team_logins.index') }}" class="btn btn-outline">Add a login →</a>
+  {% endif %}
+</div>
+{% endblock %}
