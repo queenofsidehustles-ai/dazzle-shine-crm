@@ -9,8 +9,8 @@ means "not recorded", and nothing treats NULL as either.
 from alembic import op
 import sqlalchemy as sa
 
-revision = '0040_user_worker_model'
-down_revision = '0039_call_recording_consent'
+revision = '0041_user_worker_model'
+down_revision = '0040_booking_send_guard'
 branch_labels = None
 depends_on = None
 
