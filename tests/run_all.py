@@ -34,6 +34,10 @@ import release  # noqa: E402
 PER_SUITE_SECONDS = 900
 MAX_AUTO_JOBS = 4
 
+# What the suites that read TEST_POSTGRES_URL fall back to when it is not set
+# (28 of them spell it out, and tests/fresh_postgres.py does too).
+DEFAULT_POSTGRES_URL = 'postgresql://app_user:localtest@127.0.0.1:5432/postgres'
+
 # The slowest suites, longest first (seconds on one CPU, October 2026). Started
 # first so the last minutes of a parallel run are short suites, not one long
 # one left running alone. Only the order depends on this: a suite missing from
@@ -153,10 +157,22 @@ def main(argv=None):
 
     suites = order_suites((ROOT / 'tests').glob('test_*.py'))
     jobs = min(args.jobs, len(suites))
-    base = os.environ.get('TEST_POSTGRES_URL')
+    explicit = os.environ.get('TEST_POSTGRES_URL')
+    base = explicit or DEFAULT_POSTGRES_URL
     worker_urls = {}
-    if jobs > 1 and base:
-        worker_urls = create_worker_databases(base, jobs)
+    if jobs > 1:
+        # The suites share one database whether or not it was named: with the
+        # variable unset they use the default above. So isolate that one too.
+        try:
+            worker_urls = create_worker_databases(base, jobs)
+        except Exception as e:  # noqa: BLE001
+            if explicit:
+                raise      # CI or a developer named a server and it did not work
+            # Nothing is listening at the default: the suites that need
+            # PostgreSQL skip, and the others use their own SQLite files, so
+            # there is no shared database to keep them out of.
+            print(f'No PostgreSQL at the default address ({type(e).__name__}); '
+                  f'the database suites will skip. Running in parallel anyway.', flush=True)
     if jobs > 1:
         print(f'Running {len(suites)} suites, {jobs} at a time'
               + (' (a database each)' if worker_urls else ''), flush=True)

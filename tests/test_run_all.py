@@ -51,6 +51,14 @@ check(ra.worker_url(base, 3) == 'postgresql+psycopg2://postgres:pw@localhost:543
 check(ra.worker_url('postgresql+psycopg2://u:p@h/db', 1).endswith('/db_w1'), 'an already-named driver is kept')
 check(len({ra.worker_url(base, n) for n in range(1, 5)}) == 4, 'every worker gets its own')
 
+print('\n3b. The default database is the one the suites fall back to')
+import fresh_postgres, re
+check(ra.DEFAULT_POSTGRES_URL in (ROOT / 'tests' / 'fresh_postgres.py').read_text(),
+      'the runner isolates the same default that fresh_postgres uses')
+direct = [p for p in (ROOT / 'tests').glob('test_*.py')
+          if ra.DEFAULT_POSTGRES_URL in p.read_text()]
+check(len(direct) >= 20, f'and the one the suites that read it directly spell out ({len(direct)} of them)')
+
 print('\n4. A suite runs in its own process with the worker\'s environment')
 with tempfile.TemporaryDirectory() as d:
     ok_script = Path(d) / 'test_ok.py'
