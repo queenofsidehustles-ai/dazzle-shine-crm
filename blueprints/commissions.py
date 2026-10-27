@@ -106,7 +106,7 @@ def walkthroughs():
     week = wp.parse_week(request.args.get('week'))
     return render_template('admin/walkthrough_pay.html', s=wp.statement(week),
                            prev=week - timedelta(days=7), next=week + timedelta(days=7),
-                           current=wp.last_week_start() == week)
+                           current=wp.last_week_start() == week, over=wp.is_over(week))
 
 
 @commissions_bp.route('/walkthroughs/mark-paid', methods=['POST'])
@@ -124,7 +124,10 @@ def walkthroughs_mark_paid():
         return redirect(url_for('commissions.walkthroughs'))
     back = redirect(url_for('commissions.walkthroughs', week=week.isoformat()))
     pay, created = wp.mark_paid(user_id, week, request.form.get('method', 'zelle'))
-    if pay is None:
+    if pay is None and not wp.is_over(week):
+        flash('That week is not over yet. Bookings can still be added to it, so it can be paid '
+              'from Monday.', 'warning')
+    elif pay is None:
         flash('There are no walkthroughs to pay for that week.', 'warning')
     elif not created:
         flash(f'{pay.user_name} was already marked paid for that week '

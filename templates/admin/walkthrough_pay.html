@@ -52,6 +52,8 @@
         onsubmit="return confirm('Undo this payment record? It will stop counting as an expense.')">
     <button type="submit" class="btn btn-outline" style="padding:5px 14px;font-size:0.78rem">Undo — mark unpaid</button>
   </form>
+  {% elif not over %}
+  <div style="font-size:0.86rem;color:var(--softer)">This week is not over, and more can still be booked. It can be paid from Monday.</div>
   {% else %}
   <form method="POST" action="{{ url_for('commissions.walkthroughs_mark_paid') }}"
         style="display:flex;gap:7px;align-items:center;flex-wrap:wrap"

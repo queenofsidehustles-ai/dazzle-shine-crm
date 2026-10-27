@@ -176,7 +176,21 @@ with app.app_context():
     check(gone is not None and gone.user_name == 'Ana Closer' and float(gone.amount) == 160.0,
           'it can still be paid, under the name it was booked with')
 
-    print('\n9. The rate is a setting')
+    print('\n9. A week cannot be paid before it has ended')
+    from scheduling import local_today
+    this_week = wp.week_of(local_today())
+    live = Prospect(business_name='This Week Co'); db.session.add(live); db.session.commit()
+    rep2 = mk_user('Lee Newer', model='employee')
+    book(rep2, live, datetime.utcnow()); db.session.commit()
+    check(len(wp.credited(this_week).get(rep2.id, [])) == 1, 'this week\'s booking is counted')
+    html3 = owner.get(f'/commissions/walkthroughs?week={this_week.isoformat()}').get_data(as_text=True)
+    check('not over' in html3 and 'Mark $' not in html3, 'the page offers no Mark paid for it')
+    owner.post('/commissions/walkthroughs/mark-paid', headers=H, data={'user_id': rep2.id, 'week': this_week.isoformat()})
+    check(WalkthroughPayment.query.filter_by(user_id=rep2.id).count() == 0, 'and a posted request is refused')
+    check(wp.is_over(monday) and not wp.is_over(this_week) and wp.is_over(this_week, this_week + timedelta(days=7)),
+          'a week is over once its Sunday has passed')
+
+    print('\n10. The rate is a setting')
     st = owner.get('/commissions/settings').get_data(as_text=True)
     check('va_walkthrough_booked' in st, 'the owner can change it with the other rates')
 

@@ -35,6 +35,14 @@ def last_week_start(today=None):
     return week_of(today or local_today()) - timedelta(days=7)
 
 
+def is_over(week_start, today=None):
+    """Whether the week has ended in the business's own days. A week is paid
+    once, at the figure of the day it is marked, so it cannot be marked while
+    bookings can still be added to it."""
+    from scheduling import local_today
+    return (today or local_today()) > week_start + timedelta(days=6)
+
+
 def parse_week(value, today=None):
     """A Monday from ?week=YYYY-MM-DD (any day of the week is accepted), or last
     week when it is missing or not a date."""
@@ -129,6 +137,8 @@ def mark_paid(user_id, week_start, method='zelle'):
     existing = WalkthroughPayment.query.filter_by(user_id=user_id, week_start=week_start).first()
     if existing:
         return existing, False
+    if not is_over(week_start):
+        return None, False
     user = db.session.get(User, user_id)
     rows = credited(week_start).get(user_id, [])
     n, amount = len(rows), round(len(rows) * rate(), 2)
