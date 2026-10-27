@@ -63,4 +63,5 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - name: Run every suite
-        run: python tests/run_all.py
+        # In parallel: one worker per CPU (at most four), each with its own database.
+        run: python tests/run_all.py --jobs auto
