@@ -250,6 +250,36 @@ def legal_address():
     return [ln.strip() for ln in raw.split('\n') if ln.strip()]
 
 
+# Who is behind the product, for /about and article bylines. Here rather than
+# in a template for the same reason as the legal entity: these are OUR people
+# and the cleaning companies they run, one copy of them, and test_whitelabel
+# proves none of it reaches a cleaning company's CRM. Shown only on our own
+# domain -- a private deployment has its own founders, or none.
+FOUNDERS = [
+    {
+        'name': 'Monica Lewis',
+        'where': 'Orlando, Florida',
+        'locality': 'Orlando', 'region': 'FL',
+        'companies': ['Dazzle & Shine Maids', 'L&M Commercial Cleaners'],
+        'bio': ('Owns Dazzle & Shine Maids, a residential cleaning company, and '
+                'L&M Commercial Cleaners, which cleans offices and commercial buildings.'),
+    },
+    {
+        'name': 'William Adofo',
+        'where': 'Maryland/DC area',
+        'locality': '', 'region': '',
+        'area_served': 'Maryland and Washington, DC',
+        'companies': ['Cleaning Wonder'],
+        'bio': 'Owns Cleaning Wonder, a cleaning company serving Maryland and the DC area.',
+    },
+]
+
+
+def founders():
+    """The founders to show, or [] off our own domain."""
+    return FOUNDERS if domain() == 'akyehq.com' else []
+
+
 def is_product_site():
     """True only on the product's own domain, signed out or not.
 

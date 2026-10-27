@@ -191,7 +191,11 @@ def wake_renewals(today=None):
     from extensions import db
     from models import Prospect
     today = today or local_today().isoformat()
-    horizon = (local_today() + timedelta(days=RENEWAL_LEAD_DAYS)).isoformat()
+    # From the day we were given, not the wall clock: a caller (or a test)
+    # asking "what wakes on the 6th?" must get the 6th's answer. Measuring from
+    # local_today() made that question silently answer for today instead.
+    from datetime import date
+    horizon = (date.fromisoformat(today) + timedelta(days=RENEWAL_LEAD_DAYS)).isoformat()
 
     woken = 0
     for p in Prospect.query.filter(

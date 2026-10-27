@@ -1,0 +1,50 @@
+{% extends "marketing/_shell.html" %}
+{# Every name, company and place on this page comes from product.FOUNDERS, so
+   there is one copy of them and test_whitelabel can prove none of it reaches a
+   cleaning company's CRM. Nothing about the founders is typed here. #}
+{% block title %}About {{ PRODUCT }}: Made by Cleaning Company Owners{% endblock %}
+{% block description %}{{ PRODUCT }} comes from two people who run cleaning companies: {{ founders_summary }}.{% endblock %}
+{% block head_extra %}
+<script type="application/ld+json">
+{{ founders_ld|safe }}
+</script>
+<style>
+  .about { max-width: 680px; }
+  .about h2 { font-size: 1.35rem; margin-top: 2.2rem; }
+  .people { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); margin-top: 26px; }
+  .people .card h3 { margin: 0 0 4px; }
+  .people .card .role { color: var(--softer); font-size: .9rem; margin: 0 0 10px; }
+</style>
+{% endblock %}
+{% block body %}
+<section>
+  <div class="wrap about">
+    <h1>Made by people who run cleaning companies</h1>
+    <p class="lead">{{ PRODUCT }} is the back office our own cleaning companies run on:
+      quotes, scheduling, jobs sent to the whole crew, per-job pay, hiring and proof the
+      work got done.</p>
+
+    <div class="people">
+      {% for p in founders %}
+      <div class="card">
+        <h3>{{ p.name }}</h3>
+        <p class="role">Co-founder &middot; {{ p.where }}</p>
+        <p>{{ p.bio }}</p>
+      </div>
+      {% endfor %}
+    </div>
+
+    <h2>Why it exists</h2>
+    <p>Running a cleaning company is quoting, chasing, scheduling, covering call-outs and
+      working out what everybody is owed, on top of the cleaning. We wanted one place that
+      did that the way a cleaning company actually works, so that is what {{ PRODUCT }}
+      is. Our own companies use it every day.</p>
+    <p>It doesn&rsquo;t replace the work. You still answer the phone, knock on doors and
+      show up. It just means fewer Sunday nights with a spreadsheet.</p>
+
+    <h2>Get in touch</h2>
+    <p>{% if SUPPORT_EMAIL %}Questions go to <a href="mailto:{{ SUPPORT_EMAIL }}">{{ SUPPORT_EMAIL }}</a>.{% endif %}
+      {% if signups_open %}Or <a href="/signup">start free</a>, no card needed.{% endif %}</p>
+  </div>
+</section>
+{% endblock %}

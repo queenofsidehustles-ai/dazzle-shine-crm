@@ -1,4 +1,6 @@
 {% extends "marketing/_shell.html" %}
+{% block title %}Cleaning Business Software: Hire, Pay and Prove the Work{% endblock %}
+{% block description %}{{ PRODUCT }} helps cleaning companies hire cleaners, pay them per job, and prove the work got done. Free plan for you plus 2 cleaners, no card.{% endblock %}
 
 {% block head_extra %}
 <style>
@@ -301,9 +303,9 @@
           ('What does ' ~ PRODUCT ~ ' actually do?',
            'It runs the operating side of a cleaning company: quoting and booking customers, scheduling jobs, assigning or broadcasting them to cleaners, working out what each cleaner is owed per job, keeping checklists and photos as proof, and tracking what you kept after pay and fees. Hiring is built in.'),
           ('Do my cleaners need to download an app?',
-           'No. They get a text with a link. They tap it and the job is there, with the address, entry notes, what they earn, the checklist and a Navigate button. No account, no password, nothing to install.'),
+           'No. On Pro and Scale they get a text with a link (the free plan has no texting). They tap it and the job is there, with the address, entry notes, what they earn, the checklist and a Navigate button. No account, no password, nothing to install.'),
           ('Is there a free plan?',
-           'Yes, with no card. Three cleaners, twenty jobs a month, your own booking page, and the whole job flow from booking through to getting paid.'),
+           'Yes, with no card. You plus 2 cleaners, twenty jobs a month, your own booking page, and the whole job flow from booking through to getting paid.'),
           ('Does it handle contractor pay and 1099s?',
            'It works out what each cleaner is owed — by percentage, hourly rate, or a flat amount per job — keeps a running yearly total, and collects W-9s during contractor onboarding. It is a record-keeping tool, not a payroll provider, and it takes no view on whether somebody is a contractor or an employee.'),
           ('Will it work for landscaping or pressure washing?',
@@ -421,8 +423,8 @@
           <li><span class="tick">✓</span> The checklist, photos and the customer's signature</li>
         </ul>
         <p style="color:var(--softer);margin-top:20px;font-size:.92rem">
-          Every competitor makes a cleaner download an app, create an account and
-          remember a password. Then pays for the support calls when she can't log in.
+          No app to download, no account to make and no password to forget &mdash;
+          so no support calls when somebody can't log in.
         </p>
       </div>
       <div class="shot" style="max-width:300px;margin:0 auto">
@@ -633,7 +635,7 @@
       </details>
       <details>
         <summary>Is there really a free plan?</summary>
-        <div class="a">Yes, and no card is needed. Three cleaners, twenty jobs a month,
+        <div class="a">Yes, and no card is needed. You plus 2 cleaners, twenty jobs a month,
           your own booking page, and the whole job flow from booking through to
           getting paid. Pro is ${{ plans['pro']['price'] }} a month
           when you outgrow it.</div>
@@ -680,7 +682,7 @@
       {% if signups_open %}
       <h2>Start free. Really free.</h2>
       <p style="color:var(--muted);margin-top:10px">
-        Your own booking page, three cleaners, twenty jobs a month, and the whole
+        Your own booking page, you plus 2 cleaners, twenty jobs a month, and the whole
         job flow — booking to checklist to getting paid. No card, no trial clock.
       </p>
       {% else %}
