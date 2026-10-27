@@ -326,6 +326,34 @@ try:
 finally:
     rel.git = _real
 
+print('\n9b. A suite that already passed on this commit is not run twice')
+_cr = rel.check_runs
+_suite_ok = [{'id': 5, 'name': 'Every test suite', 'status': 'completed', 'conclusion': 'success',
+              'html_url': 'https://github.com/o/r/actions/runs/1/job/5'}]
+rel.check_runs = lambda sha: _suite_ok
+got = rel.ci_covers_suites(akye, 'abc1234')
+check(got and 'Every test suite: success' in got and 'actions/runs/1' in got,
+      'a passed suite on the commit is found, with the run it came from')
+rel.check_runs = lambda sha: [dict(_suite_ok[0], conclusion='failure')]
+check(rel.ci_covers_suites(akye, 'abc1234') is None, 'a failed one is not trusted')
+rel.check_runs = lambda sha: [dict(_suite_ok[0], status='in_progress', conclusion=None)]
+check(rel.ci_covers_suites(akye, 'abc1234') is None, 'nor one still running')
+rel.check_runs = lambda sha: []
+check(rel.ci_covers_suites(akye, 'abc1234') is None, 'nor one that never ran')
+rel.check_runs = lambda sha: None
+check(rel.ci_covers_suites(akye, 'abc1234') is None,
+      'with GitHub unreachable nothing vouches for it, so the suites run')
+rel.check_runs = _cr
+check(rel.ci_covers_suites(rel.LINES['dazzle'], 'abc1234') is None,
+      'a line that does not require the suite check is never skipped')
+src = (ROOT / 'release.py').read_text()
+go_src = src[src.index('def go('):src.index('def rollback(')]
+check('retest=False' in go_src and 'ci_covers_suites(line, checked)' in go_src,
+      'go() asks about the checked commit, not the release commit')
+check(go_src.index('ci_covers_suites(') > go_src.index('require_green('),
+      'and only after the checks themselves passed')
+check('--retest' in src, 'and --retest runs them anyway')
+
 print('\n10. A release tests the code it is actually shipping')
 # The suites run against the working tree. Releasing one line while checked out
 # on the other would test one product and ship the other — green, and
