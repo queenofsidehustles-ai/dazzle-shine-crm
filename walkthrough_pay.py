@@ -45,10 +45,24 @@ def parse_week(value, today=None):
 
 
 def reps():
-    """Everyone who can be paid this way: Sales logins, active or not (a rep
-    who left is still owed for the week before they went)."""
+    """Sales logins, active or not (a rep who left is still owed for the week
+    before they went)."""
     from models import User
     return User.query.filter(User.role == 'sales').order_by(User.name).all()
+
+
+def _payable_ids(ids):
+    """Of these login ids, those a walkthrough can be paid to: a Sales login, or
+    one that has since been deleted. A deleted login is still owed for what they
+    booked, and its paid weeks must stay on the page. The activity row keeps their
+    name; their role is gone with them, so the owner is shown 'login removed'
+    and decides whether to pay."""
+    from models import User
+    ids = {i for i in ids if i is not None}
+    if not ids:
+        return set()
+    existing = {u.id: u.role for u in User.query.filter(User.id.in_(ids)).all()}
+    return {i for i in ids if i not in existing or existing[i] == 'sales'}
 
 
 def credited(week_start):
@@ -61,14 +75,15 @@ def credited(week_start):
                           .filter(A.kind == 'walkthrough_booked', A.prospect_id.isnot(None))
                           .group_by(A.prospect_id))
     rows = (A.query
-            .filter(A.kind == 'walkthrough_booked',
-                    A.user_id.in_([u.id for u in reps()] or [-1]),
+            .filter(A.kind == 'walkthrough_booked', A.user_id.isnot(None),
                     A.created_at >= start, A.created_at < end,
                     db.or_(A.prospect_id.is_(None), A.id.in_(first_for_business)))
             .order_by(A.created_at).all())
+    ok = _payable_ids({r.user_id for r in rows})
     out = {}
     for r in rows:
-        out.setdefault(r.user_id, []).append(r)
+        if r.user_id in ok:
+            out.setdefault(r.user_id, []).append(r)
     return out
 
 
@@ -76,20 +91,23 @@ def statement(week_start):
     """One line per rep for the week: what they booked, what that comes to, and
     whether it has been paid (and what was paid, which can differ from today's
     figure if the rate has moved since)."""
-    from models import WalkthroughPayment
+    from models import User, WalkthroughPayment
     per = rate()
     got = credited(week_start)
     paid = {p.user_id: p for p in WalkthroughPayment.query.filter_by(week_start=week_start).all()}
+    ids = set(got) | set(paid)
+    users = {u.id: u for u in User.query.filter(User.id.in_(ids or {-1})).all()}
     lines = []
-    for u in reps():
-        rows = got.get(u.id, [])
-        pay = paid.get(u.id)
-        if not rows and pay is None:
-            continue
+    for uid in ids:
+        rows, pay, u = got.get(uid, []), paid.get(uid), users.get(uid)
+        # A deleted login keeps the name it was booked and paid under.
+        name = u.name if u else ((pay.user_name if pay else None) or (rows[0].user_name if rows else None) or 'Former team member')
         lines.append({
-            'user': u, 'rows': rows, 'count': len(rows),
+            'user': u, 'user_id': uid, 'name': name, 'removed': u is None,
+            'rows': rows, 'count': len(rows),
             'amount': round(len(rows) * per, 2), 'payment': pay,
         })
+    lines.sort(key=lambda l: l['name'].lower())
     return {'week_start': week_start, 'week_end': week_start + timedelta(days=6),
             'rate': per, 'lines': lines,
             'owed': round(sum(l['amount'] for l in lines if l['payment'] is None), 2)}
@@ -112,12 +130,14 @@ def mark_paid(user_id, week_start, method='zelle'):
     if existing:
         return existing, False
     user = db.session.get(User, user_id)
-    n, amount, _ = week_for_user(user_id, week_start)
-    if user is None or user.role != 'sales' or n == 0:
+    rows = credited(week_start).get(user_id, [])
+    n, amount = len(rows), round(len(rows) * rate(), 2)
+    if n == 0:
         return None, False
+    name = user.name if user else (rows[0].user_name or 'Former team member')
     pay = WalkthroughPayment(
-        user_id=user_id, user_name=user.name, week_start=week_start, walkthroughs=n,
+        user_id=user_id, user_name=name, week_start=week_start, walkthroughs=n,
         amount=amount, method=(method or 'zelle')[:20],
-        note=f'{user.name} walkthroughs, week of {week_start.isoformat()}')
+        note=f'{name} walkthroughs, week of {week_start.isoformat()}')
     db.session.add(pay)
     return pay, True

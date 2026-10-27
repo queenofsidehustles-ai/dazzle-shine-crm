@@ -29,10 +29,11 @@
 {% for l in s.lines %}
 <div class="card" style="margin-bottom:14px">
   <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline">
-    <h3 style="margin:0">{{ l.user.name }}
+    <h3 style="margin:0">{{ l.name }}
       <span style="font-size:0.78rem;font-weight:500;color:var(--softer)">
-        {{ {'employee': 'Employee — through payroll', 'contractor': 'Contractor — pay as a contractor'}.get(l.user.worker_model, 'Employee or contractor not recorded') }}
-        {% if not l.user.active %} · no longer active{% endif %}
+        {% if l.removed %}Login removed — employee or contractor no longer on file
+        {% else %}{{ {'employee': 'Employee — through payroll', 'contractor': 'Contractor — pay as a contractor'}.get(l.user.worker_model, 'Employee or contractor not recorded') }}
+        {% if not l.user.active %} · no longer active{% endif %}{% endif %}
       </span></h3>
     <div style="font-size:1.4rem;font-weight:800">
       {{ l.payment.walkthroughs if l.payment else l.count }} × ${{ '%.0f' % ((l.payment.amount / l.payment.walkthroughs) if l.payment and l.payment.walkthroughs else s.rate) }}
@@ -54,8 +55,8 @@
   {% else %}
   <form method="POST" action="{{ url_for('commissions.walkthroughs_mark_paid') }}"
         style="display:flex;gap:7px;align-items:center;flex-wrap:wrap"
-        onsubmit="return confirm('Record ${{ ('%.2f' % l.amount)|js }} as paid to {{ l.user.name|js }}? It becomes an expense on your P&L.')">
-    <input type="hidden" name="user_id" value="{{ l.user.id }}">
+        onsubmit="return confirm('Record ${{ ('%.2f' % l.amount)|js }} as paid to {{ l.name|js }}? It becomes an expense on your P&L.')">
+    <input type="hidden" name="user_id" value="{{ l.user_id }}">
     <input type="hidden" name="week" value="{{ s.week_start.isoformat() }}">
     <select name="method" style="padding:7px;border:1px solid var(--line);border-radius:8px">
       <option value="zelle">Zelle</option><option value="cash">Cash</option><option value="check">Check</option>

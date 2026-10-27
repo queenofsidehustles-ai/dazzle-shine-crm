@@ -110,7 +110,7 @@ with app.app_context():
 
     print('\n4. The statement')
     s = wp.statement(monday)
-    by = {l['user'].name: l for l in s['lines']}
+    by = {l['name']: l for l in s['lines']}
     check(by['Sam Seller']['amount'] == 160.0 and by['Ana Closer']['amount'] == 160.0, '2 x $80 each')
     check(s['owed'] == 320.0, 'and $320 owed in all')
 
@@ -129,7 +129,7 @@ with app.app_context():
     check(WalkthroughPayment.query.filter_by(user_id=sam.id).count() == 1, 'a second click does not pay the week twice')
     PricingSetting.set('va_walkthrough_booked', 100)
     db.session.commit()
-    sam_line = [l for l in wp.statement(monday)['lines'] if l['user'].id == sam.id][0]
+    sam_line = [l for l in wp.statement(monday)['lines'] if l['user_id'] == sam.id][0]
     check(sam_line['payment'] is not None and float(sam_line['payment'].amount) == 160.0,
           'a later change of rate does not rewrite a week already paid')
     owner.post('/commissions/walkthroughs/mark-paid', headers=H, data={'user_id': boss.id, 'week': monday.isoformat()})
@@ -157,7 +157,26 @@ with app.app_context():
                    data={'user_id': sam.id, 'week': monday.isoformat()}).status_code in (302, 401, 403)
           and WalkthroughPayment.query.count() == 0, 'or mark themselves paid')
 
-    print('\n8. The rate is a setting')
+    print('\n8. A removed login keeps its history')
+    # Sam is paid for the week, Ana is not; then both logins are deleted.
+    owner.post('/commissions/walkthroughs/mark-paid', headers=H, data={'user_id': sam.id, 'week': monday.isoformat()})
+    sam_id, ana_id = sam.id, ana.id
+    db.session.delete(db.session.get(User, sam_id)); db.session.delete(db.session.get(User, ana_id))
+    db.session.commit()
+    s2 = wp.statement(monday)
+    by2 = {l['name']: l for l in s2['lines']}
+    check('Sam Seller' in by2 and by2['Sam Seller']['payment'] is not None and by2['Sam Seller']['removed'],
+          'a deleted rep\'s paid week is still on the page, so its expense can be traced and undone')
+    check('Ana Closer' in by2 and by2['Ana Closer']['count'] == 2 and by2['Ana Closer']['payment'] is None,
+          'and what a deleted rep booked but was not paid for is still owed')
+    html2 = owner.get(f'/commissions/walkthroughs?week={monday.isoformat()}').get_data(as_text=True)
+    check('Login removed' in html2, 'the page says the login is gone')
+    owner.post('/commissions/walkthroughs/mark-paid', headers=H, data={'user_id': ana_id, 'week': monday.isoformat()})
+    gone = WalkthroughPayment.query.filter_by(user_id=ana_id).first()
+    check(gone is not None and gone.user_name == 'Ana Closer' and float(gone.amount) == 160.0,
+          'it can still be paid, under the name it was booked with')
+
+    print('\n9. The rate is a setting')
     st = owner.get('/commissions/settings').get_data(as_text=True)
     check('va_walkthrough_booked' in st, 'the owner can change it with the other rates')
 
