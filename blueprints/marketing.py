@@ -124,7 +124,8 @@ def _inject_demo_links():
     # Callables, so only a page that shows a demo link ever asks. The homepage
     # is rendered from a before_request hook rather than this blueprint's own
     # route, which is why this is app-wide and not the blueprint's.
-    return {'DEMO_LIVE': demo_live, 'DEMO_PAGE_URL': demo_page_url}
+    return {'DEMO_LIVE': demo_live, 'DEMO_PAGE_URL': demo_page_url,
+            'ABOUT_LIVE': lambda: bool(product.founders())}
 
 
 @marketing_bp.route('/demo')
@@ -392,8 +393,39 @@ def about():
     people who built the software.
     """
     _require_product_site()
+    people = product.founders()
+    if not people:
+        abort(404)   # a private deployment has no founders of ours to show
     from blueprints.signup import signups_open
-    return render_template('marketing/about.html', signups_open=signups_open())
+    import json
+    base = _base()
+    founder_ld = []
+    for p in people:
+        works = []
+        for company in p['companies']:
+            biz = {'@type': 'LocalBusiness', 'name': company}
+            if p.get('locality'):
+                biz['address'] = {'@type': 'PostalAddress',
+                                  'addressLocality': p['locality'],
+                                  'addressRegion': p['region']}
+            elif p.get('area_served'):
+                biz['areaServed'] = p['area_served']
+            works.append(biz)
+        founder_ld.append({'@type': 'Person', 'name': p['name'],
+                           'jobTitle': 'Co-founder', 'worksFor': works})
+    ld = {'@context': 'https://schema.org', '@graph': [
+        {'@type': 'AboutPage', 'url': f'{base}/about',
+         'name': f'About {product.name()}', 'about': {'@id': f'{base}/#org'}},
+        {'@type': 'Organization', '@id': f'{base}/#org', 'name': product.name(),
+         'url': f'{base}/', 'founder': founder_ld},
+    ]}
+    # </ can never appear inside a <script> block, whatever a name contains.
+    ld_json = json.dumps(ld, indent=2).replace('</', '<\\/')
+    summary = ' and '.join(f"{p['name']} in the {p['where']}" if 'area' in p['where']
+                           else f"{p['name']} in {p['where']}" for p in people)
+    return render_template('marketing/about.html', signups_open=signups_open(),
+                           founders=people, founders_ld=ld_json,
+                           founders_summary=summary)
 
 
 BLOG_HOME = 'https://getakye.com/blog/'
@@ -459,12 +491,13 @@ def sitemap():
         # Ranked with pricing on purpose: it is the page most strangers will
         # arrive on, months before they are looking for software at all.
         (url_for('marketing.guide'), '0.9'),
-        (url_for('marketing.about'), '0.6'),
         (url_for('marketing.security'), '0.5'),
         (url_for('marketing.terms'), '0.3'),
         (url_for('marketing.privacy'), '0.3'),
         (url_for('marketing.subprocessors'), '0.2'),
     ]
+    if product.founders():
+        pages.append((url_for('marketing.about'), '0.6'))
     # The blog is not on this host any more, so it is not in this sitemap. It
     # has its own on getakye.com; listing it here would advertise a redirect.
     urls = '\n'.join(

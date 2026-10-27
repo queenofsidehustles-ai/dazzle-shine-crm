@@ -1,47 +1,12 @@
 {% extends "marketing/_shell.html" %}
+{# Every name, company and place on this page comes from product.FOUNDERS, so
+   there is one copy of them and test_whitelabel can prove none of it reaches a
+   cleaning company's CRM. Nothing about the founders is typed here. #}
 {% block title %}About {{ PRODUCT }}: Made by Cleaning Company Owners{% endblock %}
-{% block description %}{{ PRODUCT }} comes from two people who run cleaning companies: Monica Lewis in Orlando, Florida and William Adofo in the Maryland/DC area.{% endblock %}
+{% block description %}{{ PRODUCT }} comes from two people who run cleaning companies: {{ founders_summary }}.{% endblock %}
 {% block head_extra %}
-{# Named people and the companies they run. The founders sit on the same
-   Organization the home page declares (#org), so search engines read one
-   company, not two. #}
 <script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@graph": [
-    {
-      "@type": "AboutPage",
-      "url": "{{ PRODUCT_BASE }}/about",
-      "name": "About {{ PRODUCT }}",
-      "about": { "@id": "{{ PRODUCT_BASE }}/#org" }
-    },
-    {
-      "@type": "Organization",
-      "@id": "{{ PRODUCT_BASE }}/#org",
-      "name": "{{ PRODUCT }}",
-      "url": "{{ PRODUCT_BASE }}/",
-      "founder": [
-        {
-          "@type": "Person",
-          "name": "Monica Lewis",
-          "jobTitle": "Co-founder",
-          "worksFor": [
-            { "@type": "LocalBusiness", "name": "Dazzle & Shine Maids", "address": { "@type": "PostalAddress", "addressLocality": "Orlando", "addressRegion": "FL" } },
-            { "@type": "LocalBusiness", "name": "L&M Commercial Cleaners", "address": { "@type": "PostalAddress", "addressLocality": "Orlando", "addressRegion": "FL" } }
-          ]
-        },
-        {
-          "@type": "Person",
-          "name": "William Adofo",
-          "jobTitle": "Co-founder",
-          "worksFor": [
-            { "@type": "LocalBusiness", "name": "Cleaning Wonder", "areaServed": "Maryland and Washington, DC" }
-          ]
-        }
-      ]
-    }
-  ]
-}
+{{ founders_ld|safe }}
 </script>
 <style>
   .about { max-width: 680px; }
@@ -54,30 +19,26 @@
 {% block body %}
 <section>
   <div class="wrap about">
-    <h1>Made by two people who run cleaning companies</h1>
+    <h1>Made by people who run cleaning companies</h1>
     <p class="lead">{{ PRODUCT }} is the back office our own cleaning companies run on:
       quotes, scheduling, jobs sent to the whole crew, per-job pay, hiring and proof the
       work got done.</p>
 
     <div class="people">
+      {% for p in founders %}
       <div class="card">
-        <h3>Monica Lewis</h3>
-        <p class="role">Co-founder &middot; Orlando, Florida</p>
-        <p>Owns Dazzle &amp; Shine Maids, a residential cleaning company, and L&amp;M
-          Commercial Cleaners, which cleans offices and commercial buildings.</p>
+        <h3>{{ p.name }}</h3>
+        <p class="role">Co-founder &middot; {{ p.where }}</p>
+        <p>{{ p.bio }}</p>
       </div>
-      <div class="card">
-        <h3>William Adofo</h3>
-        <p class="role">Co-founder &middot; Maryland/DC area</p>
-        <p>Owns Cleaning Wonder, a cleaning company serving Maryland and the DC area.</p>
-      </div>
+      {% endfor %}
     </div>
 
     <h2>Why it exists</h2>
     <p>Running a cleaning company is quoting, chasing, scheduling, covering call-outs and
       working out what everybody is owed, on top of the cleaning. We wanted one place that
       did that the way a cleaning company actually works, so that is what {{ PRODUCT }}
-      is. All three of our companies use it every day.</p>
+      is. Our own companies use it every day.</p>
     <p>It doesn&rsquo;t replace the work. You still answer the phone, knock on doors and
       show up. It just means fewer Sunday nights with a spreadsheet.</p>
 
