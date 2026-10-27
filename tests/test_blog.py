@@ -52,14 +52,14 @@ with app.app_context():
     print('\n1. The blog addresses still answer, and go to the blog')
     r = c.get('/blog', headers={'Host': HOST})
     check(r.status_code == 301, f'/blog is a permanent redirect (got {r.status_code})')
-    check(r.headers.get('Location') == 'https://getakye.com/blog/',
-          'to the blog on getakye.com')
+    check(r.headers.get('Location') == 'https://blog.akyehq.com/',
+          'to the blog on blog.akyehq.com')
 
     print('\n2. A post keeps its slug rather than landing on a front page')
     r = c.get('/blog/the-jobs-you-lose-without-noticing', headers={'Host': HOST})
     check(r.status_code == 301, 'a post URL redirects permanently')
     check(r.headers.get('Location') ==
-          'https://getakye.com/blog/the-jobs-you-lose-without-noticing/',
+          'https://blog.akyehq.com/the-jobs-you-lose-without-noticing/',
           'to the same article, not the index — an old link still arrives somewhere useful')
 
     print('\n3. The sitemap stops promising pages this host no longer serves')
@@ -71,7 +71,7 @@ with app.app_context():
 
     print('\n4. Marketing still never appears over a company\'s CRM')
     r = c.get('/blog', headers={'Host': 'somecompany.akyehq.test'})
-    check(r.status_code != 301 or 'getakye' not in (r.headers.get('Location') or ''),
+    check(r.status_code != 301 or 'blog.akyehq.com' not in (r.headers.get('Location') or ''),
           f'a company subdomain is not handed the marketing blog (got {r.status_code})')
 
 if failures:

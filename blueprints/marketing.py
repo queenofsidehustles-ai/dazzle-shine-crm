@@ -428,13 +428,16 @@ def about():
                            founders_summary=summary)
 
 
-BLOG_HOME = 'https://getakye.com/blog/'
+# blog.akyehq.com is the same static Netlify site that used to serve
+# getakye.com/blog -- still outside this app, so publishing cannot break the
+# CRM, but now under the product's own name so the links count for akyehq.com.
+BLOG_HOME = 'https://blog.akyehq.com/'
 
 
 @marketing_bp.route('/blog')
 @marketing_bp.route('/blog/<slug>')
 def blog_index(slug=None):
-    """The blog lives on getakye.com now, so these addresses redirect there.
+    """The blog lives on blog.akyehq.com, so these addresses redirect there.
 
     It was built here first, inside the application. That meant a post could
     only be published by editing Python, passing four required checks and
@@ -499,7 +502,7 @@ def sitemap():
     if product.founders():
         pages.append((url_for('marketing.about'), '0.6'))
     # The blog is not on this host any more, so it is not in this sitemap. It
-    # has its own on getakye.com; listing it here would advertise a redirect.
+    # has its own on blog.akyehq.com; listing it here would advertise a redirect.
     urls = '\n'.join(
         f'  <url><loc>{base}{path}</loc><priority>{pri}</priority></url>'
         for path, pri in pages)
