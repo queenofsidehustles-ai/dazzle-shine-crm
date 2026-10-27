@@ -256,7 +256,13 @@ with app.app_context():
     # fire however many of them there were.
     from datetime import date as _date, timedelta as _td2
     import prospecting as _pr
-    soon_month = (_date.today() + _td2(days=_pr.RENEWAL_LEAD_DAYS + 5)).strftime('%Y-%m')
+    # A renewal month inside the lead window, on any day of the year. The month
+    # is stored as its first day and wake_renewals() wakes everything dated on
+    # or before today + RENEWAL_LEAD_DAYS, so the month holding the day halfway
+    # to that horizon always starts on or before it. (It used to be the month
+    # holding LEAD + 5 days out, which starts after the horizon on the last days
+    # of most months and the first of some, and the suite failed on those dates.)
+    soon_month = (_date.today() + _td2(days=_pr.RENEWAL_LEAD_DAYS // 2)).strftime('%Y-%m')
     locked = Prospect(business_name='Under Contract Ltd', category='property_manager',
                       status='new', stage='new')
     db.session.add(locked); db.session.commit()
