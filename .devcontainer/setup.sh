@@ -37,7 +37,7 @@ PY
 
 cat <<'MSG'
 
-Ready. To run the whole test suite:   .venv/bin/python tests/run_all.py
+Ready. To run the whole test suite:   .venv/bin/python tests/run_all.py --jobs auto
 To preview a release:                 .venv/bin/python release.py --akye
 To release (you must be on main):     .venv/bin/python release.py --akye --go
 MSG

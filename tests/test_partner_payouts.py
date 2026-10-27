@@ -404,8 +404,15 @@ try:
     ts = [threading.Thread(target=retry) for _ in range(2)]
     [t.start() for t in ts]
     [t.join() for t in ts]
-    check(all(o[0] for o in outs) and sum(1 for o in outs if o[2].get('finished_now')) == 1,
-          'both retries succeed but only one is the one that finished it')
+    # Two outcomes are both right, and which one happens is a matter of thread
+    # timing: either both retries get as far as sending (one finishes it, the
+    # other is told it was already confirmed), or the second reads the payout
+    # after the first has finished and is told it is not waiting to be sent.
+    # (This used to require the first, so it failed whenever the second thread
+    # was scheduled late.) What must never happen is a second finish or none.
+    finished = sum(1 for o in outs if (o[2] or {}).get('finished_now'))
+    check(finished == 1 and all(o[0] or 'not waiting to be sent' in o[1] for o in outs),
+          'one retry finishes it; the other either finds it already confirmed or is told it is not waiting')
     check(affiliates.payout(engine, held['id'])['status'] == 'paid'
           and [e['status'] for e in entries(ready['id']) if e['payout_id'] == held['id']] == ['paid'],
           'the payout and its commissions end up paid, once')
