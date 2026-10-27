@@ -5,8 +5,9 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from entitlements import requires_plan
 from auth import owner_required
 from extensions import db
-from models import User, PricingSetting, CommissionPayment
+from models import User, PricingSetting, CommissionPayment, WalkthroughPayment
 import va_commission as vc
+import walkthrough_pay as wp
 
 commissions_bp = Blueprint('commissions', __name__, url_prefix='/commissions')
 
@@ -92,3 +93,56 @@ def settings():
         flash('Commission rates updated. 💵', 'success')
         return redirect(url_for('commissions.settings'))
     return render_template('admin/commission_settings.html', rates=vc.get_rates())
+
+
+# ── Walkthroughs booked: paid weekly ───────────────────────────────────────
+@commissions_bp.route('/walkthroughs')
+@owner_required
+@requires_plan('va_commissions')
+def walkthroughs():
+    """What each sales rep is owed for the walkthroughs they booked in a week.
+    Opens on last week, the one being paid now."""
+    from datetime import timedelta
+    week = wp.parse_week(request.args.get('week'))
+    return render_template('admin/walkthrough_pay.html', s=wp.statement(week),
+                           prev=week - timedelta(days=7), next=week + timedelta(days=7),
+                           current=wp.last_week_start() == week)
+
+
+@commissions_bp.route('/walkthroughs/mark-paid', methods=['POST'])
+@owner_required
+@requires_plan('va_commissions')
+def walkthroughs_mark_paid():
+    """Record a rep's week as paid. The figure is worked out here, not read from
+    the form, and one row per rep-week stops it being paid twice."""
+    from datetime import date
+    try:
+        week = wp.week_of(date.fromisoformat(request.form.get('week', '')))
+        user_id = int(request.form['user_id'])
+    except (KeyError, ValueError):
+        flash('Could not read that payment.', 'error')
+        return redirect(url_for('commissions.walkthroughs'))
+    back = redirect(url_for('commissions.walkthroughs', week=week.isoformat()))
+    pay, created = wp.mark_paid(user_id, week, request.form.get('method', 'zelle'))
+    if pay is None:
+        flash('There are no walkthroughs to pay for that week.', 'warning')
+    elif not created:
+        flash(f'{pay.user_name} was already marked paid for that week '
+              f'(${float(pay.amount):.2f} on {pay.paid_at.strftime("%b %-d, %Y")}).', 'warning')
+    else:
+        db.session.commit()
+        flash(f'Recorded ${float(pay.amount):.2f} paid to {pay.user_name} for {pay.walkthroughs} '
+              f'walkthrough{"" if pay.walkthroughs == 1 else "s"}. It now shows in your Profit & Loss.', 'success')
+    return back
+
+
+@commissions_bp.route('/walkthroughs/unmark-paid/<int:payment_id>', methods=['POST'])
+@owner_required
+@requires_plan('va_commissions')
+def walkthroughs_unmark_paid(payment_id):
+    p = WalkthroughPayment.query.get_or_404(payment_id)
+    week = p.week_start
+    db.session.delete(p)
+    db.session.commit()
+    flash(f'Undone — {p.user_name} is no longer marked paid for that week.', 'success')
+    return redirect(url_for('commissions.walkthroughs', week=week.isoformat()))

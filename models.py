@@ -1784,6 +1784,27 @@ class CommissionPayment(db.Model):
     __table_args__ = (db.UniqueConstraint('agent', 'year', 'month', name='uq_commission_agent_month'),)
 
 
+class WalkthroughPayment(db.Model):
+    """Records that a sales rep was PAID for the walkthroughs they booked in one
+    week (Monday to Sunday). walkthrough_pay.py says what is owed; this says what
+    left the account, and counts as an expense in the books like a monthly
+    CommissionPayment does. One row per rep-week keeps it from being paid twice.
+    The count and amount are copied in, so a later change of rate does not
+    rewrite a week already paid."""
+    __tablename__ = 'walkthrough_payment'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, nullable=False, index=True)
+    user_name = db.Column(db.String(120))
+    week_start = db.Column(db.Date, nullable=False)          # the Monday
+    walkthroughs = db.Column(db.Integer, nullable=False)
+    amount = db.Column(Money, nullable=False)
+    method = db.Column(db.String(20), default='zelle')
+    note = db.Column(db.String(200))
+    paid_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    __table_args__ = (db.UniqueConstraint('user_id', 'week_start', name='uq_walkthrough_payment_user_week'),)
+
+
 class ProcessingFee(db.Model):
     """What Stripe actually kept in a given month, pulled from their balance
     transactions. One authoritative number per month beats guessing 2.9% + 30¢,

@@ -1661,8 +1661,16 @@ def my_numbers():
             'prev_label': today.replace(day=1).replace(year=last_y, month=last_m).strftime('%B'),
             'rates': va_commission.get_rates(),
         }
+    walk_pay = None
+    if pay:
+        import walkthrough_pay
+        this_wk, last_wk = walkthrough_pay.week_of(today), walkthrough_pay.last_week_start(today)
+        walk_pay = {'rate': walkthrough_pay.rate(),
+                    'this': walkthrough_pay.week_for_user(me.id, this_wk),
+                    'last': walkthrough_pay.week_for_user(me.id, last_wk),
+                    'last_start': last_wk}
     return render_template(
-        'admin/lead_my_numbers.html', target=target, done=done,
+        'admin/lead_my_numbers.html', target=target, done=done, walk_pay=walk_pay,
         pct=min(100, round(100 * done / target)), week=week[me.id], month=month[me.id],
         leads=leads, earnings=earnings, feed=rep_activity.recent([me.id], limit=15),
         kinds=_activity_kinds(), status_labels=Prospect.STATUS_LABELS)

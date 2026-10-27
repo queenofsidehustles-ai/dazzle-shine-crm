@@ -21,6 +21,7 @@ DEFAULT_RATES = {
     'va_comm_small_land':      50.0,   'va_comm_small_res':    10.0,   # commercial < $1,000/mo
     'va_comm_standard_land':  100.0,   'va_comm_standard_res': 20.0,   # $1,000–$2,500/mo
     'va_comm_large_land':     150.0,   'va_comm_large_res':    30.0,   # $2,500/mo+
+    'va_walkthrough_booked':   80.0,   # flat, per walkthrough booked (paid weekly)
     'va_momentum_bonus':      100.0,   'va_momentum_threshold': 10.0,  # $100 at 10+ closes/mo
 }
 
