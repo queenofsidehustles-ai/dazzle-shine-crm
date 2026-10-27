@@ -141,7 +141,9 @@ def demo():
     base = (product.domain() or '').lower()
     demo_host = f'{_demo_slug()}.{base}'
     demo_base = f'{product.scheme_for(demo_host)}://{demo_host}'
-    return render_template('marketing/demo.html', demo_base=demo_base)
+    from blueprints.signup import signups_open
+    return render_template('marketing/demo.html', demo_base=demo_base,
+                           signups_open=signups_open())
 
 
 @marketing_bp.route('/leads/unsubscribe/<token>', methods=['GET', 'POST'])
@@ -373,7 +375,25 @@ def guide():
     """
     _require_product_site()
     import guide as guide_content
-    return render_template('marketing/guide.html', g=guide_content)
+    from blueprints.signup import signups_open
+    # The shared header shows "Start free" or "Join waitlist" from this flag.
+    # Leaving it out made this page alone offer a waitlist while signups were
+    # open -- the first inconsistency the SEO review found.
+    return render_template('marketing/guide.html', g=guide_content,
+                           signups_open=signups_open())
+
+
+@marketing_bp.route('/about')
+def about():
+    """Who is behind the product: two people who run cleaning companies.
+
+    Google weighs who wrote advice about pay and hiring, and owners want to know
+    the same thing. Named, with the companies they run, never framed as the
+    people who built the software.
+    """
+    _require_product_site()
+    from blueprints.signup import signups_open
+    return render_template('marketing/about.html', signups_open=signups_open())
 
 
 BLOG_HOME = 'https://getakye.com/blog/'
@@ -439,6 +459,7 @@ def sitemap():
         # Ranked with pricing on purpose: it is the page most strangers will
         # arrive on, months before they are looking for software at all.
         (url_for('marketing.guide'), '0.9'),
+        (url_for('marketing.about'), '0.6'),
         (url_for('marketing.security'), '0.5'),
         (url_for('marketing.terms'), '0.3'),
         (url_for('marketing.privacy'), '0.3'),
