@@ -32,6 +32,17 @@
     <div style="{{ row }}"><span>Accounts won</span><strong>{{ n.won }}</strong></div>
   </div>
   {% endfor %}
+  {% if walk_pay %}
+  <div class="card" style="margin:0">
+    <h3 style="margin:0 0 6px">Walkthrough pay</h3>
+    <div style="{{ row }}"><span>Each walkthrough booked</span><strong>${{ '%.0f' % walk_pay.rate }}</strong></div>
+    <div style="{{ row }}"><span>This week so far</span><span>{{ walk_pay.this[0] }} · ${{ '%.2f' % walk_pay.this[1] }}</span></div>
+    <div style="{{ row }}"><span>Last week ({{ walk_pay.last_start.strftime('%b %-d') }})</span>
+      <span>{{ walk_pay.last[0] }} · ${{ '%.2f' % (walk_pay.last[2].amount if walk_pay.last[2] else walk_pay.last[1]) }}
+        {% if walk_pay.last[2] %}— paid {{ walk_pay.last[2].paid_at.strftime('%b %-d') }}{% elif walk_pay.last[0] %}— to be paid this week{% endif %}</span></div>
+    <div style="font-size:0.78rem;color:var(--softer);margin-top:6px">Paid weekly, Monday to Sunday. A business counts once, for whoever booked it first.</div>
+  </div>
+  {% endif %}
   <div class="card" style="margin:0">
     <h3 style="margin:0 0 6px">My leads</h3>
     <div style="{{ row }}"><span>Open</span><a href="{{ url_for('places_finder.dashboard', view='everyone') }}"><strong>{{ leads.open }}</strong></a></div>

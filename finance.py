@@ -23,7 +23,7 @@ from sqlalchemy import case, func
 
 from extensions import db
 from models import (ADVERTISING_CATEGORIES, CATEGORY_GROUP, CATEGORY_LABELS,
-                    CATEGORY_SCHEDULE_C, Booking, CommissionPayment,
+                    CATEGORY_SCHEDULE_C, Booking, CommissionPayment, WalkthroughPayment,
                     ContractorPayment, Expense, ProcessingFee)
 
 
@@ -263,7 +263,10 @@ def commissions_paid_between(start, end):
     total = db.session.query(func.sum(CommissionPayment.amount)).filter(
         CommissionPayment.paid_at >= lo, CommissionPayment.paid_at < hi,
     ).scalar()
-    return round(float(total or 0), 2)
+    weekly = db.session.query(func.sum(WalkthroughPayment.amount)).filter(
+        WalkthroughPayment.paid_at >= lo, WalkthroughPayment.paid_at < hi,
+    ).scalar()
+    return round(float(total or 0) + float(weekly or 0), 2)
 
 
 def processing_fees_between(start, end):
