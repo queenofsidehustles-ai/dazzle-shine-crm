@@ -23,7 +23,7 @@ passes.
     python3 release.py                  # this CRM: what would go out
     python3 release.py --go             # this CRM: test, tag, promote
     python3 release.py --akye           # Akye: what would go out
-    python3 release.py --akye --go      # Akye: test, tag, promote
+    python3 release.py --akye --go      # Akye: check, tag, promote (suites run only if CI has not run them)
     python3 release.py --rollback       # put a line back one release
 
 Tags are namespaced per line — v2026.09.03 and akye-v2026.09.03 — so two
@@ -184,6 +184,28 @@ def require_green(line, sha):
                  + '\nNothing was released.')
     say(f'All {len(line.required_checks)} checks passed on {sha[:7]}.')
     return check_evidence(runs, line.required_checks)
+
+
+SUITE_CHECK = 'Every test suite'
+
+
+def ci_covers_suites(line, sha):
+    """The run that already tested every suite on this exact commit, or None.
+
+    "Every test suite" is `python tests/run_all.py` on Python 3.12 against
+    PostgreSQL 16: the same thing run_tests() would run here. When GitHub says
+    it passed on the commit being released -- the checked commit itself, which
+    the release commit differs from by the RELEASE file alone -- running all of
+    it again is twenty minutes spent re-proving a result that is already
+    recorded against this commit. When GitHub cannot be asked, or the check is
+    not one this line requires, nothing here vouches for it and the suites run.
+    """
+    if SUITE_CHECK not in (line.required_checks or ()):
+        return None
+    runs = check_runs(sha)
+    if runs is None or check_problems(runs, (SUITE_CHECK,)):
+        return None
+    return check_evidence(runs, (SUITE_CHECK,))[0]
 
 
 def _attest_by_hand(line, sha):
@@ -475,7 +497,7 @@ def show(line):
     say('\nNothing has changed. Run with --go to release.')
 
 
-def go(line, expect=None, expect_stable=None):
+def go(line, expect=None, expect_stable=None, retest=False):
     preflight(line)
     first = not remote_has(line.channel)
     commits = pending(line)
@@ -503,10 +525,21 @@ def go(line, expect=None, expect_stable=None):
         say(f'  · {c}')
     say()
 
-    failed = run_tests()
-    if failed:
-        sys.exit(f'\n{len(failed)} suite(s) failed — nothing was released. '
-                 f'Fix them and run this again.')
+    # GitHub has already run every suite on this exact commit (require_green
+    # just confirmed it), so running them again here is the same result twice.
+    # --retest runs them anyway; without GitHub's answer they always run.
+    covered = None if retest else ci_covers_suites(line, checked)
+    if covered:
+        say(f'Not running the suites again here: {covered}\n'
+            f'(use --retest to run them on this machine as well)\n')
+        evidence = evidence + [
+            f'Suites not re-run for the release: the CI result above is for '
+            f'{checked[:7]}, which the release commit differs from by RELEASE only']
+    else:
+        failed = run_tests()
+        if failed:
+            sys.exit(f'\n{len(failed)} suite(s) failed — nothing was released. '
+                     f'Fix them and run this again.')
 
     tag = next_tag(line)
     say(f'\nAll green. Tagging {tag} and promoting {line.channel}…')
@@ -578,6 +611,9 @@ if __name__ == '__main__':
                     help='release only if the source branch is at this commit')
     ap.add_argument('--expect-stable', metavar='SHA',
                     help='release only if the release channel is at this commit')
+    ap.add_argument('--retest', action='store_true',
+                    help='with --go: run every suite on this machine even though CI '
+                         'already passed them on the commit being released')
     ap.add_argument('--confirm-tag', metavar='TAG',
                     help='with --rollback: the release to go back to, instead of asking')
     ap.add_argument('--rollback', action='store_true',
@@ -591,6 +627,6 @@ if __name__ == '__main__':
             sys.exit('--expect needs a commit id.')
         if args.expect_stable and not re.fullmatch(r'[0-9a-fA-F]{7,40}', args.expect_stable):
             sys.exit('--expect-stable needs a commit id.')
-        go(chosen, args.expect, args.expect_stable)
+        go(chosen, args.expect, args.expect_stable, retest=args.retest)
     else:
         show(chosen)

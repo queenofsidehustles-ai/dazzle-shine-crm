@@ -20,7 +20,8 @@ and releases to `akye-stable`.
 
     git checkout main && git pull
     python3 release.py --akye           # what would go out — changes nothing
-    python3 release.py --akye --go      # every suite, then tag and promote akye-stable
+    python3 release.py --akye --go      # check, then tag and promote akye-stable
+    python3 release.py --akye --go --retest   # the same, running every suite here too
     python3 release.py --akye --rollback   # akye-stable back one release
 
 `--go` refuses unless the four checks that ran on the push to `main` (the
@@ -29,7 +30,12 @@ lifecycle) all passed on that exact commit. It asks GitHub with `gh`; without
 it, you paste the link to each check's run (a different run for each: they
 are four separate workflows) and name a second person who checked them, and
 both go into the release's tag (a typed-back hash is not evidence, and the
-exception needs somebody other than the releaser). Then every suite runs again here on Python 3.12, and only then does it
+exception needs somebody other than the releaser). When GitHub's answer shows
+that "Every test suite" passed on that exact commit, the suites are **not run
+again**: that check is `python tests/run_all.py` on Python 3.12 against
+PostgreSQL 16, the same thing, already recorded against this commit, and the tag
+says the re-run was skipped and why. Without GitHub's answer (the by-hand
+path), or with `--retest`, every suite runs here on Python 3.12 first. Only then does it
 write `RELEASE` (the one change on top of the checked commit), tag
 `akye-vYYYY.MM.DD`, and fast-forward `akye-stable` to `main`.
 
