@@ -333,9 +333,14 @@ def _credit_intent(booking, intent_id, received):
         _notify_overpaid(booking, received, intent_id)
         return False
     booking.stripe_payment_intent = intent_id
-    if received == due:
+    if received >= due:
         if not mark_paid(booking, method='card'):
             db.session.commit()
+        if received > due:
+            # More arrived than was owed: the price came down, or part was paid
+            # another way, while Stripe had not answered. The job is paid; the
+            # difference is the customer's, and the owner has to refund it.
+            _notify_overpaid(booking, received - due, intent_id)
         return True
     # The price moved between the charge and now: credit what actually arrived
     # rather than calling the job settled, so any difference still shows owed.
@@ -346,6 +351,7 @@ def _credit_intent(booking, intent_id, received):
 
 
 def _notify_overpaid(booking, received, intent_id):
+    """received: the cents that arrived beyond what the job was owed."""
     send_email(
         to_email=branding.owner_email(),
         to_name=branding.biz_name(),
@@ -353,13 +359,13 @@ def _notify_overpaid(booking, received, intent_id):
         subject=f'Paid twice? {booking.name} — ${received / 100:.2f}',
         html=f"""
 <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
-  <h2 style="color:#d97706">Stripe took a payment on a job that was already paid</h2>
+  <h2 style="color:#d97706">Stripe took more than this job was owed</h2>
   <p><strong>Customer:</strong> {booking.name}</p>
   <p><strong>Booking #:</strong> {booking.id}</p>
   <p><strong>Amount:</strong> ${received / 100:.2f}</p>
   <p><strong>Stripe payment:</strong> {intent_id}</p>
-  <p>It has not been added to what this job has collected. Check the booking and
-  refund whichever payment was not meant to happen.</p>
+  <p>This amount has not been added to what the job has collected. Check the
+  booking and refund it to the customer.</p>
 </div>""",
     )
 

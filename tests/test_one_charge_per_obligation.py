@@ -293,6 +293,22 @@ with app.app_context():
     ok, err = payment_service.charge_balance(fresh(bid))
     check(ok and len(charged(bid)) == 1, f'it is dropped after a lookup, and charged once ({err})')
 
+    print('\n5b. Part paid another way while Stripe had not answered')
+    bid = job()
+    MODE['next'] = 'timeout'
+    payment_service.charge_balance(fresh(bid))
+    b = fresh(bid)
+    b.amount_collected = 100                 # $100 in cash, against advice
+    db.session.commit()
+    EMAILS.clear()
+    ok, err = payment_service.charge_balance(fresh(bid))
+    b = fresh(bid)
+    check(ok and len(charged(bid)) == 1, f'the $400 that did go through is found, not charged again ({err})')
+    check(b.paid_at and float(b.amount_collected) == 400.0,
+          f'the job is paid in full, not over-collected (collected {b.amount_collected})')
+    check(any(e.startswith('Paid twice?') and '$100.00' in e for e in EMAILS),
+          f'and the owner is told to refund the $100 difference ({EMAILS})')
+
     print('\n6. A charge left pending on a past job is settled by the hourly run')
     yesterday = (scheduling.local_today() - timedelta(days=1)).isoformat()
     bid = job(date=yesterday)
