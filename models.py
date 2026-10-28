@@ -160,6 +160,15 @@ class Booking(db.Model):
     # a resend. Migration 0040.
     customer_send_at = db.Column(db.DateTime)
     customer_send_kind = db.Column(db.String(10))
+    # What the last confirmation send delivered, per notification, channel and
+    # address, as JSON -- so a retry sends only what did not go. Migration 0044.
+    customer_send_log = db.Column(db.Text)
+    # An off-session card charge Stripe has not answered yet (a timeout, a
+    # dropped connection, a 5xx): the exact request, as JSON, so the next
+    # attempt -- from either the balance or the auto-pay pass, or the button --
+    # sends the same request with the same idempotency key instead of a new
+    # one. Cleared when Stripe gives a definite answer. Migration 0043.
+    charge_pending = db.Column(db.Text)
     deposit_method = db.Column(db.String(20))  # card, cash, zelle, venmo, check, other
     deposit_token = db.Column(db.String(64))   # unique link for paying deposit after a tentative booking
     tip_amount = db.Column(Money, default=0)  # customer's tip — belongs to the cleaner, never revenue
@@ -1803,6 +1812,26 @@ class WalkthroughPayment(db.Model):
     paid_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
     __table_args__ = (db.UniqueConstraint('user_id', 'week_start', name='uq_walkthrough_payment_user_week'),)
+
+
+class PaymentCredit(db.Model):
+    """One row per Stripe off-session payment a booking has dealt with.
+
+    The webhook for a charge can arrive twice, late, or after a newer charge on
+    the same job. The booking only remembers its latest intent, so an older
+    one replayed after it looked new and was credited again. A payment intent
+    is handled once: the unique key here is what says so. outcome is
+    'credited', or 'overpaid' for money that arrived on a job already paid,
+    which is not credited and is flagged to the owner once. Migration 0043."""
+    __tablename__ = 'payment_credit'
+    id = db.Column(db.Integer, primary_key=True)
+    stripe_payment_intent = db.Column(db.String(100), nullable=False)
+    booking_id = db.Column(db.Integer, nullable=False, index=True)
+    amount_cents = db.Column(db.Integer, nullable=False)
+    outcome = db.Column(db.String(20), nullable=False, default='credited')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (db.UniqueConstraint('stripe_payment_intent', name='uq_payment_credit_intent'),)
 
 
 class ProcessingFee(db.Model):

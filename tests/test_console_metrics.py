@@ -80,6 +80,27 @@ check(src.get('read_at') and src.get('commit', '').startswith('abc1234') and 'co
 check('@metrics.test' not in r.get_data(as_text=True), 'no email addresses')
 check(r.headers.get('Cache-Control') == 'no-store', 'and is never cached')
 
+print('\n3. A report program, with METRICS_API_KEY as a bearer token')
+KEY = 'metrics-key-' + 'x' * 24
+os.environ['METRICS_API_KEY'] = KEY
+r = app.test_client().get('/console/metrics.json', headers={'Authorization': f'Bearer {KEY}'})
+check(r.status_code == 200 and (r.get_json() or {}).get('counts', {}).get('by_kind', {}).get('real') == 2,
+      f'the right key reads the same counts without signing in ({r.status_code})')
+r = app.test_client().get('/console/metrics.json', headers={'Authorization': 'Bearer wrong-key-wrong-key'})
+check(r.status_code == 401 and b'metricsreal' not in r.data, f'a wrong key is refused ({r.status_code})')
+r = app.test_client().get(f'/console/metrics.json?key={KEY}')
+check(r.status_code in (302, 401, 403) and b'metricsreal' not in r.data, 'a key in the URL opens nothing')
+r = app.test_client().get('/console/', headers={'Authorization': f'Bearer {KEY}'})
+check(r.status_code in (302, 401, 403) and b'metricsreal' not in r.data,
+      f'and the key opens nothing else in the console ({r.status_code})')
+os.environ['METRICS_API_KEY'] = 'short'
+r = app.test_client().get('/console/metrics.json', headers={'Authorization': 'Bearer short'})
+check(r.status_code == 401, 'a key too short to be a secret is never accepted')
+os.environ['METRICS_API_KEY'] = ''
+r = app.test_client().get('/console/metrics.json', headers={'Authorization': 'Bearer '})
+check(r.status_code == 401, 'and an unset key opens nothing')
+os.environ.pop('METRICS_API_KEY')
+
 if failures:
     print(f'\n❌ {len(failures)} failed')
     sys.exit(1)
