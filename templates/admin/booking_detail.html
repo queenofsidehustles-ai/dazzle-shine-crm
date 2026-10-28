@@ -545,6 +545,15 @@
         </select>
         <button type="submit" class="btn btn-gold" style="flex-shrink:0"
                 {% if not booking.email and not booking.phone %}disabled{% endif %}>Send to {{ booking.name.split()[0] }}</button>
+        {# After a send that only partly went, Send retries just the part that
+           did not go. This is for meaning to send it all again. #}
+        {% if send_missed %}
+        <label style="flex-basis:100%;font-size:0.8rem;color:var(--muted);display:flex;gap:6px;align-items:center;margin:2px 0 0">
+          <input type="checkbox" name="resend_all" value="1">
+          Send everything again, including what already reached them
+          (last time the {% for n, chs in send_missed.items() %}{{ 'deposit request' if n == 'deposit' else ('payment link' if n == 'full' else n) }} {{ chs|join(' and ') }}{{ ', ' if not loop.last }}{% endfor %} did not go)
+        </label>
+        {% endif %}
       </form>
       {% if not booking.email and not booking.phone %}
       <p style="font-size:0.78rem;color:var(--warn);margin:8px 0 0">⚠️ This booking has no email or phone — nothing can be sent.</p>

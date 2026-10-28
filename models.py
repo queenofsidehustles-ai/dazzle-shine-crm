@@ -160,6 +160,9 @@ class Booking(db.Model):
     # a resend. Migration 0040.
     customer_send_at = db.Column(db.DateTime)
     customer_send_kind = db.Column(db.String(10))
+    # What the last confirmation send delivered, per notification, channel and
+    # address, as JSON -- so a retry sends only what did not go. Migration 0044.
+    customer_send_log = db.Column(db.Text)
     # An off-session card charge Stripe has not answered yet (a timeout, a
     # dropped connection, a 5xx): the exact request, as JSON, so the next
     # attempt -- from either the balance or the auto-pay pass, or the button --

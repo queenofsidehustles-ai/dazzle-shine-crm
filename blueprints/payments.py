@@ -41,7 +41,7 @@ def channel_detail(misses):
     return '; '.join(f"the {ch} didn't go ({why.rstrip('.')})" for ch, why in misses)
 
 
-def send_payment_link_detail(booking, kind='full'):
+def send_payment_link_detail(booking, kind='full', channels=None, delivered=None):
     """As send_payment_link, but returns (ok, detail) so the owner can be told
     *why* nothing went out.
 
@@ -50,8 +50,21 @@ def send_payment_link_detail(booking, kind='full'):
     calling send_email inside a try block, so every refusal -- no email key in
     Settings -> Connections, a mistyped address, Resend rejecting the call --
     counted as a successful send. A deposit request then flashed "Sent" at the
-    owner and reached nobody."""
+    owner and reached nobody.
+
+    channels limits the send to some of 'email' and 'text' (a retry of only
+    what did not go last time); delivered, if given, collects the channels
+    that went.
+
+    Money already paid is never asked for: a deposit request on a paid deposit,
+    or a payment link on a job with nothing owed, is refused here rather than
+    trusted to every caller to have checked."""
     from notifications import send_email, send_sms
+    if kind == 'deposit' and booking.deposit_paid:
+        return False, 'the deposit is already paid'
+    if kind != 'deposit' and amount_due(booking) <= 0:
+        return False, 'nothing is owed on this booking'
+    channels = set(channels) if channels is not None else {'email', 'text'}
     url = payment_link_url(booking, kind)
     first = (booking.name or 'there').split()[0]
     if kind == 'deposit':
@@ -61,7 +74,7 @@ def send_payment_link_detail(booking, kind='full'):
         amt_text = f"${amount_due(booking):.2f}"
         sms_line = f"here's your invoice for {amt_text} — tap to pay securely"
     sent, misses = False, []
-    if booking.email:
+    if booking.email and 'email' in channels:
         try:
             ok, why = send_email(
                 to_email=booking.email, to_name=booking.name,
@@ -78,15 +91,19 @@ def send_payment_link_detail(booking, kind='full'):
 </div>""",
             )
             sent = sent or bool(ok)
+            if ok and delivered is not None:
+                delivered.append('email')
             if not ok:
                 misses.append(('email', why or 'the email was refused'))
         except Exception as e:
             misses.append(('email', str(e)))
-    if booking.phone:
+    if booking.phone and 'text' in channels:
         try:
             ok, why = send_sms(booking.phone,
                                f"Hi {first}! {sms_line}: {url} — {_biz()}. Reply STOP to opt out.")
             sent = sent or bool(ok)
+            if ok and delivered is not None:
+                delivered.append('text')
             if not ok:
                 misses.append(('text', why or 'the text was refused'))
         except Exception as e:

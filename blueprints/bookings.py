@@ -571,6 +571,7 @@ def detail(booking_id):
                            future_visits=future_visits,
                            series_visits=series_visits,
                            email_ok=looks_like_email(booking.email),
+                           send_missed=missed_last_send(booking),
                            SERVICE_LABELS=SERVICE_LABELS, EXTRAS=EXTRAS,
                            FREQUENCY_LABELS=FREQUENCY_LABELS,
                            pay_url=pay_url, due=amount_due(booking),
@@ -648,7 +649,46 @@ def rebuild_clients():
     return redirect(url_for('bookings.clients'))
 
 
-def _notify_customer(b, confirmation=True, pay_kind='none'):
+# A send that only partly reached the customer is retried, by default, for
+# just the parts that did not go -- for this long after it.
+RETRY_MISSED_HOURS = 24
+
+
+def _send_log(b):
+    """What the last send to this customer was, and what of it went where."""
+    import json
+    try:
+        got = json.loads(b.customer_send_log or '')
+    except (TypeError, ValueError):
+        return None
+    return got if isinstance(got, dict) else None
+
+
+def _address(b, channel):
+    """Who a channel reaches on this booking. A delivery counts for the address
+    it went to: a corrected email is somebody the confirmation has not reached."""
+    if channel == 'email':
+        return 'email:' + (b.email or '').strip().lower()
+    return 'text:' + ''.join(ch for ch in (b.phone or '') if ch.isdigit())
+
+
+def missed_last_send(b, pay_kind=None):
+    """{notification: [channel, ...]} that the last send to this customer did
+    not deliver, when it was recent and (if pay_kind is given) of that kind.
+    Empty when the last send reached everywhere it was meant to."""
+    log = _send_log(b)
+    if not log or (pay_kind is not None and log.get('kind') != pay_kind):
+        return {}
+    try:
+        at = datetime.fromisoformat(log.get('at') or '')
+    except ValueError:
+        return {}
+    if datetime.utcnow() - at > timedelta(hours=RETRY_MISSED_HOURS):
+        return {}
+    return {n: list(chs) for n, chs in (log.get('missed') or {}).items() if chs}
+
+
+def _notify_customer(b, confirmation=True, pay_kind='none', only_missed=False):
     """Tell the customer about their booking — the confirmation, a payment
     request, or both. Returns a sentence for the flash message.
 
@@ -658,10 +698,38 @@ def _notify_customer(b, confirmation=True, pay_kind='none'):
     the customer hearing nothing at all.
 
     Each send reports separately and a failure keeps its reason, rather than
-    being swallowed into one vague warning that vanishes on the next click."""
+    being swallowed into one vague warning that vanishes on the next click.
+
+    What went is written down per notification, channel and address
+    (booking.customer_send_log). only_missed sends only what the last send did
+    not deliver: the text that failed, not the email that already arrived a
+    second time."""
+    import json
     reachable = bool(b.email or b.phone)
     if not reachable:
         return ' ⚠️ No email or phone on this booking, so the customer was told nothing.'
+
+    prev = _send_log(b) if only_missed else None
+    done = (prev or {}).get('sent') or {}
+    log_sent = {n: list(v) for n, v in done.items()}
+    log_missed = {}
+    already = []
+
+    have = {ch for ch, addr in (('email', b.email), ('text', b.phone)) if addr}
+
+    def _channels(notification):
+        return {ch for ch in have if _address(b, ch) not in done.get(notification, [])}
+
+    def _by(wanted):
+        # A retry of part of it says which part, so "Sent the confirmation"
+        # is not read as a second copy of the email.
+        return (' by ' + ' and '.join(sorted(wanted))) if wanted != have else ''
+
+    def _record(notification, wanted, went):
+        log_sent.setdefault(notification, [])
+        log_sent[notification] += [_address(b, ch) for ch in went
+                                   if _address(b, ch) not in log_sent[notification]]
+        log_missed[notification] = sorted(set(wanted) - set(went))
 
     sent, failed, partial = [], [], []
     # Both sends report by returning, not by raising. Calling them bare inside a
@@ -670,30 +738,47 @@ def _notify_customer(b, confirmation=True, pay_kind='none'):
     # "Sent the confirmation and deposit request", and the only way to find out
     # otherwise was the customer saying they never got it.
     if confirmation:
-        try:
-            ok, why = _send_booking_confirmation(b)
-            if ok:
-                sent.append('confirmation 📩')
-                if why:
-                    partial.append(('confirmation', why))
-            else:
-                failed.append(f'confirmation ({why})')
-        except Exception as e:
-            failed.append(f'confirmation ({e})')
+        wanted, went = _channels('confirmation'), []
+        if not wanted:
+            already.append('confirmation')
+        else:
+            try:
+                ok, why = _send_booking_confirmation(b, channels=wanted, delivered=went)
+                if ok:
+                    sent.append('confirmation 📩' + _by(wanted))
+                    if why:
+                        partial.append(('confirmation', why))
+                else:
+                    failed.append(f'confirmation ({why})')
+            except Exception as e:
+                failed.append(f'confirmation ({e})')
+            _record('confirmation', wanted, went)
 
     if pay_kind in ('deposit', 'full'):
         label = 'deposit request 💳' if pay_kind == 'deposit' else 'payment link 💳'
-        try:
-            from blueprints.payments import send_payment_link_detail
-            ok, why = send_payment_link_detail(b, kind=pay_kind)
-            if ok:
-                sent.append(label)
-                if why:
-                    partial.append((label.rstrip(' 💳'), why))
-            else:
-                failed.append(f'{label} ({why})')
-        except Exception as e:
-            failed.append(f'{label} ({e})')
+        wanted, went = _channels(pay_kind), []
+        if not wanted:
+            already.append(label.rstrip(' 💳'))
+        else:
+            try:
+                from blueprints.payments import send_payment_link_detail
+                ok, why = send_payment_link_detail(b, kind=pay_kind, channels=wanted,
+                                                   delivered=went)
+                if ok:
+                    sent.append(label + _by(wanted))
+                    if why:
+                        partial.append((label.rstrip(' 💳'), why))
+                else:
+                    failed.append(f'{label} ({why})')
+            except Exception as e:
+                failed.append(f'{label} ({e})')
+            _record(pay_kind, wanted, went)
+
+    b.customer_send_log = json.dumps({
+        'kind': pay_kind if pay_kind in ('deposit', 'full') else 'none',
+        'at': datetime.utcnow().isoformat(timespec='seconds'),
+        'sent': log_sent, 'missed': log_missed})
+    db.session.commit()
 
     # Flash only. send_email and send_sms write their own Sent Log row on every
     # refusal they report -- the demo guard blocking it, no key connected, no
@@ -712,7 +797,11 @@ def _notify_customer(b, confirmation=True, pay_kind='none'):
         flash(f'⚠️ Only part of the {what} reached {b.name or "the customer"}: {why}. '
               f'Check the Sent Log for details.', 'warning')
 
-    return (' Sent the ' + ' and '.join(sent) + '.') if sent else ''
+    note = (' Sent the ' + ' and '.join(sent) + '.') if sent else ''
+    if already and (sent or not failed):
+        note += (' The ' + ' and '.join(already) + ' had already reached them, '
+                 'so ' + ('it was' if len(already) == 1 else 'they were') + ' not sent again.')
+    return note
 
 
 # A second identical press of Send within this long is a double-click.
@@ -732,11 +821,6 @@ def send_confirmation(booking_id):
     pay_kind = request.form.get('pay_kind', 'none')
     if pay_kind not in ('deposit', 'full'):
         pay_kind = 'none'
-    # A deposit already paid is not asked for again: the link would only tell
-    # her it has been paid. The confirmation still goes.
-    if pay_kind == 'deposit' and b.deposit_paid:
-        pay_kind = 'none'
-        flash('The deposit is already paid, so no deposit request was sent.', 'info')
     # A double-click is not a resend. Claimed with one conditional UPDATE, so
     # two presses landing together cannot both get through.
     now = datetime.utcnow()
@@ -754,7 +838,25 @@ def send_confirmation(booking_id):
         flash(f'Already sent to {b.name or "the customer"} a moment ago, so it was not '
               f'sent again. Wait a minute if you do mean to send it twice.', 'info')
         return redirect(url_for('bookings.detail', booking_id=booking_id))
-    note = _notify_customer(b, confirmation=True, pay_kind=pay_kind)
+    # Read the payment state again now, not as it was when the page was drawn:
+    # the customer may have paid from an earlier link while the owner looked at
+    # it, and Stripe's webhook records that on its own. Money already paid is
+    # not asked for again -- the link would only tell her it has been paid. The
+    # confirmation still goes.
+    db.session.refresh(b)
+    from blueprints.payments import amount_due
+    if pay_kind == 'deposit' and (b.deposit_paid or b.paid_at):
+        pay_kind = 'none'
+        flash('The deposit is already paid, so no deposit request was sent.', 'info')
+    elif pay_kind == 'full' and amount_due(b) <= 0:
+        pay_kind = 'none'
+        flash('Nothing is owed on this booking, so no payment link was sent.', 'info')
+    # Pressed again after a send that only partly went: send what did not go,
+    # not the parts she already has. "Send everything again" overrides it.
+    only_missed = (not request.form.get('resend_all')
+                   and bool(missed_last_send(b, pay_kind)))
+    note = _notify_customer(b, confirmation=True, pay_kind=pay_kind,
+                            only_missed=only_missed)
     if not note.strip():
         # Nothing reached her, so pressing again once the cause is fixed is a
         # retry, not a double-click.
@@ -3322,7 +3424,7 @@ def confirmation_content(booking):
     return subject, html, sms
 
 
-def _send_booking_confirmation(booking):
+def _send_booking_confirmation(booking, channels=None, delivered=None):
     """Confirm a hand-created booking to the customer via email + text.
     No deposit language — a simple 'you're booked' note.
 
@@ -3333,25 +3435,32 @@ def _send_booking_confirmation(booking):
 
     detail names each channel that did not go, even when the other did -- so a
     True with a detail is a partial send. Nothing to send to at all is ok=False
-    with that said."""
+    with that said.
+
+    channels and delivered work as in payments.send_payment_link_detail."""
     from notifications import send_email, send_sms
     subject, html, sms = confirmation_content(booking)
     ok, misses = False, []
+    channels = set(channels) if channels is not None else {'email', 'text'}
 
-    if booking.email:
+    if booking.email and 'email' in channels:
         try:
             mailed, why = send_email(to_email=booking.email, to_name=booking.name,
                                      subject=subject, html=html, cc=booking.cc_email)
             ok = ok or bool(mailed)
+            if mailed and delivered is not None:
+                delivered.append('email')
             if not mailed:
                 misses.append(('email', why or 'the email was refused'))
         except Exception as e:
             misses.append(('email', str(e)))
 
-    if booking.phone:
+    if booking.phone and 'text' in channels:
         try:
             texted, why = send_sms(booking.phone, sms)
             ok = ok or bool(texted)
+            if texted and delivered is not None:
+                delivered.append('text')
             if not texted:
                 misses.append(('text', why or 'the text was refused'))
         except Exception as e:
