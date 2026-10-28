@@ -44,9 +44,16 @@ import tenancy
 CHARGES = []
 
 
+import itertools
+_ids = itertools.count(1)
+
+
 class _Intent:
     status = 'succeeded'
-    id = 'pi_test_single_run'
+
+    def __init__(self):
+        # Each charge is its own intent at Stripe, and is credited once.
+        self.id = f'pi_test_single_run_{next(_ids)}'
 
 
 class _PI:

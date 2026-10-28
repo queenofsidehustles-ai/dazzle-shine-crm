@@ -20,9 +20,14 @@ bk._send_booking_confirmation = lambda b: (True, 'stub')
 # Capture what Stripe would be asked to charge — nothing real is called.
 CHARGES = []
 import payment_service
+import itertools
+_ids = itertools.count(1)
 class _Intent:
     status = 'succeeded'
-    id = 'pi_test_123'          # the real code records the intent id
+    def __init__(self):
+        # The real code records the intent id, and credits each one once, so
+        # every charge gets its own, as at Stripe.
+        self.id = f'pi_test_{next(_ids)}'
 class _PI:
     @staticmethod
     def create(**kw):

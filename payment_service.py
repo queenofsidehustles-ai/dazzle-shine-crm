@@ -1,3 +1,6 @@
+import json
+from datetime import datetime, timezone
+
 import stripe
 from notifications import send_email, send_sms
 import branding
@@ -45,7 +48,6 @@ def charge_balance(booking) -> tuple:
     actually answers that question."""
     from blueprints.payments import sync_balance
     stripe.api_key = integrations.stripe_secret_key()
-    notify_email = branding.owner_email()
 
     if not stripe.api_key:
         return False, 'Stripe not configured'
@@ -64,70 +66,23 @@ def charge_balance(booking) -> tuple:
         return False, 'No saved payment method on file'
 
     amount_cents = int(round(due * 100))
-
-    try:
-        intent = stripe.PaymentIntent.create(
-            amount=amount_cents,
-            currency='usd',
-            customer=booking.stripe_customer_id,
-            payment_method=booking.stripe_payment_method_id,
-            confirm=True,
-            off_session=True,
-            description=f'Balance for Booking #{booking.id} — {booking.service_label}',
-            metadata={'booking_id': str(booking.id), 'kind': 'balance'},
-            idempotency_key=charge_key('balance', booking, amount_cents,
-                                       booking.stripe_payment_method_id),
-        )
-        if intent.status == 'succeeded':
-            # Mark the booking PAID, not merely "balance collected".
-            #
-            # This used to set balance_collected and stop there, leaving paid_at
-            # empty. Revenue is counted by paid_at and "still owed" is anything
-            # without it — so a job could be charged in full, the money arrive in
-            # Stripe, and the CRM still report it as unpaid and missing from
-            # income. autocharge() has always called mark_paid; this didn't.
-            #
-            # mark_paid also sends the receipt and the owner alert, so the
-            # bespoke email that used to live here has gone rather than send the
-            # customer two.
-            from blueprints.payments import mark_paid
-            booking.stripe_payment_intent = intent.id
-            mark_paid(booking, method='card')
-            return True, ''
-        else:
-            _notify_failed(booking, notify_email, f'Unexpected status: {intent.status}')
-            return False, f'Payment status: {intent.status}'
-
-    except stripe.error.CardError as e:
-        err = e.user_message or str(e)
-        _notify_failed(booking, notify_email, err)
-        return False, err
-    except UNKNOWN_OUTCOME as e:
-        # Stripe may well have taken the money; nobody here knows yet. This
-        # used to text the customer that her payment failed and tell the owner
-        # to collect it by hand -- the road to taking it twice. The next attempt
-        # sends the same idempotency key and gets the first answer back, and
-        # the payment_intent.succeeded webhook records it if it did go through.
-        _notify_unknown(booking, notify_email, str(e))
-        return False, ('Stripe did not answer, so this charge may or may not have '
-                       'gone through. Do not collect it another way; it will '
-                       'settle automatically.')
-    except stripe.error.StripeError as e:
-        _notify_failed(booking, notify_email, str(e))
-        return False, str(e)
+    return _offsession(booking, booking.stripe_customer_id,
+                       booking.stripe_payment_method_id, amount_cents, loud=True)
 
 
 # A timeout, a dropped connection, Stripe's own 5xx, or a 429: the request may
 # have been processed, or may be processed on a retry. Not a decline.
+# An IdempotencyError is the same request still in flight from another worker
+# (or one that differs from it): the answer is that request's, not a decline.
 UNKNOWN_OUTCOME = (stripe.error.APIConnectionError, stripe.error.APIError,
-                   stripe.error.RateLimitError)
+                   stripe.error.RateLimitError, stripe.error.IdempotencyError)
 
 
 def autocharge(booking) -> tuple:
     """Auto-pay: charge the FULL amount due on this booking to the saved card
     (the booking's own, or its client's card on file). Used morning-of for
     recurring / customer-portal auto-pay clients. Returns (success, error)."""
-    from blueprints.payments import amount_due, mark_paid
+    from blueprints.payments import amount_due
     stripe.api_key = integrations.stripe_secret_key()
     if not stripe.api_key:
         return False, 'Stripe not configured'
@@ -152,25 +107,175 @@ def autocharge(booking) -> tuple:
     if cents <= 0:
         return False, 'Nothing due'
 
+    return _offsession(booking, customer_id, pm_id, cents, loud=False)
+
+
+# Stripe remembers an idempotency key for 24 hours: a request repeated inside
+# that window gets the first answer back, one repeated after it is a new charge.
+# A charge left unanswered for longer than this is looked up instead of retried.
+PENDING_REPEAT_HOURS = 23
+
+UNKNOWN_MESSAGE = ('Stripe did not answer, so this charge may or may not have '
+                   'gone through. Do not collect it another way; it will '
+                   'settle automatically.')
+
+
+def _pending(booking):
+    raw = getattr(booking, 'charge_pending', None)
+    if not raw:
+        return None
+    try:
+        got = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    need = ('key', 'amount', 'customer', 'pm', 'description', 'at')
+    return got if isinstance(got, dict) and all(k in got for k in need) else None
+
+
+def _pending_hours(pending):
+    try:
+        at = datetime.fromisoformat(pending['at'])
+    except (TypeError, ValueError):
+        return PENDING_REPEAT_HOURS     # unreadable: look it up, do not repeat it
+    return (datetime.utcnow() - at).total_seconds() / 3600
+
+
+def _clear_pending(booking):
+    from extensions import db
+    if getattr(booking, 'charge_pending', None):
+        booking.charge_pending = None
+        db.session.commit()
+
+
+def _offsession(booking, customer_id, pm_id, cents, loud):
+    """The one way an off-session card charge is made: the hourly balance pass,
+    the auto-pay pass and the Charge button all come here. Returns (ok, error).
+
+    One attempt per obligation. The two passes used to send different
+    idempotency keys ('balance' and 'autopay') for the same money, so when the
+    balance charge timed out the auto-pay pass a moment later, finding the job
+    still unpaid, charged the card again under a key Stripe had never seen.
+    Now both send the same request, and a charge Stripe has not answered is
+    written down (booking.charge_pending) before it is sent. Every later
+    attempt, from any path, repeats that exact request -- same key, same
+    amount, same card -- and so gets Stripe's first answer back instead of a
+    second charge. It is only replaced once Stripe has given a definite answer,
+    or a lookup shows it never charged anything.
+
+    loud: tell the owner and customer about a failure that is not a decline
+    (the balance pass always has; auto-pay has only ever reported declines)."""
+    from extensions import db
+    notify_email = branding.owner_email()
+    pending = _pending(booking)
+    if pending and (pending['amount'] > cents
+                    or _pending_hours(pending) >= PENDING_REPEAT_HOURS):
+        # Repeating it would be wrong: less is owed now than it asked for (so
+        # if it never went through, repeating it overcharges), or Stripe has
+        # forgotten the key (so repeating it is a fresh charge). Ask Stripe.
+        state = settle_pending(booking)
+        if state == 'recorded':
+            return True, ''
+        if state != 'none':
+            return False, UNKNOWN_MESSAGE
+        pending = None
+    first = pending is None
+    if first:
+        pending = {
+            'key': charge_key('balance', booking, cents, pm_id),
+            'amount': cents, 'customer': customer_id, 'pm': pm_id,
+            'description': f'Balance for Booking #{booking.id} — {booking.service_label}',
+            'at': datetime.utcnow().isoformat(timespec='seconds'),
+        }
+        booking.charge_pending = json.dumps(pending)
+        db.session.commit()
+
     try:
         intent = stripe.PaymentIntent.create(
-            amount=cents, currency='usd', customer=customer_id,
-            payment_method=pm_id, confirm=True, off_session=True,
-            description=f'Auto-pay for Booking #{booking.id} — {booking.service_label}',
-            metadata={'booking_id': str(booking.id), 'kind': 'autopay'},
-            idempotency_key=charge_key('autopay', booking, cents, pm_id),
+            amount=pending['amount'],
+            currency='usd',
+            customer=pending['customer'],
+            payment_method=pending['pm'],
+            confirm=True,
+            off_session=True,
+            description=pending['description'],
+            metadata={'booking_id': str(booking.id), 'kind': 'balance'},
+            idempotency_key=pending['key'],
         )
-        if intent.status == 'succeeded':
-            booking.stripe_payment_intent = intent.id
-            mark_paid(booking, method='card')   # commits + sends receipt + owner alert
-            return True, ''
-        return False, f'Payment status: {intent.status}'
     except stripe.error.CardError as e:
-        notify_email = branding.owner_email()
-        _notify_failed(booking, notify_email, e.user_message or str(e))
-        return False, (e.user_message or str(e))
+        _clear_pending(booking)
+        err = e.user_message or str(e)
+        _notify_failed(booking, notify_email, err)
+        return False, err
+    except UNKNOWN_OUTCOME as e:
+        # Stripe may well have taken the money; nobody here knows yet. This
+        # used to text the customer that her payment failed and tell the owner
+        # to collect it by hand -- the road to taking it twice. The request
+        # stays pending: the next attempt repeats it and gets the first answer
+        # back, and the payment_intent.succeeded webhook records it if it did
+        # go through. The owner hears once, not on every hourly retry.
+        if first:
+            _notify_unknown(booking, notify_email, str(e), pending['amount'])
+        return False, UNKNOWN_MESSAGE
     except stripe.error.StripeError as e:
+        _clear_pending(booking)
+        if loud:
+            _notify_failed(booking, notify_email, str(e))
         return False, str(e)
+
+    if intent.status == 'succeeded':
+        # Credited by what Stripe says it took, once. Mark the booking PAID
+        # when that is everything owed, not merely "balance collected": revenue
+        # is counted by paid_at. mark_paid also sends the receipt and the owner
+        # alert, so there is no bespoke email here.
+        received = getattr(intent, 'amount_received', None) or pending['amount']
+        _credit_intent(booking, intent.id, int(received))
+        return True, ''
+    _clear_pending(booking)
+    if loud:
+        _notify_failed(booking, notify_email, f'Unexpected status: {intent.status}')
+    return False, f'Payment status: {intent.status}'
+
+
+def settle_pending(booking):
+    """Find out from Stripe what became of an unanswered charge.
+
+    Returns 'recorded' when it went through and is now credited, 'none' when
+    Stripe holds no charge for it (the pending request is dropped, so the next
+    attempt starts afresh), and 'unknown' when Stripe still cannot say -- the
+    lookup failed, or a charge for this job is still in progress."""
+    pending = _pending(booking)
+    if not pending:
+        return 'none'
+    stripe.api_key = integrations.stripe_secret_key()
+    if not stripe.api_key:
+        return 'unknown'
+    try:
+        at = datetime.fromisoformat(pending['at']).replace(tzinfo=timezone.utc)
+        since = int(at.timestamp()) - 600
+    except (TypeError, ValueError):
+        since = None
+    try:
+        query = {'customer': pending['customer'], 'limit': 100}
+        if since:
+            query['created'] = {'gte': since}
+        intents = list(stripe.PaymentIntent.list(**query).auto_paging_iter())
+    except stripe.error.StripeError:
+        return 'unknown'
+    for pi in intents:
+        metadata = pi.get('metadata') or {}
+        if str(metadata.get('booking_id') or '') != str(booking.id):
+            continue
+        if metadata.get('kind') not in ('balance', 'autopay'):
+            continue
+        status = pi.get('status')
+        if status == 'succeeded':
+            if record_offsession_success(booking, pi):
+                return 'recorded'
+            continue                     # already credited: not this request
+        if status in ('processing', 'requires_capture', 'requires_confirmation'):
+            return 'unknown'
+    _clear_pending(booking)
+    return 'none'
 
 
 def record_offsession_success(booking, pi):
@@ -179,10 +284,8 @@ def record_offsession_success(booking, pi):
     reached charge_balance/autocharge -- a timeout, or the process dying after
     Stripe took the money -- so nothing here has recorded it.
 
-    Returns True if it recorded something. Safe to receive twice: an intent
-    already on the booking has been recorded, by this or by the charge itself."""
-    from blueprints.payments import amount_due, collected, mark_paid, sync_balance
-    from extensions import db
+    Returns True if it recorded something. Safe to receive twice, late, or
+    after a newer charge on the same job: see _credit_intent."""
     if pi.get('status', 'succeeded') != 'succeeded':
         return False
     if (pi.get('currency') or 'usd').lower() != 'usd':
@@ -192,13 +295,45 @@ def record_offsession_success(booking, pi):
                  client.stripe_customer_id if client else None} - {None, ''}
     if pi.get('customer') not in customers:
         return False
-    if booking.stripe_payment_intent == pi.get('id'):
+    return _credit_intent(booking, pi.get('id'), int(pi.get('amount_received') or 0))
+
+
+def _credit_intent(booking, intent_id, received):
+    """Credit one Stripe payment to this booking, once. True if it credited.
+
+    Once means once whatever order things arrive in. The booking only keeps its
+    latest intent id, so that alone could not tell an old payment's webhook,
+    replayed after a newer charge on the same job, from a new payment -- and
+    credited it again. Every intent handled is in payment_credit, unique."""
+    from blueprints.payments import amount_due, collected, mark_paid, sync_balance
+    from extensions import db
+    from models import PaymentCredit
+    from sqlalchemy.exc import IntegrityError
+    if not intent_id or received <= 0:
         return False
-    received = int(pi.get('amount_received') or 0)
-    if received <= 0:
+    if booking.stripe_payment_intent == intent_id or \
+            PaymentCredit.query.filter_by(stripe_payment_intent=intent_id).first():
+        _clear_pending(booking)
         return False
-    booking.stripe_payment_intent = pi.get('id')
-    if received == int(round(amount_due(booking) * 100)):
+    due = int(round(amount_due(booking) * 100))
+    outcome = 'credited' if due > 0 else 'overpaid'
+    try:
+        with db.session.begin_nested():
+            db.session.add(PaymentCredit(stripe_payment_intent=intent_id,
+                                         booking_id=booking.id,
+                                         amount_cents=received, outcome=outcome))
+    except IntegrityError:
+        return False                     # another request handled it just now
+    booking.charge_pending = None
+    if outcome == 'overpaid':
+        # Money arrived on a job that was already paid -- most likely collected
+        # another way while Stripe had not answered. Crediting it would report
+        # income nobody is owed; the owner needs to refund one of them.
+        db.session.commit()
+        _notify_overpaid(booking, received, intent_id)
+        return False
+    booking.stripe_payment_intent = intent_id
+    if received == due:
         if not mark_paid(booking, method='card'):
             db.session.commit()
         return True
@@ -210,10 +345,30 @@ def record_offsession_success(booking, pi):
     return True
 
 
-def _notify_unknown(booking, notify_email, error_msg):
+def _notify_overpaid(booking, received, intent_id):
+    send_email(
+        to_email=branding.owner_email(),
+        to_name=branding.biz_name(),
+        from_name=f'{branding.biz_name()} Payments',
+        subject=f'Paid twice? {booking.name} — ${received / 100:.2f}',
+        html=f"""
+<div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;color:#1f1333">
+  <h2 style="color:#d97706">Stripe took a payment on a job that was already paid</h2>
+  <p><strong>Customer:</strong> {booking.name}</p>
+  <p><strong>Booking #:</strong> {booking.id}</p>
+  <p><strong>Amount:</strong> ${received / 100:.2f}</p>
+  <p><strong>Stripe payment:</strong> {intent_id}</p>
+  <p>It has not been added to what this job has collected. Check the booking and
+  refund whichever payment was not meant to happen.</p>
+</div>""",
+    )
+
+
+def _notify_unknown(booking, notify_email, error_msg, cents=None):
     """Owner only. The customer is told nothing until there is something true
     to tell her."""
-    amt = booking.balance_due if booking.balance_due else (booking.price or 0)
+    amt = (cents / 100 if cents else
+           booking.balance_due if booking.balance_due else (booking.price or 0))
     send_email(
         to_email=notify_email,
         to_name=branding.biz_name(),

@@ -1954,9 +1954,16 @@ def fixdb():
 def charge_balance(booking_id):
     from flask import jsonify
     from payment_service import charge_balance as do_charge
+    from blueprints.api import _one_charge_run_at_a_time
     booking = Booking.query.get_or_404(booking_id)
-    ok, error = do_charge(booking)
-    db.session.commit()
+    # The same lock as the hourly run: pressed while the run is charging this
+    # very job, the two would otherwise race to Stripe with the same request.
+    with _one_charge_run_at_a_time() as mine:
+        if not mine:
+            return jsonify({'ok': False, 'error': 'Card charges are running for '
+                            'this business right now. Try again in a minute.'})
+        ok, error = do_charge(booking)
+        db.session.commit()
     return jsonify({'ok': ok, 'error': error})
 
 

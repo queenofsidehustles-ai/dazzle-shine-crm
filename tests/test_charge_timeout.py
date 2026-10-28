@@ -44,6 +44,8 @@ payment_service.send_email = lambda *a, **k: EMAILS.append(k.get('subject', ''))
 # key returns the stored intent and charges nothing, as Stripe does for 24h.
 STRIPE = {}
 MODE = {'next': 'ok'}
+import itertools
+_ids = itertools.count(1)       # intent ids are unique at Stripe, across jobs
 
 
 class _Intent:
@@ -58,7 +60,7 @@ class _PI:
         if key in STRIPE:
             return STRIPE[key]
         CHARGES.append(kw)                       # money moved
-        STRIPE[key] = _Intent(len(CHARGES))
+        STRIPE[key] = _Intent(next(_ids))
         mode, MODE['next'] = MODE['next'], 'ok'
         if mode == 'timeout_after_charge':
             raise stripe.error.APIConnectionError('Request timed out')

@@ -257,6 +257,10 @@ def _charge_balances_work():
         ok, err = do_charge(b)
         results.append({'booking_id': b.id, 'name': b.name, 'ok': ok, 'error': err})
     db.session.commit()
+    # One attempt per job per run. A balance charge that timed out leaves the
+    # job unpaid, and the auto-pay pass below used to find it unpaid and charge
+    # it again; a declined one would have been declined and texted twice.
+    tried = {r['booking_id'] for r in results}
 
     # Second pass: portal / recurring auto-pay clients — charge the FULL amount to
     # the client's card on file. Guarded so a booking already handled above (paid /
@@ -269,6 +273,8 @@ def _charge_balances_work():
         Booking.balance_collected == False,
     ).all()
     for b in auto:
+        if b.id in tried:
+            continue
         client = b.client
         if not (client and client.autopay):
             continue
@@ -282,6 +288,18 @@ def _charge_balances_work():
             continue
         ok, err = autocharge(b)
         results.append({'booking_id': b.id, 'name': b.name, 'ok': ok, 'error': err, 'autopay': True})
+    db.session.commit()
+
+    # Charges Stripe never answered, on jobs not being charged today. Today's
+    # are settled by repeating the request above; these would otherwise wait
+    # forever on a webhook that may not be set up. Looked up, never repeated.
+    from payment_service import settle_pending
+    for b in Booking.query.filter(Booking.charge_pending.isnot(None)).all():
+        if b.id in tried or b.preferred_date == today:
+            continue
+        if settle_pending(b) == 'recorded':
+            results.append({'booking_id': b.id, 'name': b.name, 'ok': True,
+                            'error': '', 'settled': True})
     db.session.commit()
 
     charged = len([r for r in results if r['ok']])
