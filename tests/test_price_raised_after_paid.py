@@ -128,7 +128,10 @@ with app.app_context():
 
     print('\n7. The money is not counted as income until it arrives')
     # b2 has taken $300 against a $360 price. Revenue must show the $300.
-    start, end = finance.month_bounds(b2.paid_at.year, b2.paid_at.month)
+    # the business's own month: see test_charge, section 8
+    from scheduling import to_local
+    when = to_local(b2.paid_at)
+    start, end = finance.month_bounds(when.year, when.month)
     rev = finance.revenue_between(start, end)
     check(rev == 482.0 + 300.0, f'revenue counts what was received, not the prices (${rev:,.2f})')
     check(finance.unpaid_outstanding() == 60.0,

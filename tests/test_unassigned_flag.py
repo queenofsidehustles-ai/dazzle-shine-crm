@@ -87,7 +87,10 @@ with app.app_context():
           'and so is a job five days out — which used to be invisible until the night before')
 
     print('\n7. The calendar marks it too')
-    page = c.get('/bookings/calendar').get_data(as_text=True)
+    # The month the job is in, which is not this month on the last day of one:
+    # the job is dated tomorrow, and the calendar opens on today's month.
+    jy, jm = int(TOMORROW[:4]), int(TOMORROW[5:7])
+    page = c.get(f'/bookings/calendar?year={jy}&month={jm}').get_data(as_text=True)
     check('unassigned' in page, 'the chip carries the class')
     check('NOBODY ASSIGNED' in page, 'and says so on hover')
 

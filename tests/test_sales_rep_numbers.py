@@ -232,7 +232,11 @@ check(sam.get('/find-leads/team', base_url=HOST).status_code == 403,
 
 print('\n5. A rep\'s own numbers and earnings')
 def sign():
-    now = datetime.utcnow()
+    # Noon UTC on the business's today: the same day and month on the business's
+    # clock and on UTC's, whatever the hour the suite runs at. The commission report
+    # counts months in UTC and this page picks its month by the business's day, so
+    # a payment stamped in the first hours of the 1st is a different month to each.
+    now = datetime.combine(TODAY, datetime.min.time()).replace(hour=12)
     db.session.add(CommercialAccount(business_name='Numbers Won Clinic', agent='Sam Sales', status='active',
                                      frequency='weekly', billing_type='monthly', billing_amount=1800,
                                      first_paid_at=now))
