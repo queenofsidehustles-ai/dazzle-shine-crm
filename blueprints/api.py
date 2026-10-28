@@ -785,10 +785,20 @@ def _resend_signature_ok(raw, secret_env=('RESEND_WEBHOOK_SECRET',)):
     import hmac
     import os
 
+    import time
+
     msg_id = request.headers.get('svix-id', '')
     stamp = request.headers.get('svix-timestamp', '')
     header = request.headers.get('svix-signature', '')
     if not (msg_id and stamp and header):
+        return False
+    # The timestamp is signed so that it can be checked: a signature is good
+    # forever, and without this a request captured once could be replayed at
+    # any time. Svix's own rule is five minutes either side.
+    try:
+        if abs(time.time() - int(stamp)) > SVIX_TOLERANCE_SECONDS:
+            return False
+    except ValueError:
         return False
     for name in secret_env:
         secret = (os.environ.get(name) or '').strip()
@@ -802,10 +812,13 @@ def _resend_signature_ok(raw, secret_env=('RESEND_WEBHOOK_SECRET',)):
         signed = f'{msg_id}.{stamp}.'.encode() + raw
         expected = base64.b64encode(hmac.new(key, signed, hashlib.sha256).digest()).decode()
         for part in header.split():
-            _, _, value = part.partition(',')
-            if value and hmac.compare_digest(value, expected):
+            version, _, value = part.partition(',')
+            if version == 'v1' and value and hmac.compare_digest(value, expected):
                 return True
     return False
+
+
+SVIX_TOLERANCE_SECONDS = 5 * 60
 
 
 @api_bp.route('/email-events', methods=['POST'])

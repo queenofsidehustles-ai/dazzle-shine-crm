@@ -891,8 +891,41 @@ def purge_company(slug):
     return redirect(here)
 
 
+def _metrics_key_ok():
+    """Whether this request carries METRICS_API_KEY as a bearer token.
+
+    A daily report is a program, not a person: it cannot sign in with a
+    password and a second factor, and without this the counts it needs were
+    only ever readable by somebody at a browser. The header only (a key in a
+    URL is in every proxy log on the way), compared in constant time, and only
+    when a key of real length is set -- an unset or empty variable opens
+    nothing. It reaches metrics.json and nothing else."""
+    import hmac
+    expected = (os.environ.get('METRICS_API_KEY') or '').strip()
+    if len(expected) < 16:
+        return False
+    given = request.headers.get('Authorization') or ''
+    if not given.startswith('Bearer '):
+        return False
+    return hmac.compare_digest(given[len('Bearer '):].strip().encode(), expected.encode())
+
+
+def console_or_metrics_key(f):
+    @functools.wraps(f)
+    def wrapper(*a, **kw):
+        if _metrics_key_ok():
+            return f(*a, **kw)
+        if request.headers.get('Authorization'):
+            # A program presenting a wrong key wants a 401 it can act on, not
+            # the sign-in page.
+            from flask import jsonify
+            return jsonify({'ok': False, 'error': 'invalid metrics key'}), 401
+        return console_required(f)(*a, **kw)
+    return wrapper
+
+
 @console_bp.route('/metrics.json')
-@console_required
+@console_or_metrics_key
 def metrics_json():
     """Who is on the platform, as JSON, for a daily report to read.
 
