@@ -672,6 +672,21 @@ def _address(b, channel):
     return 'text:' + ''.join(ch for ch in (b.phone or '') if ch.isdigit())
 
 
+def _fingerprint(b, notification):
+    """What a notification says, in short. A delivery only counts for the
+    words that went: an email with Tuesday's date in it has not told the
+    customer about Thursday, whatever the log says about the address."""
+    import hashlib
+    if notification == 'confirmation':
+        parts = confirmation_content(b)
+    else:
+        from blueprints.payments import amount_due
+        from pricing import get_deposit
+        parts = (notification, get_deposit() if notification == 'deposit' else amount_due(b),
+                 b.preferred_date, b.service_label, b.name)
+    return hashlib.sha256(repr(parts).encode()).hexdigest()[:16]
+
+
 def missed_last_send(b, pay_kind=None):
     """{notification: [channel, ...]} that the last send to this customer did
     not deliver, when it was recent and (if pay_kind is given) of that kind.
@@ -709,8 +724,14 @@ def _notify_customer(b, confirmation=True, pay_kind='none', only_missed=False):
     if not reachable:
         return ' ⚠️ No email or phone on this booking, so the customer was told nothing.'
 
+    notifications = (['confirmation'] if confirmation else []) + \
+        ([pay_kind] if pay_kind in ('deposit', 'full') else [])
+    prints = {n: _fingerprint(b, n) for n in notifications}
     prev = _send_log(b) if only_missed else None
-    done = (prev or {}).get('sent') or {}
+    # Only deliveries of what the notification says now count as done: details
+    # changed since (a new date, time, address, amount) make it a fresh send.
+    done = {n: v for n, v in ((prev or {}).get('sent') or {}).items()
+            if ((prev or {}).get('fp') or {}).get(n) == prints.get(n)}
     log_sent = {n: list(v) for n, v in done.items()}
     log_missed = {}
     already = []
@@ -777,7 +798,7 @@ def _notify_customer(b, confirmation=True, pay_kind='none', only_missed=False):
     b.customer_send_log = json.dumps({
         'kind': pay_kind if pay_kind in ('deposit', 'full') else 'none',
         'at': datetime.utcnow().isoformat(timespec='seconds'),
-        'sent': log_sent, 'missed': log_missed})
+        'sent': log_sent, 'missed': log_missed, 'fp': prints})
     db.session.commit()
 
     # Flash only. send_email and send_sms write their own Sent Log row on every

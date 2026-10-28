@@ -191,6 +191,19 @@ with app.app_context():
     b = a_booking()
     state.update(email_ok=True, sms_ok=False)
     press(c, b, 'none')
+    bb = db.session.get(Booking, b.id)
+    bb.preferred_date = '2026-11-05'              # rescheduled since
+    db.session.commit()
+    state.update(sms_ok=True)
+    later(b)
+    sent.clear()
+    press(c, b, 'none')
+    check(len(confirmations()) == 1 and len([m for m in sent if 'sms' in m]) == 1,
+          'a rescheduled booking is a fresh send: the email she has carries the old date')
+
+    b = a_booking()
+    state.update(email_ok=True, sms_ok=False)
+    press(c, b, 'none')
     lg = log(b)
     lg['at'] = (datetime.utcnow() - timedelta(hours=30)).isoformat(timespec='seconds')
     bb = db.session.get(Booking, b.id)

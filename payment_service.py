@@ -1,3 +1,4 @@
+import hashlib
 import json
 from datetime import datetime, timezone
 
@@ -180,8 +181,12 @@ def _offsession(booking, customer_id, pm_id, cents, loud):
         pending = None
     first = pending is None
     if first:
+        key = charge_key('balance', booking, cents, pm_id)
         pending = {
-            'key': charge_key('balance', booking, cents, pm_id),
+            'key': key,
+            # Carried in the intent's metadata, so an event or a lookup can
+            # tell whether a payment is the answer to THIS request.
+            'attempt': hashlib.sha256(key.encode()).hexdigest()[:20],
             'amount': cents, 'customer': customer_id, 'pm': pm_id,
             'description': f'Balance for Booking #{booking.id} — {booking.service_label}',
             'at': datetime.utcnow().isoformat(timespec='seconds'),
@@ -198,7 +203,7 @@ def _offsession(booking, customer_id, pm_id, cents, loud):
             confirm=True,
             off_session=True,
             description=pending['description'],
-            metadata={'booking_id': str(booking.id), 'kind': 'balance'},
+            metadata=_metadata(booking, pending),
             idempotency_key=pending['key'],
         )
     except stripe.error.CardError as e:
@@ -229,11 +234,30 @@ def _offsession(booking, customer_id, pm_id, cents, loud):
         # alert, so there is no bespoke email here.
         received = getattr(intent, 'amount_received', None) or pending['amount']
         _credit_intent(booking, intent.id, int(received))
+        _clear_pending(booking)          # this IS the answer to the held request
         return True, ''
     _clear_pending(booking)
     if loud:
         _notify_failed(booking, notify_email, f'Unexpected status: {intent.status}')
     return False, f'Payment status: {intent.status}'
+
+
+def _metadata(booking, pending):
+    out = {'booking_id': str(booking.id), 'kind': 'balance'}
+    if pending.get('attempt'):
+        out['attempt'] = pending['attempt']
+    return out
+
+
+def _resolves_pending(booking, attempt):
+    """Drop the held request if, and only if, this payment answers it. A
+    replayed event for an earlier payment says nothing about a newer request
+    still waiting on Stripe; dropping that would make its retry a new charge."""
+    pending = _pending(booking)
+    if pending and attempt and pending.get('attempt') == attempt:
+        booking.charge_pending = None
+        return True
+    return False
 
 
 def settle_pending(booking):
@@ -295,10 +319,11 @@ def record_offsession_success(booking, pi):
                  client.stripe_customer_id if client else None} - {None, ''}
     if pi.get('customer') not in customers:
         return False
-    return _credit_intent(booking, pi.get('id'), int(pi.get('amount_received') or 0))
+    return _credit_intent(booking, pi.get('id'), int(pi.get('amount_received') or 0),
+                          attempt=(pi.get('metadata') or {}).get('attempt'))
 
 
-def _credit_intent(booking, intent_id, received):
+def _credit_intent(booking, intent_id, received, attempt=None):
     """Credit one Stripe payment to this booking, once. True if it credited.
 
     Once means once whatever order things arrive in. The booking only keeps its
@@ -313,7 +338,8 @@ def _credit_intent(booking, intent_id, received):
         return False
     if booking.stripe_payment_intent == intent_id or \
             PaymentCredit.query.filter_by(stripe_payment_intent=intent_id).first():
-        _clear_pending(booking)
+        if _resolves_pending(booking, attempt):
+            db.session.commit()
         return False
     due = int(round(amount_due(booking) * 100))
     outcome = 'credited' if due > 0 else 'overpaid'
@@ -324,7 +350,7 @@ def _credit_intent(booking, intent_id, received):
                                          amount_cents=received, outcome=outcome))
     except IntegrityError:
         return False                     # another request handled it just now
-    booking.charge_pending = None
+    _resolves_pending(booking, attempt)
     if outcome == 'overpaid':
         # Money arrived on a job that was already paid -- most likely collected
         # another way while Stripe had not answered. Crediting it would report

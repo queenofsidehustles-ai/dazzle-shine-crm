@@ -267,6 +267,30 @@ with app.app_context():
     check(sum(e.startswith('Paid twice?') for e in EMAILS) == 1,
           f'the owner is told once to refund one ({EMAILS})')
 
+    print('\n4b. A replayed old event does not drop a newer held charge')
+    bid = job()
+    payment_service.charge_balance(fresh(bid))
+    old_pi = charged(bid)[0]
+    b = fresh(bid)
+    b.price = 500
+    db.session.commit()
+    MODE['next'] = 'timeout'
+    payment_service.charge_balance(fresh(bid))       # the $100: taken, answer lost
+    held = fresh(bid).charge_pending
+    deliver(old_pi)                                   # the $400 event, replayed
+    check(held and fresh(bid).charge_pending == held, 'the $100 request is still held')
+    b = fresh(bid)
+    b.price = 550                                     # and the price moves again
+    db.session.commit()
+    ok, err = payment_service.charge_balance(fresh(bid))
+    b = fresh(bid)
+    check(len(charged(bid)) == 2, f'the retry is the first answer, not a new charge (got {len(charged(bid))})')
+    check(float(b.amount_collected) == 500.0 and not b.charge_pending,
+          f'the $100 is credited and the hold dropped (collected {b.amount_collected})')
+    ok, err = payment_service.charge_balance(fresh(bid))
+    check(ok and len(charged(bid)) == 3 and charged(bid)[-1]['amount'] == 5000 and fresh(bid).paid_at,
+          'and the last $50 is its own charge')
+
     print('\n5. Past Stripe\'s 24-hour key memory, look it up rather than repeat it')
     bid = job()
     MODE['next'] = 'timeout'
