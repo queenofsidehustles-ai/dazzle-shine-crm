@@ -140,7 +140,7 @@ else:
                 'business': f'{slug.title()} Cleaning', 'slug': slug,
                 'name': 'Owner Person', 'email': email or f'{slug}@example.com',
                 'password': 'a-perfectly-fine-password', 'terms_accepted': '1',
-                'zip_code': '10001'})
+                'zip_code': '10001', 'phone': '4075550123'})
 
         def cookie_of(response):
             for h in response.headers.getlist('Set-Cookie'):

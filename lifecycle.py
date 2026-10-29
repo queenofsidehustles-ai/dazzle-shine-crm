@@ -542,8 +542,10 @@ def send_cleaner_schedule_reminders():
         myday = f"{branding.crm_base()}/contractors/my-day/{s.agreement_token}"
         _send_transactional('cleaner_schedule_reminder', s.email, s.name,
                             {'job_count': n, 'tomorrow_date': tomorrow, 'myday_link': myday})
-        # The owner's team row has no phone of its own (signup does not ask);
-        # their business phone is the number they gave for this.
+        # The owner's team row has no phone of its own. Signup does ask for one,
+        # but that is the number we ring them on, kept on the company record
+        # (control_plane owner_phone) and not lent to their reminders; their
+        # business phone is the number they gave for this.
         phone = s.phone
         if not phone and s.is_owner:
             from models import BusinessSetting

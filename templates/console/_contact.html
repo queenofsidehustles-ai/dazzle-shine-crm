@@ -1,0 +1,16 @@
+{# How the console shows the person to ring and write to. One place, so a
+   company's owner reads the same on the Companies list, its own page and every
+   funnel list. owner_phone is +1XXXXXXXXXX (see control_plane, and signup);
+   NULL for a company made before the number was asked for. #}
+{% macro phone(o) -%}
+  {%- if o.owner_phone and o.owner_phone|length == 12 -%}
+    <a href="tel:{{ o.owner_phone }}">({{ o.owner_phone[2:5] }}) {{ o.owner_phone[5:8] }}-{{ o.owner_phone[8:] }}</a>
+  {%- elif o.owner_phone -%}
+    <a href="tel:{{ o.owner_phone }}">{{ o.owner_phone }}</a>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro owner(o) -%}
+  {%- if o.owner_email %}<a href="mailto:{{ o.owner_email }}">{{ o.owner_email }}</a>{% endif -%}
+  {%- if o.owner_phone %}{% if o.owner_email %} · {% endif %}{{ phone(o) }}{% endif -%}
+{%- endmacro %}

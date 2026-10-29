@@ -166,6 +166,12 @@ organizations = Table(
     # _validate). Kept as a timestamp rather than a boolean because "she agreed"
     # is a fact worth being able to point to later, not just a flag.
     Column('terms_accepted_at', DateTime),
+    # The number to ring the owner on, as +1XXXXXXXXXX. Asked for at signup
+    # (blueprints/signup.py) so that someone can call to welcome them and check
+    # on them -- not a texting permission, which is separate and asked for
+    # separately (lead_outreach.send_welcome_text). NULL for companies made
+    # before it was asked, or by hand.
+    Column('owner_phone', String(40)),
 )
 
 
@@ -770,7 +776,7 @@ def find(engine, slug):
 
 
 def create(engine, slug, name, owner_email=None, attribution=None,
-           terms_accepted_at=None):
+           terms_accepted_at=None, owner_phone=None):
     import tenancy
     if not tenancy.valid_slug(slug):
         raise ValueError(
@@ -797,6 +803,7 @@ def create(engine, slug, name, owner_email=None, attribution=None,
             trial_ends_at=now + timedelta(days=billing.TRIAL_DAYS),
             activated_at=None,
             terms_accepted_at=terms_accepted_at,
+            owner_phone=owner_phone,
             **came_from))
     return find(engine, slug)
 

@@ -77,7 +77,7 @@ def _form(slug, email):
         'name': 'Test Owner',
         'email': email,
         'password': 'a-strong-test-password',
-        'terms_accepted': '1', 'zip_code': '32801',
+        'terms_accepted': '1', 'zip_code': '32801', 'phone': '4075550123',
     }
 
 

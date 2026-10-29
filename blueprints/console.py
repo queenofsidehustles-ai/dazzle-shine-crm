@@ -296,7 +296,7 @@ def companies():
     if q:
         needle = q.lower()
         orgs = [o for o in orgs if needle in ' '.join(
-            str(o.get(k) or '') for k in ('name', 'slug', 'owner_email')).lower()]
+            str(o.get(k) or '') for k in ('name', 'slug', 'owner_email', 'owner_phone')).lower()]
     # Most recent sign-ups first.
     orgs.sort(key=lambda o: o.get('created_at') or datetime.min, reverse=True)
     snaps = console_data.snapshots(orgs)

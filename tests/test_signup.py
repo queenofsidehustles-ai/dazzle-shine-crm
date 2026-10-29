@@ -102,7 +102,7 @@ r = c.post("/signup", data={
     "business": "Sparkle Cleaning Services", "slug": "sparkle",
     "name": "Dana Reed", "email": "dana@sparkle.test",
     "password": "a-perfectly-fine-password", "terms_accepted": "1",
-    "zip_code": "32801",
+    "zip_code": "32801", "phone": "(407) 555-0123",
 }, headers={"Host": "rollcall.test"})
 print("REDIRECT:", r.status_code, r.headers.get("Location"))
 print("OK")
@@ -186,7 +186,7 @@ c = app.test_client()
 r = c.post("/signup", data={
     "business": "Someone Else Entirely", "slug": "sparkle",
     "name": "Imposter", "email": "nope@x.test", "password": "another-password",
-    "zip_code": "32801",
+    "zip_code": "32801", "phone": "4075550123",
 }, headers={"Host": "rollcall.test"})
 print("STATUS:", r.status_code)
 print("SAYS TAKEN:", b"already taken" in r.data)
@@ -220,6 +220,7 @@ cases = [
       'password': 'a-good-password', 'zip_code': '00042'}, b'US ZIP code'),
 ]
 for data, expect in cases:
+    data = dict({'phone': '4075550123'}, **data)      # every case is a good number but the one under test
     out = run(STUB + f'''
 from app import create_app
 app = create_app()
@@ -229,6 +230,40 @@ print("MATCH:", {expect!r} in r.data, "STATUS:", r.status_code)
 print("OK")
 ''', f'validation {data.get("slug")}')
     check('MATCH: True' in out, f'{expect.decode()!r} — refused with a useful message')
+
+print('\n6b. A phone number is required, so somebody can ring to welcome them')
+good = {'business': 'B', 'name': 'A', 'email': 'a@b.test', 'password': 'a-good-password',
+        'terms_accepted': '1', 'zip_code': '32801'}
+for slug, phone in (('phone-none', None), ('phone-blank', '   '), ('phone-short', '555-0123'),
+                    ('phone-words', 'call me'), ('phone-area-code-0', '0075550123'),
+                    ('phone-exchange-1', '4071550123'), ('phone-long', '14075550123999')):
+    data = dict(good, slug=slug)
+    if phone is not None:
+        data['phone'] = phone
+    out = run(STUB + f'''
+from app import create_app
+import control_plane, provisioning
+app = create_app()
+c = app.test_client()
+r = c.post("/signup", data={data!r}, headers={{"Host": "rollcall.test"}})
+print("MATCH:", b"phone number" in r.data, "STATUS:", r.status_code)
+print("NOTHING MADE:", control_plane.find(provisioning._engine(), {slug!r}) is None)
+print("OK")
+''', f'phone {slug}')
+    check('MATCH: True STATUS: 200' in out and 'NOTHING MADE: True' in out,
+          f'{phone!r} is refused, says why, and creates no company')
+out = run(STUB + '''
+from app import create_app
+import control_plane, provisioning
+app = create_app()
+c = app.test_client()
+r = c.post("/signup", data=%r, headers={"Host": "rollcall.test"})
+org = control_plane.find(provisioning._engine(), "phone-ok")
+print("STATUS:", r.status_code, "PHONE:", org["owner_phone"])
+print("OK")
+''' % dict(good, slug='phone-ok', phone='1 (407) 555-0123'), 'phone ok')
+check('STATUS: 302 PHONE: +14075550123' in out,
+      'a number typed any way is kept on the company as +1XXXXXXXXXX, for the console to ring')
 
 print('\n7. Nothing half-built is left behind by a failed signup')
 out = run(STUB + '''
@@ -242,9 +277,9 @@ print("SCHEMAS:", schemas)
 print("ORGS:", orgs)
 print("OK")
 ''', 'no orphans')
-check("SCHEMAS: ['tenant_sparkle']" in out,
-      'the seven refused attempts left no schemas behind')
-check("ORGS: ['sparkle']" in out, 'and no half-recorded companies')
+check("SCHEMAS: ['tenant_phone_ok', 'tenant_sparkle']" in out,
+      'every refused attempt left no schema behind: only the two companies that were made exist')
+check("ORGS: ['phone-ok', 'sparkle']" in out, 'and no half-recorded companies')
 
 print('\n8. The address check answers as somebody types')
 out = run(STUB + '''

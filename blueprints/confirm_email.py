@@ -138,7 +138,6 @@ def change():
 
     Asks for the password, because this changes how the owner signs in.
     """
-    from blueprints.signup import EMAIL_RE
     from extensions import db
     from models import BusinessSetting, User
     import notifications
@@ -154,7 +153,7 @@ def change():
     if not user.check_password(request.form.get('password') or ''):
         flash('That password is not right.', 'error')
         return redirect(url_for('email_confirm.page'))
-    if not (EMAIL_RE.match(new) and notifications.looks_like_email(new)):
+    if not notifications.looks_like_email(new):
         flash('That email address does not look right.', 'error')
         return redirect(url_for('email_confirm.page'))
     if new == old:
