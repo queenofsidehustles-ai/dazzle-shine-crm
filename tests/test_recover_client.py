@@ -82,6 +82,32 @@ except SystemExit as e:
 plain = rc.decrypt(enc, PASS)
 check(os.path.exists(plain), 'the right one opens it')
 
+# A wrong passphrase leaves valid CBC padding about one time in 256, and openssl then
+# "succeeds" and writes noise. That used to make this suite fail one run in a few
+# hundred, and would have let a wrong passphrase through to a confusing gzip error.
+# Simulate exactly that outcome, so it is checked every time and not by luck.
+real_run = rc.subprocess.run
+
+
+class _Lucky:
+    returncode, stderr = 0, b''
+
+
+def lucky_wrong_passphrase(cmd, **kw):
+    open(cmd[cmd.index('-out') + 1], 'wb').write(b'\x07noise that is not a gzip file')
+    return _Lucky()
+
+
+rc.subprocess.run = lucky_wrong_passphrase
+try:
+    rc.decrypt(enc, 'wrong-passphrase')
+    raise AssertionError('noise written under a wrong passphrase must not be accepted')
+except SystemExit as e:
+    check('Could not decrypt' in str(e),
+          'a wrong passphrase that slips past the padding check is still refused')
+finally:
+    rc.subprocess.run = real_run
+
 print('\n2. It finds the customer and everything hanging off them')
 found, _ = rc.collect(plain, 'Susan Mills')
 check(found is not None, 'Susan is in the backup')

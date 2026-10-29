@@ -225,7 +225,10 @@ with app.app_context():
 
     # ------------------------------------------------------------- the P&L
     print('\n14. Revenue is cash basis — the day the money landed')
-    today = date.today()
+    # The business's day: a payment stamped at 00:30 UTC on the 1st is still the
+    # evening of the 31st in New York, and revenue follows the business's days.
+    from scheduling import local_today
+    today = local_today()
     start, end = finance.month_bounds(today.year, today.month)
 
     paid = Booking(service_type='standard', name='Paid Job', status='completed',

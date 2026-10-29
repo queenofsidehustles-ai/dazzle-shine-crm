@@ -65,8 +65,8 @@ with app.app_context():
     BusinessSetting.set('timezone', 'America/New_York')
     db.session.commit()
 
-    # A Monday well in the past, so "last week" logic is not what is under test.
-    monday = date(2026, 9, 7)
+    # A week that is over, whatever today is: two weeks back.
+    monday = wp.last_week_start() - timedelta(days=7)
     noon = lambda d, h=16: datetime(d.year, d.month, d.day, h)       # 16:00 UTC = noon in New York
     sam = mk_user('Sam Seller', model='contractor')
     ana = mk_user('Ana Closer', model='employee')
@@ -80,7 +80,7 @@ with app.app_context():
 
     print('1. The rate')
     check(wp.rate() == 80.0, 'a walkthrough is $80 until the owner says otherwise')
-    check(wp.week_of(date(2026, 9, 13)) == monday and wp.week_of(monday) == monday,
+    check(wp.week_of(monday + timedelta(days=6)) == monday and wp.week_of(monday) == monday,
           'a week runs Monday to Sunday')
 
     print('\n2. What is counted')
@@ -104,7 +104,7 @@ with app.app_context():
     print("\n3. The week's days are the business's days")
     late = Prospect(business_name='Late Sunday')
     db.session.add(late); db.session.commit()
-    book(ana, late, datetime(2026, 9, 14, 2, 30))              # 22:30 Sunday in New York = still last week
+    book(ana, late, noon(monday + timedelta(days=7), 2) + timedelta(minutes=30))              # 22:30 Sunday in New York = still last week
     db.session.commit()
     check(len(wp.credited(monday).get(ana.id, [])) == 2, '10:30pm Sunday in New York is that Sunday, not Monday UTC')
 
@@ -141,9 +141,10 @@ with app.app_context():
     db.session.commit()
 
     print('\n6. The books')
-    pay.paid_at = datetime(2026, 9, 15, 12)
+    paid_day = monday + timedelta(days=9)
+    pay.paid_at = noon(paid_day, 12)
     db.session.commit()
-    check(finance.commissions_paid_between(date(2026, 9, 1), date(2026, 9, 30)) == 160.0,
+    check(finance.commissions_paid_between(*finance.month_bounds(paid_day.year, paid_day.month)) == 160.0,
           'a paid week is an expense in that month\'s Profit & Loss')
     owner.post(f'/commissions/walkthroughs/unmark-paid/{pay.id}', headers=H)
     check(WalkthroughPayment.query.count() == 0, 'it can be undone')

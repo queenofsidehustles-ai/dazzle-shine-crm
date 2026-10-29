@@ -139,9 +139,13 @@ with app.app_context():
     # it started failing every day and would have blocked every release of the
     # month. Revenue is counted by paid_at, so that is what the window follows.
     paid = b5.paid_at
-    start, end = finance.month_bounds(paid.year, paid.month)
+    # in the business's own month: stamped at 00:30 UTC on the 1st it is still the
+    # evening of the 31st in New York, and revenue follows the business's days
+    from scheduling import to_local
+    when = to_local(paid)
+    start, end = finance.month_bounds(when.year, when.month)
     check(finance.revenue_between(start, end) >= 1420,
-          f'the $1,420 counts as income in {paid.strftime("%B")}, when it was paid')
+          f'the $1,420 counts as income in {when.strftime("%B")}, when it was paid')
     # And the job's own month proves the point, on any day where the two differ:
     # the work was done in August, so counting it there would be counting it by
     # the wrong date entirely.

@@ -53,7 +53,15 @@ def decrypt(path, passphrase):
         ['openssl', 'enc', '-d', '-aes-256-cbc', '-pbkdf2', '-pass', 'stdin',
          '-in', path, '-out', out],
         input=(passphrase + '\n').encode(), capture_output=True)
-    if proc.returncode != 0:
+    # AES-CBC has no check of its own beyond the padding, and a wrong passphrase
+    # leaves valid padding about one time in 256 -- openssl then "succeeds" and
+    # writes noise. A real backup is a gzip file, so anything else is the wrong
+    # passphrase however the padding came out.
+    ok = proc.returncode == 0
+    if ok:
+        with open(out, 'rb') as fh:
+            ok = fh.read(2) == b'\x1f\x8b'
+    if not ok:
         shutil.rmtree(os.path.dirname(out), ignore_errors=True)
         err = proc.stderr.decode(errors='replace').strip()
         raise SystemExit(f'Could not decrypt that file.\n{err}\n\n'

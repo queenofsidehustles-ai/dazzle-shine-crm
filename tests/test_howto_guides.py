@@ -62,12 +62,12 @@ with app.app_context():
     # draft quote to review. Hiring: an applicant who has finished the video
     # interview and is not yet approved.
     import brands
-    from datetime import date
+    from scheduling import local_today
     from models import CommercialAccount, CommercialQuote, ContractorApplication, Prospect
     lead = Prospect(business_name='Riverside Dental', category='office', phone='2565550123',
                     email='office@riverside.example', city='Huntsville', status='new', stage='new',
                     source='manual', brand=brands.COMMERCIAL, next_action='First call',
-                    next_action_date=date.today().isoformat())
+                    next_action_date=local_today().isoformat())
     account = CommercialAccount(business_name='Oak Tower Offices', contact_name='Pat Lee',
                                 email='pat@oaktower.example', category='office', frequency='weekly',
                                 billing_type='monthly', billing_amount=800, status='active', source='manual')
