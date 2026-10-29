@@ -299,7 +299,7 @@ SENT.clear()
 r = client.post('/signup', data={
     'business': 'Sparkle Cleaning', 'slug': 'sparkle', 'name': 'Dana Reed',
     'email': 'dana@sparkle.test', 'password': 'a-perfectly-fine-password',
-    'terms_accepted': '1', 'zip_code': '32801'}, headers=PRODUCT)
+    'terms_accepted': '1', 'zip_code': '32801', 'phone': '4075550123'}, headers=PRODUCT)
 check(r.status_code == 302, 'signup still goes straight into the account')
 token = r.headers['Location'].split('/welcome/')[1]
 check(not leads_for('dana@sparkle.test'), 'and they are no longer a half-finished signup')

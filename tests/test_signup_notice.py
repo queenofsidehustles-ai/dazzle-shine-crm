@@ -52,7 +52,8 @@ def check(cond, m):
 
 
 FORM = {'business': 'Brightside Cleaning', 'slug': 'brightside',
-        'name': 'Dana Whitfield', 'email': 'dana@brightside.example'}
+        'name': 'Dana Whitfield', 'email': 'dana@brightside.example',
+        'phone': '+14075550123'}
 
 
 print('\n1. A signup is reported')
@@ -69,6 +70,8 @@ if SENT:
         check(bit in m['html'], f'and {bit!r} in the body')
     check('https://brightside.akyehq.com' in m['html'],
           'with a link straight into their CRM')
+    check('href="tel:+14075550123"' in m['html'],
+          'and the number to ring, as a link, because somebody is going to call them')
 
 
 print('\n2. It goes out as the product, on the product\'s key')
@@ -118,6 +121,18 @@ check(src.index('_create_everything') < src.index('_tell_us('),
 check(src.index('_tell_us(') < src.index('return redirect('),
       'and before the customer is sent on their way')
 
+
+print('\n6. What a stranger typed into a public form is not put into the email as HTML')
+SENT.clear()
+signup._tell_us('evil', dict(FORM, business='<script>alert(1)</script>Co',
+                             name='<img src=x onerror=alert(2)>',
+                             email='a"><b>@x.example'), 'akyehq.com')
+check(len(SENT) == 1, 'still sent')
+if SENT:
+    html = SENT[0]['html']
+    check('<script>' not in html and '<img' not in html and '<b>' not in html,
+          'no tag a visitor typed survives into the HTML')
+    check('&lt;script&gt;alert(1)&lt;/script&gt;Co' in html, 'it is shown as text, so staff can still read it')
 
 if failures:
     print(f'\n\n❌ {len(failures)} signup-notice check(s) failed.\n')

@@ -1344,8 +1344,7 @@ def build(say=print):
             provisioning.drop_schema(engine, staging)
             provisioning.create_schema(engine, staging)
             provisioning.migrate_schema(engine, staging)
-            from blueprints.signup import _seed_strict
-            _seed_strict(app, staging)
+            provisioning.seed(app, staging, strict=True)
             with tenancy.use_tenant(staging):
                 db.session.remove()
                 Builder(say=say).run()

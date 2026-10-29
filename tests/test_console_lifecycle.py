@@ -95,7 +95,7 @@ try:
         r = c.post('/signup', headers=PRODUCT, data={
             'business': f'{slug.title()} Cleaning', 'slug': slug, 'name': 'Owner Person',
             'email': f'{slug}@example.com', 'password': 'a-perfectly-fine-password',
-            'terms_accepted': '1', 'zip_code': '10001'})
+            'terms_accepted': '1', 'zip_code': '10001', 'phone': '4075550123'})
         assert r.status_code == 302, (slug, r.status_code)
 
     def seed(slug, client_name, extra=False):

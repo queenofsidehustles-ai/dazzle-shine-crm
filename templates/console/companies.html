@@ -1,6 +1,7 @@
 {% extends "console/_shell.html" %}
 {% block title %}Companies{% endblock %}
 {% block body %}
+{% import "console/_contact.html" as contact %}
 {% include "console/_ops_style.html" %}
 {% set meter_class = {'help': 'ops-failing', 'watch': 'ops-stale', 'ok': 'ops-ok'} %}
 <h2 style="font-size:1.05rem;margin:0 0 var(--s3)">{{ 'Archived companies' if show_archived else ('Needing support' if needs else 'Companies') }} ({{ rows|length }})</h2>
@@ -30,7 +31,7 @@
   {% set s = r.snap %}
   <tr>
     <td><a href="{{ url_for('console.company', slug=r.slug) }}"><strong>{{ r.name }}</strong></a>
-        <br><span class="ops-dim">{{ r.slug }}{% if r.owner_email %} · {{ r.owner_email }}{% endif %}</span></td>
+        <br><span class="ops-dim">{{ r.slug }}{% if r.owner_email %} · {{ r.owner_email }}{% endif %}{% if r.owner_phone %} · {{ contact.phone(r) }}{% endif %}</span></td>
     <td class="wrap" style="min-width:12rem">
       <span class="ops-badge {{ meter_class.get(r.meter.level, '') }}">{{ r.meter.label }}</span>
       {% if r.meter.level in ('help', 'watch') %}

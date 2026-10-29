@@ -125,17 +125,27 @@ def migrate_schema(engine, schema):
         command.upgrade(cfg, 'head')
 
 
-def seed(app, schema):
-    """The starter content a brand-new business needs to be usable."""
+SEEDS = ('_seed_checklists', '_seed_scripts', '_seed_sales_scripts', '_seed_sops',
+         '_seed_email_templates', '_seed_pricing_defaults', '_seed_message_templates')
+
+
+def seed(app, schema, strict=False):
+    """The starter content a brand-new business needs to be usable.
+
+    Tolerant by default, like the boot-time helpers it calls: one optional
+    repair must not take an established deployment down. A company being
+    created is held to a stricter contract -- it must never be declared ready
+    when its required starter template only partly exists -- so signup and the
+    demo company pass strict=True, and any seed that fails fails the caller."""
     with app.app_context():
         with tenancy.use_tenant(schema):
             import app as app_module
-            for fn in ('_seed_checklists', '_seed_scripts', '_seed_sales_scripts',
-                       '_seed_sops', '_seed_email_templates', '_seed_pricing_defaults',
-                       '_seed_message_templates'):
+            for fn in SEEDS:
                 try:
                     getattr(app_module, fn)()
                 except Exception as e:
+                    if strict:
+                        raise
                     print(f'   ⚠️  {fn}: {type(e).__name__}: {e}')
 
 

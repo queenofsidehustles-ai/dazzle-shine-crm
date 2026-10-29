@@ -64,9 +64,14 @@
            value="{{ form.email or '' }}" autocomplete="username" />
     <p class="small">We'll send your web address and sign-in details here.</p>
 
-    <label for="phone">Mobile number <span class="small">(optional)</span></label>
-    <input id="phone" name="phone" type="tel" autocomplete="tel"
-           value="{{ form.phone or '' }}" />
+    {# Required: somebody rings every new owner to welcome them and to check in
+       while they get set up. Said here, so it is never a surprise. A phone call
+       and a text are different permissions: the box below is only the text. #}
+    <label for="phone">Phone number</label>
+    <input id="phone" name="phone" type="tel" required autocomplete="tel"
+           inputmode="tel" value="{{ form.phone or '' }}" placeholder="(407) 555-0123" />
+    <p class="small">Somebody from our team will call to welcome you and see how
+       setup is going. Ten digits, with the area code.</p>
     <label for="sms_consent" class="small" style="display:flex;align-items:flex-start;gap:8px;margin-top:8px;cursor:pointer">
       <input type="checkbox" id="sms_consent" name="sms_consent" value="1"
              style="margin-top:3px" />

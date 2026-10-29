@@ -53,8 +53,6 @@ from models import User, LoginToken
 
 signup_bp = Blueprint('signup', __name__)
 
-EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[a-z]{2,}$', re.I)
-
 # Every signup creates a whole schema for a company. Without limits, a script
 # could create thousands and take the database down for every real company.
 # The daily ceiling below is the circuit breaker, raised with an env var.
@@ -152,23 +150,26 @@ def _engine():
 
 
 @contextmanager
-def _slug_lock(engine, slug):
-    """Serialize provisioning for one tenant address across all app workers.
+def _advisory_lock(engine, key):
+    """Hold a PostgreSQL advisory lock for the length of the block.
 
     A process-local lock is insufficient in production because separate workers
-    can receive the same signup concurrently. PostgreSQL advisory locks are held
-    by the dedicated connection for the whole provisioning attempt, including
-    migrations and cleanup performed through other connections.
-    """
-    if engine.dialect.name != 'postgresql':
-        raise RuntimeError('Tenant signup requires PostgreSQL.')
-    key = f'akye:tenant-provision:{slug}'
+    can receive the same request concurrently. The lock is held by a dedicated
+    connection for the whole block, including work done through other
+    connections (migrations, cleanup)."""
     with engine.connect() as conn:
         conn.execute(text('SELECT pg_advisory_lock(hashtext(:key))'), {'key': key})
         try:
             yield
         finally:
             conn.execute(text('SELECT pg_advisory_unlock(hashtext(:key))'), {'key': key})
+
+
+def _slug_lock(engine, slug):
+    """Serialize provisioning for one tenant address across all app workers."""
+    if engine.dialect.name != 'postgresql':
+        raise RuntimeError('Tenant signup requires PostgreSQL.')
+    return _advisory_lock(engine, f'akye:tenant-provision:{slug}')
 
 
 def _ensure_control_plane(engine):
@@ -183,30 +184,8 @@ def _ensure_control_plane(engine):
     if engine.dialect.name != 'postgresql':
         control_plane.ensure_table(engine)
         return
-    key = 'akye:control-plane-init'
-    with engine.connect() as conn:
-        conn.execute(text('SELECT pg_advisory_lock(hashtext(:key))'), {'key': key})
-        try:
-            control_plane.ensure_table(engine)
-        finally:
-            conn.execute(text('SELECT pg_advisory_unlock(hashtext(:key))'), {'key': key})
-
-
-def _seed_strict(app, schema):
-    """Apply every required starter seed and fail the signup if any seed fails.
-
-    The boot-time seed helper is deliberately tolerant so one optional repair
-    cannot take an established deployment down. New-company provisioning has a
-    different contract: a tenant must never be declared ready when its required
-    starter template only partly exists.
-    """
-    with app.app_context():
-        with tenancy.use_tenant(schema):
-            import app as app_module
-            for fn in ('_seed_checklists', '_seed_scripts', '_seed_sales_scripts',
-                       '_seed_sops', '_seed_email_templates', '_seed_pricing_defaults',
-                       '_seed_message_templates'):
-                getattr(app_module, fn)()
+    with _advisory_lock(engine, 'akye:control-plane-init'):
+        control_plane.ensure_table(engine)
 
 
 @signup_bp.route('/signup/check')
@@ -269,7 +248,7 @@ def started():
     email = (data.get('email') or '').strip().lower()
     if (data.get(HONEYPOT_FIELD) or '').strip():
         return Response(status=204)
-    if not (EMAIL_RE.match(email) and notifications.looks_like_email(email)):
+    if not notifications.looks_like_email(email):
         return Response(status=204)
     if _started_throttled(security.client_ip()):
         return Response(status=204)
@@ -314,6 +293,10 @@ def signup():
         # sending (TCPA, Florida's FTSA).
         sms_consent = bool(request.form.get('sms_consent'))
 
+        def again(error):
+            return render_template('admin/signup.html', form=form, slug=slug, base=base,
+                                   terms_accepted=terms_accepted, error=error)
+
         try:
             error = _validate(form, slug, password, terms_accepted)
             if not error:
@@ -325,26 +308,22 @@ def signup():
             except Exception:
                 pass
             print(f'  ❌ signup validation failed: {type(e).__name__}: {e}')
-            return render_template(
-                'admin/signup.html', form=form, slug=slug, base=base,
-                terms_accepted=terms_accepted,
-                error='We could not check that address just now. Please try '
-                      'again in a moment — nothing was created.')
+            return again('We could not check that address just now. Please try '
+                         'again in a moment — nothing was created.')
         if error:
-            return render_template('admin/signup.html', form=form, slug=slug,
-                                   base=base, terms_accepted=terms_accepted,
-                                   error=error)
+            return again(error)
 
+        # Kept the way a text can be sent to it: +1XXXXXXXXXX. _validate has
+        # already refused anything that is not a US number.
+        import lead_outreach
+        form['phone'] = lead_outreach.us_number(form['phone'])
         came_from = _came_from()
         try:
             token = _create_everything(slug, form, password,
                                        attribution=came_from,
                                        terms_accepted=terms_accepted)
         except SlugTaken:
-            return render_template(
-                'admin/signup.html', form=form, slug=slug, base=base,
-                terms_accepted=terms_accepted,
-                error=f'"{slug}" was just taken. Please choose another address.')
+            return again(f'"{slug}" was just taken. Please choose another address.')
         except Exception as e:
             print(f'  ❌ signup failed for {slug!r}: {type(e).__name__}: {e}')
             import traceback; traceback.print_exc()
@@ -353,11 +332,8 @@ def signup():
                 errors.capture(e, path='/signup', method='POST')
             except Exception:
                 pass
-            return render_template(
-                'admin/signup.html', form=form, slug=slug, base=base,
-                terms_accepted=terms_accepted,
-                error='We could not finish setting your account up. Please try '
-                      'again. If it happens twice, tell us so we can investigate.')
+            return again('We could not finish setting your account up. Please try '
+                         'again. If it happens twice, tell us so we can investigate.')
 
         import security
         control_plane.record_signup_attempt(_engine(), security.client_ip())
@@ -398,10 +374,11 @@ def signup():
         except Exception as _e:
             print(f'  ⚠️  welcome email not sent for {slug!r}: {_e}')
         # The text, if they asked for one. After the email, and after the
-        # account exists, so it can only ever add to a signup.
-        if sms_consent and form.get('phone'):
+        # account exists, so it can only ever add to a signup. The number is
+        # always given now (it is how we ring them); consent to a text is not
+        # the same thing and is still its own box.
+        if sms_consent:
             try:
-                import lead_outreach
                 ok, detail = lead_outreach.send_welcome_text(
                     _engine(), slug, form['phone'],
                     (form.get('name') or '').split(' ')[0], f'{slug}.{base}')
@@ -426,15 +403,21 @@ def _tell_us(slug, form, base):
         to = product.support_email()
         if not to:
             return
+        from markupsafe import escape
         url = f'https://{slug}.{base}'
+        business = escape(form.get('business') or slug)
+        phone = escape(form.get('phone') or '')
         notifications.send_email(
             to, product.name(),
             f'New signup: {form.get("business") or slug}',
-            f'''<p><strong>{form.get('business') or slug}</strong> just signed up.</p>
+            # Every value here was typed by a stranger on a public form, so none
+            # of it goes into the HTML as it came.
+            f'''<p><strong>{business}</strong> just signed up.</p>
             <table cellpadding="6" style="border-collapse:collapse;font-family:sans-serif">
-              <tr><td><strong>Company</strong></td><td>{form.get('business') or ''}</td></tr>
-              <tr><td><strong>Person</strong></td><td>{form.get('name') or ''}</td></tr>
-              <tr><td><strong>Email</strong></td><td>{form.get('email') or ''}</td></tr>
+              <tr><td><strong>Company</strong></td><td>{business}</td></tr>
+              <tr><td><strong>Person</strong></td><td>{escape(form.get('name') or '')}</td></tr>
+              <tr><td><strong>Email</strong></td><td>{escape(form.get('email') or '')}</td></tr>
+              <tr><td><strong>Phone</strong></td><td><a href="tel:{phone}">{phone}</a> — call to welcome them</td></tr>
               <tr><td><strong>Address</strong></td><td><a href="{url}">{url}</a></td></tr>
             </table>
             <p>They are on the top plan, trialing for 30 days from today.</p>''',
@@ -452,8 +435,16 @@ def _validate(form, slug, password, terms_accepted=False):
         return 'What is the business called?'
     if not form['name']:
         return 'What is your name?'
-    if not EMAIL_RE.match(form['email'] or ''):
+    import notifications
+    if not notifications.looks_like_email(form['email']):
         return 'That email address does not look right.'
+    # Asked for so that a person can ring them to welcome them and see how
+    # setup is going. A US number, like the ZIP below: that is where the
+    # product is sold, and a number that cannot be rung is no use to anyone.
+    import lead_outreach
+    if not lead_outreach.us_number(form.get('phone')):
+        return ('What phone number can we reach you on? Ten digits with the '
+                'area code, so we can call to welcome you and check setup is going well.')
     # Refused here rather than fixed up later: a ZIP we cannot place is a
     # timezone we cannot work out, and that is the one setting whose being
     # wrong never announces itself.
@@ -514,7 +505,7 @@ def _create_everything(slug, form, password, attribution=None, terms_accepted=Fa
             provisioning.migrate_schema(engine, schema)
 
             from flask import current_app
-            _seed_strict(current_app, schema)
+            provisioning.seed(current_app, schema, strict=True)
 
             with tenancy.use_tenant(schema):
                 owner = User(name=form['name'], username=form['email'], role='owner',
@@ -545,6 +536,7 @@ def _create_everything(slug, form, password, attribution=None, terms_accepted=Fa
 
             control_plane.create(engine, slug, form['business'], form['email'],
                                  attribution=attribution,
+                                 owner_phone=form.get('phone'),
                                  # _validate already refused to reach here
                                  # without this being true; stamped again at
                                  # the point of creation rather than trusted
