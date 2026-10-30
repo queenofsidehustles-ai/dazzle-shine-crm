@@ -63,7 +63,9 @@ with admin.connect() as conn:
     conn.execute(text(f'CREATE DATABASE {DB}'))
 os.environ.update(DATABASE_URL=f'{PG.rsplit("/", 1)[0]}/{DB}', SECRET_KEY='health-test',
                   BASE_DOMAIN='akyehq.test', SIGNUPS_OPEN='1', REMINDER_API_KEY='cron-key',
-                  ANTHROPIC_API_KEY='sk-ant-test')
+                  ANTHROPIC_API_KEY='sk-ant-test',
+                  # What a deployment that is set up has; config_gaps() names the ones that are missing.
+                  RESEND_WEBHOOK_SECRET='whsec_dGVzdA==', METRICS_API_KEY='k' * 20)
 for k in ('ADMIN_USER', 'ADMIN_PASS', 'CANONICAL_HOST'):
     os.environ.pop(k, None)
 
@@ -141,6 +143,49 @@ try:
     wheres = {p['where'] for p in found}
     check({'Background jobs', 'Stripe'} <= wheres, f'scheduler, product job and Stripe failures all count ({wheres})')
     check(platform_health.stripe_webhook(engine, NOW)['state'] == 'failed', "Stripe's webhook is failed, never stale")
+
+    print('\n2b. Settings the platform cannot say are missing, and the inbound webhook')
+    full = {'RESEND_WEBHOOK_SECRET': 'whsec_x', 'METRICS_API_KEY': 'k' * 16}
+    check(platform_health.config_gaps(full) == [], 'everything set: nothing to say (a delivery-events secret falls back to the inbound one)')
+    gaps = ' | '.join(g['text'] for g in platform_health.config_gaps({}))
+    check('RESEND_WEBHOOK_SECRET is not set' in gaps and 'delivery events' in gaps and 'METRICS_API_KEY' in gaps,
+          'nothing set: all three are named, by variable name, never by value')
+    check(any('METRICS_API_KEY' in g['text'] for g in platform_health.config_gaps(dict(full, METRICS_API_KEY='short'))),
+          'a metrics key under 16 characters is no key (the endpoint ignores it too)')
+    check(not any('delivery events' in g['text'] for g in platform_health.config_gaps(
+              {'RESEND_WEBHOOK_SECRET': 'whsec_x', 'METRICS_API_KEY': 'k' * 16})),
+          'one secret serves both webhooks, as api.py accepts')
+    with app.app_context():
+        check(platform_health.inbound_replies(engine, NOW)['state'] == 'never',
+              'before any reply has arrived: not reported yet, which is not an alarm')
+
+    import base64, hashlib, hmac as _hmac, time as _time, json as _json
+    def signed(payload, secret='whsec_dGVzdA==', stamp=None):
+        raw = _json.dumps(payload).encode()
+        stamp = str(stamp or int(_time.time()))
+        key = base64.b64decode(secret.split('_', 1)[1])
+        sig = base64.b64encode(_hmac.new(key, f'msg_1.{stamp}.'.encode() + raw, hashlib.sha256).digest()).decode()
+        return raw, {'svix-id': 'msg_1', 'svix-timestamp': stamp, 'svix-signature': f'v1,{sig}',
+                     'Content-Type': 'application/json', **PRODUCT}
+    c0 = app.test_client()
+    raw, hdr = signed({'from': 'a@x.test', 'to': ['nobody@reply.test'], 'subject': 'hi'}, secret='whsec_d3Jvbmc=')
+    check(c0.post('/api/email-reply', data=raw, headers=hdr).status_code == 403, 'a wrongly signed reply is refused')
+    with app.app_context():
+        got = platform_health.inbound_replies(engine, NOW)
+        found = platform_health.attention(engine, NOW)
+    check(got['state'] == 'failed' and 'signing secret' in got['detail'],
+          'and Health says the signing secret is the likely cause')
+    check(any(p['where'] == 'Email' and 'inbound reply' in p['text'] for p in found),
+          'it lights the alarm, so the next person to look knows where')
+    raw, hdr = signed({'from': 'a@x.test', 'to': ['nobody@reply.test'], 'subject': 'hi'})
+    check(c0.post('/api/email-reply', data=raw, headers=hdr).status_code == 200, 'a correctly signed one is accepted')
+    with app.app_context():
+        check(platform_health.inbound_replies(engine, NOW)['state'] == 'ok',
+              'and reads ok: the first genuine reply is the evidence that the secret is right')
+    # The unroutable reply above is recorded as a platform error, as it should be; later
+    # sections count errors from nothing, so clear it.
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM public.error_log"))
 
     print('\n3. Reporting in: the endpoint')
     c = app.test_client()

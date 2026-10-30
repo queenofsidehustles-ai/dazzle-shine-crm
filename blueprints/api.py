@@ -881,6 +881,14 @@ def email_reply():
 
     raw = request.get_data() or b''
     if not _resend_signature_ok(raw):
+        # Not an alarm on a company's own address (that is not Resend), but on
+        # ours it is Resend reaching us and not being believed: the secret here
+        # is not the one the inbound webhook signs with, and every reply to an
+        # introduction is being dropped. Health says so (platform_health).
+        import tenancy
+        if tenancy.current_schema() == tenancy.PUBLIC:
+            _note_inbound(False, 'refused: no valid signature -- is RESEND_WEBHOOK_SECRET '
+                                 'the inbound webhook\'s signing secret?')
         from flask import abort
         abort(403)
 
@@ -888,6 +896,7 @@ def email_reply():
     data = payload.get('data') or payload
     found = email_replies.pick_address(data)
     if not found:
+        _note_inbound(True, 'received, matched no prospect')
         _record_unrouted_reply(data)
         return jsonify({'ok': True}), 200
 
@@ -908,7 +917,21 @@ def email_reply():
     finally:
         g.tenant_slug, g._org = prev_slug, prev_org
 
+    _note_inbound(bool(ok), f'to {slug}: {said}')
     return jsonify({'ok': bool(ok), 'detail': said}), 200
+
+
+def _note_inbound(ok, detail):
+    """Write down that Resend reached the inbound-reply webhook, and how it
+    went, for the console's Health page: the only evidence that a genuine reply
+    has ever arrived. Never raises."""
+    try:
+        import control_plane
+        import provisioning
+        control_plane.record_platform_run(
+            provisioning._engine(), 'resend:inbound', ok=ok, items=1, detail=detail[:400])
+    except Exception:
+        pass
 
 
 def _first_address(value):
