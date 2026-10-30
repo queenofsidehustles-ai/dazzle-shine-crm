@@ -1834,6 +1834,32 @@ class PaymentCredit(db.Model):
     __table_args__ = (db.UniqueConstraint('stripe_payment_intent', name='uq_payment_credit_intent'),)
 
 
+class WalkthroughPayEvent(db.Model):
+    """What was done about a rep's walkthrough pay for a week, kept for good.
+
+    One row each time a week is paid and each time a payment is reversed, with
+    exactly what was counted (the businesses, so a lead that is later deleted
+    or renamed does not change what was paid for), who did it and why. Rows are
+    only ever added: nothing in the application updates or deletes one, which is
+    what lets a reversal remove the live WalkthroughPayment (so the week can be
+    paid again, correctly) without losing the fact that it was paid.
+    """
+    __tablename__ = 'walkthrough_pay_event'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, nullable=False, index=True)
+    user_name = db.Column(db.String(120))
+    week_start = db.Column(db.Date, nullable=False, index=True)
+    action = db.Column(db.String(12), nullable=False)       # 'paid' | 'reversed'
+    walkthroughs = db.Column(db.Integer, nullable=False)
+    amount = db.Column(Money, nullable=False)
+    method = db.Column(db.String(20))
+    items = db.Column(db.Text)                               # JSON: [{prospect_id, business, booked_at}]
+    actor_id = db.Column(db.Integer)
+    actor_name = db.Column(db.String(120))
+    reason = db.Column(db.String(300))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+
 class ProcessingFee(db.Model):
     """What Stripe actually kept in a given month, pulled from their balance
     transactions. One authoritative number per month beats guessing 2.9% + 30¢,

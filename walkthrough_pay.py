@@ -13,7 +13,26 @@ first, no rep is paid for it.
 
 Employees and contractors are counted alike. How the money goes out differs
 (payroll or a contractor payment), and the list says which each rep is.
+
+## What qualifies, in one place
+A walkthrough qualifies when a Sales login books it (the diary entry or a call
+outcome that books one) and it is the first booking of that business. The
+booking is the event: not that the visit happened, and not that the business
+later signs. A booking cancelled or moved afterwards still qualifies, because
+the pay is for getting it in the diary; the owner who disagrees reverses that
+week's payment and pays it again, with a reason.
+
+## Paying and reversing is kept for good
+Marking a week paid, and reversing a payment, each add a row to
+WalkthroughPayEvent with what was counted (the businesses, copied in, so a lead
+deleted or renamed later changes nothing), who did it, and why. Nothing here
+updates or deletes an event. A reversal removes the live WalkthroughPayment so
+the week can be paid again at the right figure, and the event is what remains of
+the first payment. This is the application's rule, not the database's: unlike
+the quote trail there is no trigger holding the table, so a person with direct
+database access can still change it.
 """
+import json
 from datetime import date, timedelta
 
 from extensions import db
@@ -129,10 +148,28 @@ def week_for_user(user_id, week_start):
     return n, round(n * rate(), 2), pay
 
 
-def mark_paid(user_id, week_start, method='zelle'):
+def _items(rows):
+    """What was counted, copied: the business as it was named when it was paid."""
+    return json.dumps([{'prospect_id': r.prospect_id, 'business': r.business_name,
+                        'booked_at': r.created_at.isoformat() if r.created_at else None}
+                       for r in rows])
+
+
+def _event(action, pay, items, actor_id, actor_name, reason=None):
+    from models import WalkthroughPayEvent
+    db.session.add(WalkthroughPayEvent(
+        user_id=pay.user_id, user_name=pay.user_name, week_start=pay.week_start,
+        action=action, walkthroughs=pay.walkthroughs, amount=pay.amount,
+        method=pay.method, items=items, actor_id=actor_id,
+        actor_name=(actor_name or '')[:120] or None,
+        reason=(reason or '').strip()[:300] or None))
+
+
+def mark_paid(user_id, week_start, method='zelle', actor_id=None, actor_name=None):
     """Record the week as paid, at the figure worked out now. Returns
     (payment, created): a week already recorded is returned untouched, never
-    paid a second time. Added to the session; the caller commits."""
+    paid a second time. Added to the session, with its event; the caller
+    commits."""
     from models import User, WalkthroughPayment
     existing = WalkthroughPayment.query.filter_by(user_id=user_id, week_start=week_start).first()
     if existing:
@@ -150,4 +187,28 @@ def mark_paid(user_id, week_start, method='zelle'):
         amount=amount, method=(method or 'zelle')[:20],
         note=f'{name} walkthroughs, week of {week_start.isoformat()}')
     db.session.add(pay)
+    _event('paid', pay, _items(rows), actor_id, actor_name)
     return pay, True
+
+
+def reverse(payment, actor_id=None, actor_name=None, reason=''):
+    """Take a payment back, saying why. False when no reason is given: a payment
+    that was made and is being undone is exactly what needs one. The event keeps
+    the figure and what was counted; the live record goes so the week can be paid
+    again. The caller commits."""
+    if not (reason or '').strip():
+        return False
+    from models import WalkthroughPayEvent
+    paid = (WalkthroughPayEvent.query
+            .filter_by(user_id=payment.user_id, week_start=payment.week_start, action='paid')
+            .order_by(WalkthroughPayEvent.id.desc()).first())
+    _event('reversed', payment, paid.items if paid else None, actor_id, actor_name, reason)
+    db.session.delete(payment)
+    return True
+
+
+def history(week_start):
+    """Every payment and reversal for the week, oldest first."""
+    from models import WalkthroughPayEvent
+    return (WalkthroughPayEvent.query.filter_by(week_start=week_start)
+            .order_by(WalkthroughPayEvent.id).all())

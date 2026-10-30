@@ -1,6 +1,5 @@
 """VA commission report + rate settings (owner-only). See va_commission.py for the
 calculation engine."""
-from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from entitlements import requires_plan
 from auth import owner_required
@@ -20,7 +19,9 @@ def index():
     agent = request.args.get('agent', '')
     if not agent and vas:
         agent = vas[0].name
-    now = datetime.utcnow()
+    # The business's month, the one the commission is worked out in.
+    from scheduling import local_today
+    now = local_today()
     try:
         year, month = (int(x) for x in request.args.get('month', '').split('-'))
     except Exception:
@@ -106,7 +107,8 @@ def walkthroughs():
     week = wp.parse_week(request.args.get('week'))
     return render_template('admin/walkthrough_pay.html', s=wp.statement(week),
                            prev=week - timedelta(days=7), next=week + timedelta(days=7),
-                           current=wp.last_week_start() == week, over=wp.is_over(week))
+                           current=wp.last_week_start() == week, over=wp.is_over(week),
+                           history=wp.history(week))
 
 
 @commissions_bp.route('/walkthroughs/mark-paid', methods=['POST'])
@@ -123,7 +125,10 @@ def walkthroughs_mark_paid():
         flash('Could not read that payment.', 'error')
         return redirect(url_for('commissions.walkthroughs'))
     back = redirect(url_for('commissions.walkthroughs', week=week.isoformat()))
-    pay, created = wp.mark_paid(user_id, week, request.form.get('method', 'zelle'))
+    from flask import session
+    pay, created = wp.mark_paid(user_id, week, request.form.get('method', 'zelle'),
+                                actor_id=session.get('user_id'),
+                                actor_name=session.get('user_name') or 'Owner')
     if pay is None and not wp.is_over(week):
         flash('That week is not over yet. Bookings can still be added to it, so it can be paid '
               'from Monday.', 'warning')
@@ -143,9 +148,16 @@ def walkthroughs_mark_paid():
 @owner_required
 @requires_plan('va_commissions')
 def walkthroughs_unmark_paid(payment_id):
+    from flask import session
     p = WalkthroughPayment.query.get_or_404(payment_id)
-    week = p.week_start
-    db.session.delete(p)
+    week, name = p.week_start, p.user_name
+    back = redirect(url_for('commissions.walkthroughs', week=week.isoformat()))
+    if not wp.reverse(p, actor_id=session.get('user_id'),
+                      actor_name=session.get('user_name') or 'Owner',
+                      reason=request.form.get('reason', '')):
+        flash('Say why you are reversing it. The payment was not changed.', 'error')
+        return back
     db.session.commit()
-    flash(f'Undone — {p.user_name} is no longer marked paid for that week.', 'success')
-    return redirect(url_for('commissions.walkthroughs', week=week.isoformat()))
+    flash(f'Reversed — {name} is no longer marked paid for that week. The payment and '
+          f'your reason are kept in the history below.', 'success')
+    return back

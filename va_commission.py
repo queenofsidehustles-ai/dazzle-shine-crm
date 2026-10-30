@@ -8,8 +8,7 @@ field matches the VA's username. Commission is only earned once the customer has
 PAID (Booking.paid_at / CommercialAccount.first_paid_at). Leads from paid ads
 (source in PAID_AD_SOURCES) never earn commission, even if the VA worked them.
 """
-from datetime import datetime
-from calendar import monthrange
+from datetime import timedelta
 
 # Paid-advertising sources → NEVER earn commission.
 PAID_AD_SOURCES = {'google_lsa', 'google', 'lsa', 'meta', 'facebook', 'instagram',
@@ -55,9 +54,28 @@ def _not_paid_ad(source):
 
 
 def _month_bounds(year, month):
-    start = datetime(year, month, 1)
-    end = datetime(year, month, monthrange(year, month)[1], 23, 59, 59)
-    return start, end
+    """The month in the business's own days, as the naive-UTC range the payment
+    columns are stored in (finance.month_utc_bounds), end inclusive.
+
+    A payment taken at 8pm New York on the 31st is stamped 00:00 UTC on the
+    1st. Bucketed by the UTC calendar it counted toward next month's
+    commission, while the owner's revenue (finance) and the rep's own page,
+    which picks its month by the business's day, counted it in this one. All
+    three now read the same month, the way the books do."""
+    import finance
+    start, next_start = finance.month_utc_bounds(year, month)
+    return start, next_start - timedelta(microseconds=1)
+
+
+def _local(when):
+    """A stored naive-UTC time as the business's own clock, for showing a date."""
+    if when is None:
+        return None
+    try:
+        import scheduling
+        return scheduling.to_local(when).replace(tzinfo=None)
+    except Exception:
+        return when
 
 
 def commission_for_month(agent, year, month):
@@ -119,7 +137,7 @@ def commission_for_month(agent, year, month):
         lines.append(('momentum', f'Momentum bonus — {int(total_closes)} closes this month',
                       momentum, end))
 
-    line_dicts = [{'type': t, 'label': l, 'amount': round(a, 2), 'when': w}
+    line_dicts = [{'type': t, 'label': l, 'amount': round(a, 2), 'when': _local(w)}
                   for (t, l, a, w) in sorted(lines, key=lambda x: x[3] or start)]
     return {
         'agent': agent, 'year': year, 'month': month,

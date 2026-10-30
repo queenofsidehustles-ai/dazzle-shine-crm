@@ -33,6 +33,14 @@ def month_bounds(year, month):
     return date(year, month, 1), date(year, month, monthrange(year, month)[1])
 
 
+def month_utc_bounds(year, month):
+    """The month in the business's own days, as (first instant, first instant of
+    the next month) in the naive UTC that paid_at and the like are stored in.
+    Half-open: a row belongs if lo <= when < hi. The one answer to "which month
+    is this payment in" for revenue, commissions and everything else that asks."""
+    return _dt_bounds(*month_bounds(year, month))
+
+
 def period_bounds(kind, year, month):
     """(start, end, label) for the period the user picked."""
     if kind == 'quarter':

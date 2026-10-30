@@ -48,9 +48,12 @@
     ✅ Paid {{ l.payment.paid_at.strftime('%b %-d, %Y') }} via {{ (l.payment.method or 'zelle').title() }} — counted in your
     <a href="{{ url_for('money.pnl', period='month', year=l.payment.paid_at.year, month=l.payment.paid_at.month) }}" style="color:var(--good);font-weight:700">Profit &amp; Loss</a>.
   </div>
-  <form method="POST" action="{{ url_for('commissions.walkthroughs_unmark_paid', payment_id=l.payment.id) }}" style="margin-top:8px"
-        onsubmit="return confirm('Undo this payment record? It will stop counting as an expense.')">
-    <button type="submit" class="btn btn-outline" style="padding:5px 14px;font-size:0.78rem">Undo — mark unpaid</button>
+  <form method="POST" action="{{ url_for('commissions.walkthroughs_unmark_paid', payment_id=l.payment.id) }}"
+        style="margin-top:8px;display:flex;gap:7px;flex-wrap:wrap;align-items:center"
+        onsubmit="return confirm('Reverse this payment? It stops counting as an expense, and the payment and your reason are kept in the history.')">
+    <input name="reason" required maxlength="300" placeholder="Why it is being reversed"
+           aria-label="Why it is being reversed" style="flex:1;min-width:14rem;padding:6px;border:1px solid var(--line);border-radius:8px">
+    <button type="submit" class="btn btn-outline" style="padding:5px 14px;font-size:0.78rem">Reverse — mark unpaid</button>
   </form>
   {% elif not over %}
   <div style="font-size:0.86rem;color:var(--softer)">This week is not over, and more can still be booked. It can be paid from Monday.</div>
@@ -70,4 +73,27 @@
 </div>
 {% endfor %}
 {% endif %}
+
+<div class="card" style="margin-top:18px">
+  <h3 style="margin:0 0 6px">History for this week</h3>
+  {% if history %}
+  <table style="width:100%;font-size:0.84rem;border-collapse:collapse">
+    {% for e in history %}
+    <tr style="border-top:1px solid var(--line)">
+      <td style="padding:6px 8px 6px 0;white-space:nowrap">{{ e.created_at.strftime('%b %-d, %-I:%M %p') }} UTC</td>
+      <td style="padding:6px 8px"><strong>{{ 'Paid' if e.action == 'paid' else 'Reversed' }}</strong>
+        {{ e.user_name }} · {{ e.walkthroughs }} × · ${{ '%.2f' % e.amount }}{% if e.method %} · {{ e.method|title }}{% endif %}</td>
+      <td style="padding:6px 0;color:var(--softer)">by {{ e.actor_name or 'the owner' }}{% if e.reason %} — “{{ e.reason }}”{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <div style="font-size:0.86rem;color:var(--softer)">Nothing paid or reversed yet.</div>
+  {% endif %}
+  <div style="font-size:0.78rem;color:var(--softer);margin-top:8px">
+    A walkthrough counts when a Sales login books it and it is that business's first booking. The booking is the
+    event, so one cancelled afterwards still counts; reverse the week and pay it again if you disagree.
+    Every payment and reversal is kept here for good.
+  </div>
+</div>
 {% endblock %}
