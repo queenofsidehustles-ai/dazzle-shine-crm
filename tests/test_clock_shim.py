@@ -46,8 +46,14 @@ check(out == 'True', 'one second later it is one second later')
 
 print('\n3. Without FAKE_NOW it does nothing at all')
 out, _ = run(PROBE)
-from datetime import datetime, timezone
-check(out.startswith(datetime.now(timezone.utc).isoformat()[:10]), f'the real date ({out[:16]})')
+# The expected date comes from a process with no shim, not from this one: under
+# the weekly clock check this process's own clock is shifted too.
+env = {k: v for k, v in os.environ.items() if k not in ('FAKE_NOW', 'PYTHONPATH')}
+real_today = subprocess.run(
+    [sys.executable, '-c', 'from datetime import datetime, timezone; '
+     'print(datetime.now(timezone.utc).isoformat()[:10])'],
+    capture_output=True, text=True, env=env).stdout.strip()
+check(out.startswith(real_today), f'the real date ({out[:16]})')
 
 print('\n4. The workflow uses it')
 wf = open(os.path.join(ROOT, '.github', 'workflows', 'clock-check.yml')).read()
