@@ -237,6 +237,10 @@ def started():
     (control_plane.clear_abandoned_signup). The welcome sequence for the ones
     who do not finish is lead_nurture.py.
 
+    The phone number is noted the same way once it has been typed, so somebody
+    can ring them (it is for calling, not texting: see
+    control_plane.find_or_add_abandoned_signup).
+
     Always answers 204: the form must not behave differently for an address
     we already have, or this becomes a way to ask "is this person a lead?".
     """
@@ -264,11 +268,15 @@ def started():
             note = ('campaign:' + attribution.label(came))[:120] if came else None
         except Exception:
             note = None
+        import lead_outreach
         control_plane.find_or_add_abandoned_signup(
             engine, email,
             name=(data.get('name') or '').strip()[:120] or None,
             company=(data.get('business') or '').strip()[:200] or None,
-            note=note)
+            note=note,
+            # Only a number we could ring: the same test the form applies, and
+            # a half-typed one is ignored rather than kept.
+            phone=lead_outreach.us_number(data.get('phone')))
     except Exception as e:
         print(f'  ⚠️  could not note a started signup: {type(e).__name__}')
     return Response(status=204)
@@ -337,6 +345,10 @@ def signup():
 
         import security
         control_plane.record_signup_attempt(_engine(), security.client_ip())
+        # They finished, so they are not a half-finished signup any more. Before
+        # the welcome text, not after: the half-finished row holds their number
+        # as do-not-text, and would stop the text they are about to be sent.
+        control_plane.clear_abandoned_signup(_engine(), form.get('email'), form.get('phone'))
         _tell_us(slug, form, base)
         # Tell Meta an ad produced an account. Sent here, before the
         # attribution cookie is forgotten below, and from `came_from` --
@@ -386,9 +398,6 @@ def signup():
                     print(f'  ⚠️  welcome text not sent for {slug!r}: {detail}')
             except Exception as _e:
                 print(f'  ⚠️  welcome text not sent for {slug!r}: {_e}')
-        # They finished, so they are not a half-finished signup any more.
-        control_plane.clear_abandoned_signup(_engine(), form.get('email'))
-
         return redirect(f'{scheme}://{slug}.{base}/welcome/{token}')
 
     return render_template('admin/signup.html', form=form, slug='', base=base,

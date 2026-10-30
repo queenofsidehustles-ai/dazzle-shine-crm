@@ -116,26 +116,33 @@
   <script>
     // Note the email as soon as it is typed, before the account exists, so
     // somebody who leaves at the password box can still be helped to finish
-    // (signup.started). Once per address; failure is silent and harmless.
+    // (signup.started). The phone number is sent the same way once it is typed,
+    // so they can be rung. Once per address and number; failure is silent and
+    // harmless.
     (function () {
       var email = document.getElementById('email');
+      var phone = document.getElementById('phone');
       var sent = {};
-      email.addEventListener('blur', function () {
+      function note() {
         var v = (email.value || '').trim().toLowerCase();
-        if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/.test(v) || sent[v]) return;
-        sent[v] = true;
+        var p = (phone.value || '').replace(/\D/g, '');
+        if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/.test(v) || sent[v + '|' + p]) return;
+        sent[v + '|' + p] = true;
         try {
           fetch('/signup/started', {
             method: 'POST', headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
               email: v,
+              phone: (phone.value || '').trim(),
               name: (document.getElementById('name').value || '').trim(),
               business: (document.getElementById('business').value || '').trim(),
               website: (document.getElementById('website').value || '')
             }), keepalive: true
           }).catch(function () {});
         } catch (e) {}
-      });
+      }
+      email.addEventListener('blur', note);
+      phone.addEventListener('blur', note);
     })();
 
     // Suggest an address from the business name, until the person edits it

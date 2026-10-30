@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import (Column, DateTime, Integer, String, Boolean, MetaData,
                         LargeBinary, Text, UniqueConstraint,
-                        Table, select, insert, update, delete, text, func)
+                        Table, select, insert, update, delete, text, func, or_)
 
 # Its own MetaData: these tables must never be created inside a tenant schema,
 # and must never be swept up by a migration that walks models.py.
@@ -963,32 +963,63 @@ def owner_emails(engine):
 
 
 def find_or_add_abandoned_signup(engine, email, name=None, company=None,
-                                 note=None):
+                                 note=None, phone=None):
     """Somebody typed their email into the signup form. Never raises.
 
     Written before the account exists, so that leaving at the password box
     still leaves a name to follow up. One row per address: a person tabbing
     in and out of the field, or coming back tomorrow, is still one person.
+
+    The number, if they got as far as typing one, is on the row so somebody
+    can ring them. It is for ringing and not for texting: the form says a
+    person will call, and they have not ticked the box that asks for a text.
+    So the row is marked do-not-text, the way an uploaded call list is, and
+    number_text_block() holds for the number until they finish and ask. It
+    usually arrives after the row was made (the email box is left first), so
+    it is put on the existing row, and the newest number wins.
     """
-    return add_lead(engine, source='abandoned_signup', email=email,
-                    name=name, company=company, note=note)
+    phone = (phone or '').strip() or None
+    added = add_lead(engine, source='abandoned_signup', email=email,
+                     name=name, company=company, note=note, phone=phone,
+                     do_not_text=bool(phone))
+    email = (email or '').strip().lower()
+    if phone and not added and email:
+        try:
+            with engine.begin() as conn:
+                conn.execute(
+                    update(product_leads)
+                    .where(func.lower(product_leads.c.email) == email,
+                           product_leads.c.source == 'abandoned_signup')
+                    .values(phone=phone,
+                            do_not_text_at=func.coalesce(
+                                product_leads.c.do_not_text_at, datetime.utcnow())))
+        except Exception:
+            pass
+    return added
 
 
-def clear_abandoned_signup(engine, email):
+def clear_abandoned_signup(engine, email, phone=None):
     """They finished. Take the half-finished row off the leads list.
 
     Only rows this form wrote: an early-access request or an uploaded
     prospect at the same address is a different record with its own history.
+    Matched by the address or by the number, because a person who finishes
+    with a different address is still the one who started, and their old row
+    would otherwise hold the number as do-not-text against the welcome text
+    they have just asked for.
     """
     email = (email or '').strip().lower()
-    if not email:
+    same = _same_number(phone)
+    mine = [func.lower(product_leads.c.email) == email] if email else []
+    if same is not None:
+        mine.append(same)
+    if not mine:
         return 0
     try:
         with engine.begin() as conn:
             return conn.execute(
                 delete(product_leads)
-                .where(func.lower(product_leads.c.email) == email,
-                       product_leads.c.source == 'abandoned_signup')).rowcount
+                .where(or_(*mine), product_leads.c.source == 'abandoned_signup')).rowcount
     except Exception:
         return 0
 
@@ -1153,7 +1184,6 @@ def add_lead(engine, count_repeat=False, do_not_text=False, **fields):
                     same.append(func.regexp_replace(
                         func.coalesce(product_leads.c.phone, ''), '[^0-9]', '', 'g')
                         == phone_digits)
-                from sqlalchemy import or_
                 existing = conn.execute(select(product_leads.c.id).where(
                     or_(*same)).order_by(product_leads.c.id).limit(1)).scalar()
                 if existing is not None:
