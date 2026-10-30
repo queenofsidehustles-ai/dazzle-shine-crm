@@ -294,6 +294,65 @@ client.post('/signup/started', json={'email': 'bot@spam.test', 'website': 'x'},
 check(not leads_for('not-an-email') and not leads_for('bot@spam.test'),
       'nothing written for a bad address or a bot')
 
+print('\n10b. The number they typed is kept, to ring and not to text')
+import lead_outreach
+control_plane.add_lead(engine, source='early_access', email='early@x.test', phone='+14075550166')
+r = client.post('/signup/started', json={'email': 'dana@sparkle.test', 'name': 'Dana',
+                                         'business': 'Sparkle', 'phone': '(407) 555-0188'},
+                headers=PRODUCT)
+rows = leads_for('dana@sparkle.test')
+check(r.status_code == 204 and len(rows) == 1,
+      'typed after the email, it goes on the same row: still one person')
+check(rows[0]['phone'] == '+14075550188', 'kept as +1XXXXXXXXXX, however it was typed')
+check(lead_outreach.sms_block(rows[0]) == 'left the signup form without asking for a text',
+      'it cannot be texted from the leads page: they were told somebody would call, and have not asked for a text')
+check(rows[0]['do_not_text_at'] is None and control_plane.number_text_block(engine, '+14075550188') is None,
+      'but that is not a do-not-text mark, which is durable: when they finish and ask, the welcome text can go')
+client.post('/signup/started', json={'email': 'dana@sparkle.test', 'phone': '555'}, headers=PRODUCT)
+check(leads_for('dana@sparkle.test')[0]['phone'] == '+14075550188',
+      'half a number is ignored, not kept over a good one')
+client.post('/signup/started', json={'email': 'dana@sparkle.test', 'phone': '407 555 0199'}, headers=PRODUCT)
+check(leads_for('dana@sparkle.test')[0]['phone'] == '+14075550199', 'a corrected number replaces it')
+client.post('/signup/started', json={'email': 'new@sparkle.test', 'phone': '4075550142'}, headers=PRODUCT)
+fresh = leads_for('new@sparkle.test')
+check(len(fresh) == 1 and fresh[0]['phone'] == '+14075550142',
+      'a number typed with the email (a browser that filled both) is kept the same way')
+client.post('/signup/started', json={'email': 'bot2@spam.test', 'phone': '4075550143', 'website': 'x'},
+            headers=PRODUCT)
+check(not leads_for('bot2@spam.test'), 'a bot leaves nothing, number included')
+client.post('/signup/started', json={'email': 'nonumber@sparkle.test'}, headers=PRODUCT)
+check(leads_for('nonumber@sparkle.test')[0]['phone'] is None, 'no number, no number')
+client.post('/signup/started', json={'email': 'early@x.test', 'phone': '4075550166'}, headers=PRODUCT)
+early = leads_for('early@x.test')[0]
+check(early['source'] == 'early_access' and early['do_not_text_at'] is None
+      and lead_outreach.sms_block(early) is None,
+      'somebody already on the list as an early-access request is not changed by it: still textable by the rules they came in under')
+
+print('\n10c. Finishing clears the half-finished row by address or by number, and never a refusal')
+control_plane.add_lead(engine, source='abandoned_signup', email='pat@old.test', phone='+14075550177')
+control_plane.add_lead(engine, source='abandoned_signup', email='other@x.test', phone='+14075550155')
+control_plane.add_lead(engine, source='abandoned_signup', email='stop@old.test', phone='+14075550133')
+control_plane.set_leads_sms_opt_out(engine, '+14075550133')
+control_plane.add_lead(engine, source='abandoned_signup', email='dnt@old.test', phone='+14075550122',
+                       do_not_text=True)
+gone = control_plane.clear_abandoned_signup(engine, 'pat@new.test', '(407) 555-0177')
+check(gone == 1 and not leads_for('pat@old.test'),
+      'finishing with a different address but the same number clears the row')
+control_plane.clear_abandoned_signup(engine, 'nobody@x.test', '407-555-0166')
+check(leads_for('early@x.test') and leads_for('other@x.test'),
+      'an early-access request on the same number, and somebody else\'s half-finished signup, are left alone')
+control_plane.clear_abandoned_signup(engine, 'stop@old.test', '+14075550133')
+check(leads_for('stop@old.test') and control_plane.number_text_block(engine, '+14075550133') == 'replied STOP',
+      'a row that holds a STOP reply is kept, so the number stays opted out')
+control_plane.clear_abandoned_signup(engine, 'dnt@old.test', '+14075550122')
+check(leads_for('dnt@old.test') and control_plane.number_text_block(engine, '+14075550122') == 'marked do not text',
+      'and so is one staff marked do-not-text')
+# These rows were for this section only: a later one counts who the nurture run emails.
+with engine.begin() as conn:
+    conn.execute(text("DELETE FROM public.product_leads WHERE email IN "
+                      "('new@sparkle.test', 'nonumber@sparkle.test', 'other@x.test', 'early@x.test', "
+                      "'stop@old.test', 'dnt@old.test')"))
+
 print('\n11. Finishing signup sends the address, the code, and clears the lead')
 SENT.clear()
 r = client.post('/signup', data={

@@ -156,6 +156,10 @@ def sms_block(lead, now=None, bulk=False):
         return 'replied STOP'
     if lead.get('do_not_text_at'):
         return 'marked do not text'
+    # Their number is here to ring them: the signup form says somebody will call,
+    # and they left before ticking the box that asks for a text.
+    if lead.get('source') == 'abandoned_signup':
+        return 'left the signup form without asking for a text'
     if bulk and lead.get('last_texted_at') and \
             lead['last_texted_at'] > (now or datetime.utcnow()) - RECENT:
         return 'texted in the last 7 days'

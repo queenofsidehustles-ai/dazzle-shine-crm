@@ -95,6 +95,8 @@ html = app.test_client().get('/signup', base_url='http://akyehq.test').get_data(
 check('name="phone" type="tel" required' in html, 'the field is required')
 check('call to welcome you' in html, 'and says why, before they give it')
 check('name="sms_consent"' in html and 'Text me' in html, 'a text is still its own, separate, unticked box')
+check("phone.addEventListener('blur', note)" in html and 'phone: (phone.value' in html,
+      'the number is sent to /signup/started when it is typed, not only the email')
 
 print()
 if failures:
