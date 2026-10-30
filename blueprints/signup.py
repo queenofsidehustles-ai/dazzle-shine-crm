@@ -239,7 +239,7 @@ def started():
 
     The phone number is noted the same way once it has been typed, so somebody
     can ring them (it is for calling, not texting: see
-    control_plane.find_or_add_abandoned_signup).
+    control_plane.find_or_add_abandoned_signup and lead_outreach.sms_block).
 
     Always answers 204: the form must not behave differently for an address
     we already have, or this becomes a way to ask "is this person a lead?".
@@ -345,9 +345,8 @@ def signup():
 
         import security
         control_plane.record_signup_attempt(_engine(), security.client_ip())
-        # They finished, so they are not a half-finished signup any more. Before
-        # the welcome text, not after: the half-finished row holds their number
-        # as do-not-text, and would stop the text they are about to be sent.
+        # They finished, so they are not a half-finished signup any more. By the
+        # address or the number they gave (a row holding a STOP is kept).
         control_plane.clear_abandoned_signup(_engine(), form.get('email'), form.get('phone'))
         _tell_us(slug, form, base)
         # Tell Meta an ad produced an account. Sent here, before the

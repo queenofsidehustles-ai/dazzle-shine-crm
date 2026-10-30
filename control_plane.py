@@ -973,15 +973,17 @@ def find_or_add_abandoned_signup(engine, email, name=None, company=None,
     The number, if they got as far as typing one, is on the row so somebody
     can ring them. It is for ringing and not for texting: the form says a
     person will call, and they have not ticked the box that asks for a text.
-    So the row is marked do-not-text, the way an uploaded call list is, and
-    number_text_block() holds for the number until they finish and ask. It
-    usually arrives after the row was made (the email box is left first), so
-    it is put on the existing row, and the newest number wins.
+    That is not recorded as a do-not-text mark, which is durable and belongs
+    to staff and to STOP replies, and would land on any other lead sharing the
+    address or number. It is the source that says so: lead_outreach.sms_block
+    refuses to text a lead that only ever left the signup form.
+
+    The number usually arrives after the row was made (the email box is left
+    first), so it is put on the existing row, and the newest number wins.
     """
     phone = (phone or '').strip() or None
     added = add_lead(engine, source='abandoned_signup', email=email,
-                     name=name, company=company, note=note, phone=phone,
-                     do_not_text=bool(phone))
+                     name=name, company=company, note=note, phone=phone)
     email = (email or '').strip().lower()
     if phone and not added and email:
         try:
@@ -990,9 +992,7 @@ def find_or_add_abandoned_signup(engine, email, name=None, company=None,
                     update(product_leads)
                     .where(func.lower(product_leads.c.email) == email,
                            product_leads.c.source == 'abandoned_signup')
-                    .values(phone=phone,
-                            do_not_text_at=func.coalesce(
-                                product_leads.c.do_not_text_at, datetime.utcnow())))
+                    .values(phone=phone))
         except Exception:
             pass
     return added
@@ -1005,8 +1005,11 @@ def clear_abandoned_signup(engine, email, phone=None):
     prospect at the same address is a different record with its own history.
     Matched by the address or by the number, because a person who finishes
     with a different address is still the one who started, and their old row
-    would otherwise hold the number as do-not-text against the welcome text
-    they have just asked for.
+    would otherwise stay on the list to be followed up.
+
+    A row that holds a STOP reply or a do-not-text mark is kept, matched by
+    either: that is the record number_text_block() reads, and finishing a
+    signup does not take back a refusal to be texted.
     """
     email = (email or '').strip().lower()
     same = _same_number(phone)
@@ -1019,7 +1022,9 @@ def clear_abandoned_signup(engine, email, phone=None):
         with engine.begin() as conn:
             return conn.execute(
                 delete(product_leads)
-                .where(or_(*mine), product_leads.c.source == 'abandoned_signup')).rowcount
+                .where(or_(*mine), product_leads.c.source == 'abandoned_signup',
+                       product_leads.c.sms_opted_out_at.is_(None),
+                       product_leads.c.do_not_text_at.is_(None))).rowcount
     except Exception:
         return 0
 
