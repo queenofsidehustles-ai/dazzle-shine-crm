@@ -6,6 +6,7 @@ booking of the same business, the owner's own bookings, a rep who is not a Sales
 login. Paying a week is recorded once and flows into the books.
 """
 import os, sys, tempfile
+import json
 from datetime import date, datetime, timedelta
 TMP = tempfile.mkdtemp()
 os.environ['DATABASE_URL'] = f'sqlite:///{TMP}/walk.db'
@@ -14,7 +15,8 @@ os.environ['FLASK_ENV'] = 'development'
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app import create_app
 from extensions import db
-from models import User, Prospect, ProspectActivity, WalkthroughPayment, BusinessSetting, PricingSetting
+from models import (User, Prospect, ProspectActivity, WalkthroughPayment, WalkthroughPayEvent,
+                    BusinessSetting, PricingSetting)
 import entitlements
 import walkthrough_pay as wp
 import finance
@@ -146,8 +148,42 @@ with app.app_context():
     db.session.commit()
     check(finance.commissions_paid_between(*finance.month_bounds(paid_day.year, paid_day.month)) == 160.0,
           'a paid week is an expense in that month\'s Profit & Loss')
-    owner.post(f'/commissions/walkthroughs/unmark-paid/{pay.id}', headers=H)
-    check(WalkthroughPayment.query.count() == 0, 'it can be undone')
+    pay_id = pay.id
+    owner.post(f'/commissions/walkthroughs/unmark-paid/{pay_id}', headers=H)
+    check(WalkthroughPayment.query.count() == 1, 'a reversal with no reason is refused, and changes nothing')
+    owner.post(f'/commissions/walkthroughs/unmark-paid/{pay_id}', headers=H, data={'reason': '  '})
+    check(WalkthroughPayment.query.count() == 1, 'a blank reason is no reason')
+    owner.post(f'/commissions/walkthroughs/unmark-paid/{pay_id}', headers=H,
+               data={'reason': 'Paid the wrong rep by mistake'})
+    check(WalkthroughPayment.query.count() == 0, 'with a reason it is reversed: the live record is gone')
+    events = WalkthroughPayEvent.query.order_by(WalkthroughPayEvent.id).all()
+    check([e.action for e in events] == ['paid', 'reversed'],
+          'and both the payment and its reversal are kept')
+    check(events[1].reason == 'Paid the wrong rep by mistake' and events[1].actor_name == 'Owner',
+          'with who reversed it and why')
+    kept = json.loads(events[0].items)
+    check(sorted(i['business'] for i in kept) == ['Biz 0', 'Biz 1'] and float(events[0].amount) == 160.0
+          and events[0].walkthroughs == 2,
+          'the payment kept what was counted: the businesses, the number and the amount')
+    check(events[1].items == events[0].items, 'a reversal carries the same list, so it can be read on its own')
+    html = owner.get(f'/commissions/walkthroughs?week={monday.isoformat()}').get_data(as_text=True)
+    check('Reversed' in html and 'Paid the wrong rep by mistake' in html and 'History for this week' in html,
+          'the history is on the page, reason and all')
+    owner.post('/commissions/walkthroughs/mark-paid', headers=H,
+               data={'user_id': sam.id, 'week': monday.isoformat()})
+    check(WalkthroughPayment.query.filter_by(user_id=sam.id).count() == 1
+          and [e.action for e in WalkthroughPayEvent.query.order_by(WalkthroughPayEvent.id)] == ['paid', 'reversed', 'paid'],
+          'and the week can then be paid again, correctly, leaving all three on record')
+    # Rename and delete a lead afterwards: what was paid for does not change.
+    db.session.get(Prospect, ps[0].id).business_name = 'Renamed Afterwards'
+    db.session.commit()
+    db.session.delete(db.session.get(Prospect, ps[1].id))
+    db.session.commit()
+    last = WalkthroughPayEvent.query.order_by(WalkthroughPayEvent.id.desc()).first()
+    check(sorted(i['business'] for i in json.loads(last.items)) == ['Biz 0', 'Biz 1'],
+          'a lead renamed or deleted later does not change what the payment says it was for')
+    owner.post(f"/commissions/walkthroughs/unmark-paid/{WalkthroughPayment.query.filter_by(user_id=sam.id).one().id}",
+               headers=H, data={'reason': 'restoring the state this test expects'})
 
     print('\n7. The rep sees their own')
     rep = login(sam)

@@ -37,9 +37,11 @@
   {% for r in ph.scheduler %}{{ run_row(r) }}{% endfor %}
   {% for r in ph.jobs %}{{ run_row(r) }}{% endfor %}
   {{ run_row(ph.stripe) }}
+  {{ run_row(ph.inbound) }}
 </table></div>
 <p class="ops-dim" style="margin-top:var(--s2)">The scheduler wakes every company's automations; the two daily jobs are the product's own emails.
-  Stripe's webhook is what turns a payment into a plan, so a failure here means somebody paid and was not upgraded.</p>
+  Stripe's webhook is what turns a payment into a plan, so a failure here means somebody paid and was not upgraded.
+  Inbound email replies read "not reported yet" until the first genuine reply arrives; a refusal means the signing secret is wrong.</p>
 
 <h3 class="ops-h" id="errors">Platform errors{% if ph.error_total %} ({{ ph.error_total }}){% endif %}</h3>
 {% if ph.errors %}

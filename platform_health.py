@@ -53,6 +53,7 @@ LABELS = {
     'job:lead-nurture': 'Emails to leads',
     'job:recording-retention': 'Call recordings past their keep date deleted',
     'stripe:webhook': "Stripe's webhook",
+    'resend:inbound': 'Inbound email replies',
 }
 
 
@@ -122,6 +123,35 @@ def stripe_webhook(engine, now=None):
     return run_state(engine, 'stripe:webhook', None, now)
 
 
+def inbound_replies(engine, now=None):
+    """Customer-driven, like Stripe's webhook: never 'stale', only whether the
+    last reply that reached us was believed and recorded. 'never' until the
+    first genuine reply, which is itself the evidence that has been missing."""
+    return run_state(engine, 'resend:inbound', None, now)
+
+
+# Settings the platform runs without being able to say so. Each is (what it
+# is for, the variables any one of which will do, what it costs not to have it).
+# Names only: a value is never read out, only whether there is one.
+def config_gaps(env=None):
+    import os
+    env = os.environ if env is None else env
+    out = []
+
+    def has(*names, min_len=1):
+        return any(len((env.get(n) or '').strip()) >= min_len for n in names)
+    if not has('RESEND_WEBHOOK_SECRET'):
+        out.append({'where': 'Email', 'text': 'RESEND_WEBHOOK_SECRET is not set: every reply to an '
+                    'introduction is refused, so no prospect\'s answer reaches anyone'})
+    if not has('RESEND_EVENTS_WEBHOOK_SECRET', 'RESEND_WEBHOOK_SECRET'):
+        out.append({'where': 'Email', 'text': 'No signing secret for delivery events: bounces and '
+                    'spam reports are refused, so "sent" stays "sent"'})
+    if not has('METRICS_API_KEY', min_len=16):
+        out.append({'where': 'Reports', 'text': 'METRICS_API_KEY is not set (or is under 16 characters): '
+                    'the daily report cannot read /console/metrics.json without a console sign-in'})
+    return out
+
+
 def platform_errors(engine, limit=10):
     """Unresolved faults recorded outside any company's CRM: the product's own
     pages, the console, the Stripe webhook. ([], 0) if the table is not there.
@@ -182,6 +212,10 @@ def attention(engine, now=None):
     hook = stripe_webhook(engine, now)
     if hook['state'] == 'failed':
         out.append({'where': 'Stripe', 'text': f"Stripe's webhook failed on its last event ({hook['detail'] or 'no detail'})"})
+    inbound = inbound_replies(engine, now)
+    if inbound['state'] == 'failed':
+        out.append({'where': 'Email', 'text': f"The last inbound reply was refused or not recorded ({inbound['detail'] or 'no detail'})"})
+    out.extend(config_gaps())
     _rows, n = platform_errors(engine, 1)
     if n:
         out.append({'where': 'Errors', 'text': f'{n} unresolved platform error{"" if n == 1 else "s"}'})
@@ -244,6 +278,7 @@ def build(engine, orgs, snaps, now=None):
             problems.append({'where': 'Usage', 'text': f'{r["name"]} has reached a monthly limit'})
     return {'backups': backups(engine, now), 'scheduler': scheduler(engine, now),
             'jobs': product_jobs(engine, now), 'stripe': stripe_webhook(engine, now),
+            'inbound': inbound_replies(engine, now),
             'errors': errs, 'error_total': n_errs,
             'usage': rows, 'usage_totals': totals,
             'switches': platform_switches.states(engine),
