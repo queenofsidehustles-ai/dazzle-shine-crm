@@ -1,0 +1,77 @@
+name: Clock check
+
+# The full suite, run as if it were another day. Most date bugs here have been
+# in the tests, not the product, and every one passed on every ordinary day: a
+# suite that fails only on the last day of a month, on a leap day, or in the
+# evening before a 1st (when it is already tomorrow in UTC and still today in
+# New York) cannot be caught by running on the day it happens to be. This runs
+# the suite on those days, weekly, so it is caught the week it is written and
+# not on the one day a release is due. See tests/clock_shim/sitecustomize.py
+# for how, and for what it cannot imitate (PostgreSQL keeps real time).
+#
+# Not a gate on a pull request, only a scheduled and manual run: a failure here
+# is a lead to read, not a verdict. Run the same suite on the real date too.
+
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      fake_now:
+        description: 'Run once at this naive UTC time instead of the usual dates (e.g. 2027-02-28T12:00:00)'
+        required: false
+
+jobs:
+  clock:
+    name: Suites on ${{ matrix.when }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        # Month end; the evening before a 1st and just after it (UTC and New
+        # York disagree about the day); a non-leap February end; a leap day;
+        # both daylight-saving changes; an ordinary night.
+        when:
+          - '2026-10-31T12:00:00'
+          - '2026-12-31T23:30:00'
+          - '2027-01-01T00:30:00'
+          - '2027-02-28T12:00:00'
+          - '2028-02-29T12:00:00'
+          - '2026-11-01T05:30:00'
+          - '2027-03-14T12:00:00'
+          - '2026-11-10T02:30:00'
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: akye_clock_check
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d akye_clock_check"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_POSTGRES_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/akye_clock_check
+      PGURL: postgresql+psycopg2://postgres:postgres@localhost:5432/akye_clock_check
+      PGOPTIONS: "-c log_min_messages=fatal -c log_min_error_statement=panic"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Run every suite at the shifted time
+        # A manual run with a time given replaces the matrix's: every job then
+        # runs that one time, which is wasteful but harmless.
+        env:
+          FAKE_NOW: ${{ github.event.inputs.fake_now || matrix.when }}
+          PYTHONPATH: ${{ github.workspace }}/tests/clock_shim
+        run: python tests/run_all.py --jobs auto
