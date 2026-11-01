@@ -31,7 +31,11 @@ jobs:
       matrix:
         # Month end; the evening before a 1st and just after it (UTC and New
         # York disagree about the day); a non-leap February end; a leap day;
-        # both daylight-saving changes; an ordinary night.
+        # both daylight-saving changes, each at the instants either side of the
+        # jump: on 1 Nov 2026 the New York hour of 1:30 AM happens twice (05:30
+        # UTC, then 06:30 UTC, an hour later by the clock and the same on the
+        # wall), and on 14 Mar 2027 2:30 AM never happens (06:30 UTC is 1:30 AM,
+        # 07:30 UTC is already 3:30 AM); an ordinary night.
         when:
           - '2026-10-31T12:00:00'
           - '2026-12-31T23:30:00'
@@ -39,6 +43,9 @@ jobs:
           - '2027-02-28T12:00:00'
           - '2028-02-29T12:00:00'
           - '2026-11-01T05:30:00'
+          - '2026-11-01T06:30:00'
+          - '2027-03-14T06:30:00'
+          - '2027-03-14T07:30:00'
           - '2027-03-14T12:00:00'
           - '2026-11-10T02:30:00'
     services:
