@@ -81,7 +81,7 @@ c = app.test_client()
 r = c.post("/signup", data={
     "business": "Sparkle Cleaning Services", "slug": "sparkle",
     "name": "Dana Reed", "email": "dana@sparkle.test",
-    "password": "a-perfectly-fine-password", "terms_accepted": "1",
+    "password": "a-perfectly-fine-password", "confirm": "a-perfectly-fine-password", "terms_accepted": "1",
     "zip_code": "32801", "phone": "4075550123",
 }, headers={"Host": "rollcall.test"})
 print("REDIRECT:", r.status_code)

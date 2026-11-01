@@ -85,6 +85,19 @@
     <p class="small">At least 8 characters. Three ordinary words beats one word
        with symbols in it.</p>
 
+    {# Typed twice because a password nobody has seen is a password that cannot be
+       got back into: a slip here means a new account nobody can sign in to, on the
+       first day. The page says whether they match as they type; the server checks
+       it again (signup._validate, passwords.py). Neither box is ever filled in
+       again after a refusal. #}
+    <label for="confirm">Confirm password</label>
+    <input id="confirm" name="confirm" type="password" required minlength="8"
+           autocomplete="new-password" />
+    <p id="match-note" class="small" role="status" aria-live="polite" style="min-height:1.2em"></p>
+    <label for="show_password" class="small" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+      <input type="checkbox" id="show_password" /> <span>Show password</span>
+    </label>
+
     {# A checkbox, not a sentence saying pressing the button counts as
        agreeing. On the signup form rather than buried in a footer, because
        this is the moment somebody is actually agreeing -- and _validate
@@ -143,6 +156,29 @@
       }
       email.addEventListener('blur', note);
       phone.addEventListener('blur', note);
+    })();
+
+    // Say whether the two passwords match, and let them look at what they typed.
+    // The browser is told too (setCustomValidity), so a mismatch stops the form
+    // with its own message; the server still checks, it does not trust this.
+    (function () {
+      var pw = document.getElementById('password');
+      var cf = document.getElementById('confirm');
+      var show = document.getElementById('show_password');
+      var note = document.getElementById('match-note');
+      function sync() {
+        if (!cf.value) { note.textContent = ''; cf.setCustomValidity(''); return; }
+        var same = pw.value === cf.value;
+        note.textContent = same ? '\u2713 The passwords match' : '\u2717 The passwords do not match yet';
+        note.className = 'small ' + (same ? 'match-ok' : 'match-bad');
+        cf.setCustomValidity(same ? '' : 'The two passwords do not match.');
+      }
+      pw.addEventListener('input', sync);
+      cf.addEventListener('input', sync);
+      show.addEventListener('change', function () {
+        var t = show.checked ? 'text' : 'password';
+        pw.type = t; cf.type = t;
+      });
     })();
 
     // Suggest an address from the business name, until the person edits it

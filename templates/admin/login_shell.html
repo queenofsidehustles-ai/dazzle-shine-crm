@@ -46,6 +46,14 @@
     .panel input:focus {
       outline:none; border-color:var(--amber); box-shadow:var(--ring);
     }
+    /* A checkbox is not a text box: the rule above stretched it to the width of
+       the form, which put a gap between each tick box and its words. */
+    .panel input[type="checkbox"] {
+      width:auto; padding:0; flex:none;
+    }
+    /* Whether the two passwords match, in the system's colours. */
+    .panel .match-ok  { color:var(--good); }
+    .panel .match-bad { color:var(--warn); }
 
     .panel button {
       width:100%; margin-top:var(--s6); padding:var(--s3) var(--s4);

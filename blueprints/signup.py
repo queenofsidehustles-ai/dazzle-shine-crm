@@ -45,6 +45,7 @@ from flask import (Blueprint, render_template, request, redirect, url_for,
 from sqlalchemy import text
 
 import control_plane
+import passwords
 import provisioning
 import tenancy
 from auth import bind_authenticated_session
@@ -294,6 +295,7 @@ def signup():
                           'browser_tz', 'phone')}
         form['email'] = form['email'].lower()
         password = request.form.get('password') or ''
+        confirm = request.form.get('confirm') or ''
         slug = form['slug'].lower() or suggest_slug(form['business'])
         terms_accepted = bool(request.form.get('terms_accepted'))
         # Asked for separately from the terms and never pre-ticked: a text to
@@ -306,7 +308,7 @@ def signup():
                                    terms_accepted=terms_accepted, error=error)
 
         try:
-            error = _validate(form, slug, password, terms_accepted)
+            error = _validate(form, slug, password, terms_accepted, confirm)
             if not error:
                 error = _refused(_engine())
         except Exception as e:
@@ -438,7 +440,7 @@ def _tell_us(slug, form, base):
               f'{type(e).__name__}: {e}')
 
 
-def _validate(form, slug, password, terms_accepted=False):
+def _validate(form, slug, password, terms_accepted=False, confirm=''):
     if not form['business']:
         return 'What is the business called?'
     if not form['name']:
@@ -461,10 +463,11 @@ def _validate(form, slug, password, terms_accepted=False):
         return 'What is the business ZIP code? Five digits.'
     if not zip_zones.zone_for_zip(form.get('zip_code')):
         return 'That does not look like a US ZIP code.'
-    if len(password) < 8:
-        return 'Please use a password of at least 8 characters.'
-    if password.lower() in ('password', '12345678', 'changeme'):
-        return 'That password is too easy to guess.'
+    # The same rule as resetting or changing one (passwords.py), and the second
+    # box is checked here: the page tells them as they type, but this is the check.
+    bad = passwords.problem(password, confirm)
+    if bad:
+        return bad
     if not tenancy.valid_slug(slug):
         return ('Pick a web address of 3–40 lower-case letters, numbers or '
                 'hyphens — and not a reserved word like "www" or "admin".')
