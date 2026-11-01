@@ -1,5 +1,7 @@
 import json
+import logging
 import secrets
+import time
 from datetime import datetime
 from flask import Blueprint, Response, render_template, request, redirect, url_for, flash, jsonify, g
 from auth import login_required
@@ -8,6 +10,8 @@ from extensions import db
 from notifications import send_email, send_sms
 import branding
 import private_media
+
+log = logging.getLogger(__name__)
 
 workorders_bp = Blueprint('workorders', __name__, url_prefix='/workorders')
 
@@ -450,7 +454,16 @@ def add_photo(token):
     checklist = JobChecklist.query.filter_by(token=token).first_or_404()
     tenant_slug = _tenant_slug()
     phase = (request.form.get('phase') or '').strip()
+    # The request body is read from the phone the first time request.files is
+    # touched, so this is where a slow connection spends its time. Timed on its
+    # own, because "the upload timed out" has two very different causes: the
+    # phone sending slowly (this) and Cloudinary taking it slowly (private_media).
+    received = time.monotonic()
     photo = request.files.get('photo')
+    received = time.monotonic() - received
+    if received > private_media.SLOW_UPLOAD_SECONDS:
+        log.warning("slow job-photo upload from the phone: %.1fs to receive %s bytes",
+                    received, request.content_length)
     if not tenant_slug:
         return jsonify({'ok': False, 'error': 'Tenant context is required.'}), 404
     if phase not in ('before', 'after') or photo is None:
@@ -459,6 +472,15 @@ def add_photo(token):
         ref = private_media.upload_image(
             photo, tenant_slug=tenant_slug, kind='job-photo',
             scope_id=_photo_scope(checklist, phase))
+    except private_media.UploadUnavailable as exc:
+        # Not the person's mistake and not a crash: say so, and say it can be
+        # retried. Recorded so Health shows photo uploads failing, with the cause.
+        try:
+            import errors
+            errors.capture(exc, path=request.path, method='POST')
+        except Exception:  # noqa: BLE001
+            pass
+        return jsonify({'ok': False, 'error': str(exc), 'retry': True}), 503
     except (ValueError, RuntimeError) as exc:
         return jsonify({'ok': False, 'error': str(exc)}), 400
 
