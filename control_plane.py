@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import (Column, DateTime, Integer, String, Boolean, MetaData,
                         LargeBinary, Text, UniqueConstraint,
-                        Table, select, insert, update, delete, text, func, or_)
+                        Table, select, insert, update, delete, text, func, or_, and_)
 
 # Its own MetaData: these tables must never be created inside a tenant schema,
 # and must never be swept up by a migration that walks models.py.
@@ -998,24 +998,29 @@ def find_or_add_abandoned_signup(engine, email, name=None, company=None,
     return added
 
 
-def clear_abandoned_signup(engine, email, phone=None):
+def clear_abandoned_signup(engine, email, phone=None, name=None):
     """They finished. Take the half-finished row off the leads list.
 
     Only rows this form wrote: an early-access request or an uploaded
     prospect at the same address is a different record with its own history.
-    Matched by the address or by the number, because a person who finishes
-    with a different address is still the one who started, and their old row
-    would otherwise stay on the list to be followed up.
+
+    By the address they finished with. A person who finishes with a different
+    address is still the one who started, so the number matches too, but only
+    together with the name: a phone number is shared (a family, an office, a
+    business line), and a number alone would delete a different person's
+    half-finished signup. Without a name on the row, or without the same one,
+    the number is not enough and the row stays.
 
     A row that holds a STOP reply or a do-not-text mark is kept, matched by
     either: that is the record number_text_block() reads, and finishing a
     signup does not take back a refusal to be texted.
     """
     email = (email or '').strip().lower()
+    name = ' '.join((name or '').lower().split())
     same = _same_number(phone)
     mine = [func.lower(product_leads.c.email) == email] if email else []
-    if same is not None:
-        mine.append(same)
+    if same is not None and name:
+        mine.append(and_(same, func.lower(func.trim(func.coalesce(product_leads.c.name, ''))) == name))
     if not mine:
         return 0
     try:
