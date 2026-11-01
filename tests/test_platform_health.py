@@ -187,6 +187,19 @@ try:
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM public.error_log"))
 
+    print('\n2c. A watchdog can tell that a timetable stopped')
+    import scheduler
+    with app.app_context():
+        run_at('scheduler:hourly', 5)             # the only hourly run so far: five hours old
+        late = scheduler.overdue(NOW, engine)
+    check(any('hourly' in l and 'within 3 hours' in l for l in late),
+          f'an hourly run last good five hours ago is named, with the window ({late})')
+    check(any('daily' in l for l in late), 'and so is the daily one from section 2, forty hours old')
+    with app.app_context():
+        run_at('scheduler:hourly', 0.5)
+        run_at('scheduler:daily', 1)
+        check(scheduler.overdue(NOW, engine) == [], 'once both have reported lately nothing is overdue')
+
     print('\n3. Reporting in: the endpoint')
     c = app.test_client()
     body = {'kind': 'backup:akye', 'ok': True, 'items': 123, 'detail': 'nightly'}
