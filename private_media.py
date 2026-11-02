@@ -161,8 +161,12 @@ class UploadUnavailable(RuntimeError):
 
 
 def upload_image(file_storage, *, tenant_slug: str, kind: str,
-                 scope_id: int | str | None = None) -> str:
-    """Upload one image as a Cloudinary authenticated asset and return its ref."""
+                 scope_id: int | str | None = None,
+                 upload_id: str | None = None) -> str:
+    """Upload one image as a Cloudinary authenticated asset and return its ref.
+
+    `upload_id` is the caller's name for this one upload, kept inside the signed
+    reference so a repeat of it can be recognised later (see workorders.add_photo)."""
     if not tenant_slug or not kind:
         raise ValueError("tenant_slug and kind are required")
     if file_storage is None or not getattr(file_storage, "filename", ""):
@@ -213,6 +217,8 @@ def upload_image(file_storage, *, tenant_slug: str, kind: str,
         "format": result["format"],
         "resource_type": result.get("resource_type", "image"),
     }
+    if upload_id:
+        payload["uid"] = str(upload_id)
     return _encode(payload)
 
 

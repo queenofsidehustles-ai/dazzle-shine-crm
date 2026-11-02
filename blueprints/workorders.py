@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import secrets
 import time
 from datetime import datetime
@@ -313,6 +314,38 @@ def _private_photo_refs(checklist, phase):
         ref, tenant_slug=tenant_slug, kind='job-photo', scope_id=scope)]
 
 
+_UPLOAD_ID = re.compile(r'[A-Za-z0-9-]{8,64}')
+
+
+def _photo_with_upload_id(checklist, phase, tenant_slug, upload_id):
+    """The index of the photo already saved under this upload id, or None."""
+    scope = _photo_scope(checklist, phase)
+    for i, ref in enumerate(_private_photo_refs(checklist, phase)):
+        payload = private_media.parse_ref(ref, tenant_slug=tenant_slug,
+                                          kind='job-photo', scope_id=scope)
+        if payload and payload.get('uid') == upload_id:
+            return i
+    return None
+
+
+def _one_at_a_time(tenant_slug, upload_id):
+    """Make a second attempt at the same photo wait for the first to finish.
+
+    The phone gives up after forty seconds and tries again, but the server may
+    still be working on the first attempt; without this both would save the
+    photo. A lock on this upload id only (not on the checklist, which the same
+    person is ticking items on while a photo goes up), held until the request's
+    transaction ends. PostgreSQL only; the single-business install has no second
+    worker to race."""
+    try:
+        if db.engine.dialect.name == 'postgresql':
+            from sqlalchemy import text
+            db.session.execute(text('SELECT pg_advisory_xact_lock(hashtext(:k))'),
+                               {'k': f'job-photo:{tenant_slug}:{upload_id}'})
+    except Exception:  # noqa: BLE001 -- the lock is a courtesy; the upload is not
+        db.session.rollback()
+
+
 def _photo_urls(checklist, phase):
     refs = _private_photo_refs(checklist, phase)
     return [url_for('workorders.get_photo', token=checklist.token,
@@ -453,12 +486,14 @@ def submit_review(token):
 def add_photo(token):
     checklist = JobChecklist.query.filter_by(token=token).first_or_404()
     tenant_slug = _tenant_slug()
-    phase = (request.form.get('phase') or '').strip()
-    # The request body is read from the phone the first time request.files is
-    # touched, so this is where a slow connection spends its time. Timed on its
-    # own, because "the upload timed out" has two very different causes: the
-    # phone sending slowly (this) and Cloudinary taking it slowly (private_media).
+    # The request body is read from the phone the first time request.form or
+    # request.files is touched (werkzeug parses both at once), so the clock starts
+    # before the first of them: this is where a slow connection spends its time.
+    # Timed on its own, because "the upload timed out" has two very different
+    # causes: the phone sending slowly (this) and Cloudinary taking it slowly
+    # (private_media).
     received = time.monotonic()
+    phase = (request.form.get('phase') or '').strip()
     photo = request.files.get('photo')
     received = time.monotonic() - received
     if received > private_media.SLOW_UPLOAD_SECONDS:
@@ -468,10 +503,24 @@ def add_photo(token):
         return jsonify({'ok': False, 'error': 'Tenant context is required.'}), 404
     if phase not in ('before', 'after') or photo is None:
         return jsonify({'ok': False, 'error': 'Missing phase or photo'}), 400
+
+    # The phone names each photo once and sends that name with every attempt. If
+    # an attempt got as far as being saved and its answer was lost, the next one
+    # is told so instead of saving the photo twice.
+    upload_id = (request.form.get('upload_id') or '').strip()
+    if not _UPLOAD_ID.fullmatch(upload_id):
+        upload_id = ''
+    if upload_id:
+        _one_at_a_time(tenant_slug, upload_id)
+        seen = _photo_with_upload_id(checklist, phase, tenant_slug, upload_id)
+        if seen is not None:
+            return jsonify({'ok': True, 'duplicate': True,
+                            'url': url_for('workorders.get_photo', token=token,
+                                           phase=phase, photo_index=seen)})
     try:
         ref = private_media.upload_image(
             photo, tenant_slug=tenant_slug, kind='job-photo',
-            scope_id=_photo_scope(checklist, phase))
+            scope_id=_photo_scope(checklist, phase), upload_id=upload_id or None)
     except private_media.UploadUnavailable as exc:
         # Not the person's mistake and not a crash: say so, and say it can be
         # retried. Recorded so Health shows photo uploads failing, with the cause.

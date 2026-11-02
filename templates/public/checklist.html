@@ -479,10 +479,16 @@
       $('photo-err').style.display = 'none';
       try {
         try { file = await AkyePhoto.shrink(file); } catch (e) {}
+        // One name for this photo, sent with every attempt: if the first got as
+        // far as being saved and its answer was lost, the second is told so
+        // instead of saving it twice.
+        const uploadId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+          : (Date.now().toString(16) + Math.random().toString(16).slice(2));
         const send = async () => {
           const fd = new FormData();
           fd.append('photo', file);
           fd.append('phase', phase);
+          fd.append('upload_id', uploadId);
           const stop = new AbortController();
           const timer = setTimeout(() => stop.abort(), 40000);
           try {

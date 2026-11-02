@@ -147,15 +147,27 @@ def overdue(now=None, engine=None):
 
     A GitHub schedule is best-effort: it can fire late or not at all, and the
     only trace of a run that never started is the absence of one. Something has
-    to notice an absence, and it cannot be the run that did not happen. A run
-    that reported and failed is not this: that run's own job fails, and the
-    console shows it. 'Never reported' is not this either: a deployment that
-    has not run yet is not late."""
+    to notice an absence, and it cannot be the run that did not happen.
+
+    Judged by the age of the newest report, whether it succeeded or not. A run
+    that reported a failure just now is not this: that run's own job fails, and
+    the console shows it. But a timetable whose last report was a failure and
+    then nothing, for longer than its window, has stopped all the same, and
+    Health calls it 'failed' rather than 'stale', so reading only 'stale' would
+    let that outage pass for ever. 'Never reported' is not this either: a
+    deployment that has not run yet is not late."""
     import platform_health
     engine = engine or _control_engine()
-    return [f'{r["label"]}: last good run {r["last_ok_ago"]} (expected within '
-            f'{r["stale_hours"]} hours)'
-            for r in platform_health.scheduler(engine, now) if r['state'] == 'stale']
+    late = []
+    for r in platform_health.scheduler(engine, now):
+        window, age = r['stale_hours'], r['age_hours']
+        if r['state'] == 'stale':
+            late.append(f'{r["label"]}: last good run {r["last_ok_ago"]} (expected within '
+                        f'{window} hours)')
+        elif r['state'] == 'failed' and window and age is not None and age > window:
+            late.append(f'{r["label"]}: its last report was a failure {platform_health.ago(age)}, '
+                        f'and nothing has reported since (expected within {window} hours)')
+    return late
 
 
 def call(slug, job, base, key):

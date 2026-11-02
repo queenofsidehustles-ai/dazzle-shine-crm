@@ -34,6 +34,7 @@ def check(cond, m):
 
 import requests
 import private_media
+REAL_UPLOAD_IMAGE = private_media.upload_image
 from app import create_app
 from extensions import db
 from flask import g
@@ -141,9 +142,89 @@ with app.app_context():
     check(any('slow job-photo upload from the phone' in r and 'to receive' in r for r in records),
           'the time taken to receive the picture from the phone is logged on its own')
 
+    print('\n3b. The clock starts before the body is read, not after')
+    # The first touch of request.form reads the whole body from the phone, so a timer
+    # started after it measured nothing. A phone that sends slowly is simulated by an
+    # input stream that waits as it is read.
+    import time as _time
+    from werkzeug.test import EnvironBuilder
+
+    class SlowStream(io.BytesIO):
+        # werkzeug reads through whichever of these the stream offers
+        def read(self, *a):
+            _time.sleep(0.35)
+            return super().read(*a)
+
+        def read1(self, *a):
+            _time.sleep(0.35)
+            return super().read1(*a)
+
+        def readinto(self, b):
+            _time.sleep(0.35)
+            return super().readinto(b)
+
+    builder = EnvironBuilder(path='/workorders/checklist/tok-123/add-photo', method='POST',
+                             data={'phase': 'before', 'photo': (io.BytesIO(b'\xff\xd8\xff' + b'0' * 50), 'a.jpg', 'image/jpeg')})
+    environ = builder.get_environ()
+    body = environ['wsgi.input'].read()
+    environ['wsgi.input'] = SlowStream(body)
+    records.clear()
+    wo.log.addHandler(h)
+    private_media.SLOW_UPLOAD_SECONDS = 0.2
+    private_media.upload_image = lambda *a, **k: (_ for _ in ()).throw(private_media.UploadUnavailable('x'))
+    with app.request_context(environ):
+        g.tenant_slug = 'acme'
+        wo.add_photo('tok-123')
+    private_media.SLOW_UPLOAD_SECONDS = old
+    wo.log.removeHandler(h)
+    took = [float(r.split('slow job-photo upload from the phone: ')[1].split('s')[0]) for r in records
+            if 'slow job-photo upload from the phone' in r]
+    check(took and took[0] >= 0.3, f'a body that takes a third of a second to arrive is timed at that ({took})')
+
+    print('\n3c. A repeat of the same photo is not saved twice')
+    private_media.upload_image = REAL_UPLOAD_IMAGE
+    saved = []
+
+    def counting_upload(fh, **opts):
+        saved.append(1)
+        return {'public_id': f'akye-private/acme/job-photo/p{len(saved)}', 'version': 1,
+                'format': 'jpg', 'resource_type': 'image'}
+    cloudinary.uploader.upload = counting_upload
+
+    def post_id(upload_id, phase='before'):
+        data = {'phase': phase, 'photo': (io.BytesIO(b'\xff\xd8\xff' + b'0' * 50), 'a.jpg', 'image/jpeg')}
+        if upload_id is not None:
+            data['upload_id'] = upload_id
+        with app.test_request_context('/workorders/checklist/tok-123/add-photo', method='POST',
+                                      data=data, content_type='multipart/form-data'):
+            g.tenant_slug = 'acme'
+            out = wo.add_photo('tok-123')
+        resp = out[0] if isinstance(out, tuple) else out
+        return resp.get_json()
+
+    baseline = len(JobChecklist.query.get(cl.id).get_before_photos())
+    first = post_id('photo-aaaa1111')
+    again = post_id('photo-aaaa1111')          # the answer to the first was lost, so the phone asks again
+    check(first['ok'] and again['ok'] and again.get('duplicate') and again['url'] == first['url'] and len(saved) == 1,
+          'the second attempt is told it is there already, with the same address, and nothing is uploaded again')
+    other = post_id('photo-bbbb2222')
+    check(other['ok'] and not other.get('duplicate') and len(saved) == 2 and other['url'] != first['url'],
+          'a different photo is a different photo')
+    post_id(None); post_id('x')                 # no name, or one that is not a name: saved as before
+    check(len(saved) == 4, 'an upload with no name (an older page), or a bad one, is simply saved')
+    cl_now = JobChecklist.query.get(cl.id)
+    check(len(cl_now.get_before_photos()) - baseline == 4, 'and the checklist gained four photos, not five')
+    third = post_id('photo-aaaa1111', phase='after')
+    check(third['ok'] and not third.get('duplicate'), 'the same name on the other phase is not a repeat')
+    check("pg_advisory_xact_lock" in open(os.path.join(ROOT, 'blueprints/workorders.py')).read(),
+          'on PostgreSQL a second attempt waits for the first (an advisory lock on that one upload, not the checklist)')
+    cloudinary.uploader.upload = real_upload
+
 print('\n4. The page')
 html = open(os.path.join(ROOT, 'templates/public/checklist.html')).read()
 check("filename='photo-resize.js'" in html and 'AkyePhoto.shrink' in html, 'the phone shrinks the picture first')
+check('upload_id' in html and 'crypto.randomUUID' in html,
+      'it names each photo once, and sends that name with every attempt')
 check('AbortController' in html and '[502, 503, 504]' in html,
       'gives the upload a limit and tries once more when nothing came back or the server said to')
 check('Could not upload that photo. Please try again. (' not in html, 'and no longer shows a raw error in brackets')

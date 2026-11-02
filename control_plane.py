@@ -1020,7 +1020,8 @@ def clear_abandoned_signup(engine, email, phone=None, name=None):
     same = _same_number(phone)
     mine = [func.lower(product_leads.c.email) == email] if email else []
     if same is not None and name:
-        mine.append(and_(same, func.lower(func.trim(func.coalesce(product_leads.c.name, ''))) == name))
+        stored = func.trim(func.regexp_replace(func.lower(func.coalesce(product_leads.c.name, '')), r'\s+', ' ', 'g'))
+        mine.append(and_(same, stored == name))
     if not mine:
         return 0
     try:
