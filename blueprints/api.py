@@ -305,7 +305,9 @@ def _charge_balances_work():
     late = Booking.query.filter(
         Booking.preferred_date >= floor,
         Booking.preferred_date < today,
-        Booking.status.in_(['confirmed', 'pending']),
+        # 'completed' too: a cleaner or owner closing out the job does not
+        # collect, so a finished job can still owe a never-tried balance.
+        Booking.status.in_(['confirmed', 'pending', 'completed']),
         Booking.balance_collected == False,
         Booking.paid_at.is_(None),
         Booking.charge_pending.is_(None),

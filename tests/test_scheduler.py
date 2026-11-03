@@ -234,6 +234,8 @@ check(scheduler._judge('{"ok": true, "failed": 2}')[0] is False, 'a failed count
 check(scheduler._judge('{"ok": true, "failed": ["cleaner reminders: x"]}')[0] is False, 'a list of failures fails the job')
 check(scheduler._judge('{"ok": false, "error": "x"}')[0] is False, 'ok:false fails')
 check(scheduler._judge('{"ok": true, "skipped": "turned off"}')[0], 'skipped is not a failure')
+check(scheduler._judge('{' + 'x' * scheduler.JOB_REPLY_LIMIT)[0] is False,
+      'a reply cut off by the size limit is a failure, not a pass')
 check('Ashley' not in scheduler._judge('{"ok":true,"results":[{"ok":false,"name":"Ashley","error":"e"}]}')[1],
       'customer names never reach the log')
 

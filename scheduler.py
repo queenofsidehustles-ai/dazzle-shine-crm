@@ -189,6 +189,8 @@ def _judge(body_text):
     try:
         body = json.loads(body_text)
     except ValueError:
+        if len(body_text) >= JOB_REPLY_LIMIT:
+            return False, 'reply too long to check for failures'
         return True, body_text[:160]
     if not isinstance(body, dict):
         return True, body_text[:160]
@@ -243,6 +245,11 @@ def call_product(job, base, key):
     return not failed, summary
 
 
+# A reply this long is cut off by the read below and no longer parses; it is
+# reported rather than read as success.
+JOB_REPLY_LIMIT = 1_000_000
+
+
 def _post(url, key, raw=False):
     req = urllib.request.Request(url, data=b'{}', method='POST', headers={
         'Content-Type': 'application/json',
@@ -250,7 +257,7 @@ def _post(url, key, raw=False):
     })
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-            body = r.read(20000 if raw else 2000).decode('utf8', 'replace')
+            body = r.read(JOB_REPLY_LIMIT if raw else 2000).decode('utf8', 'replace')
             if raw:
                 return True, body
             try:

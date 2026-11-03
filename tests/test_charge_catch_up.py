@@ -128,6 +128,12 @@ with app.app_context():
     check(bool(get(y, 'paid_at')), 'and the job is settled')
     check(any(x.get('catch_up') for x in r.get_json()['results']), 'the reply says it was a catch-up')
 
+    done = make(1, status='completed')
+    CHARGES.clear()
+    c.post(URL, headers=HOST)
+    check(len(CHARGES) == 1 and bool(get(done, 'paid_at')),
+          'a job closed out without collecting is collected too')
+
     print('\n2. It is tried once, not every hour')
     CHARGES.clear()
     c.post(URL, headers=HOST)
