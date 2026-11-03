@@ -7,7 +7,7 @@ missing or unusable number and checks what is stored. This is the rest:
     owner, from one macro and not four copies of the same markup
   * the one list of starter seeds is shared by signup, the demo company and the
     command line, and strict means a failed seed fails the caller
-  * the form tells people up front that they will be called
+  * the form tells people up front that they will be called (the number is optional)
 """
 import os, sys, tempfile
 TMP = tempfile.mkdtemp()
@@ -92,7 +92,8 @@ check('_seed_strict' not in open(f'{ROOT}/demo_company.py').read(), 'and so does
 print('\n4. The form says they will be called, and asks for the number')
 html = app.test_client().get('/signup', base_url='http://akyehq.test').get_data(as_text=True) \
     if os.environ.get('BASE_DOMAIN') else open(f'{ROOT}/templates/admin/signup.html').read()
-check('name="phone" type="tel" required' in html, 'the field is required')
+check('name="phone" type="tel"' in html and 'name="phone" type="tel" required' not in html
+      and '(optional)' in html, 'the field is optional, and says so')
 check('call to welcome you' in html, 'and says why, before they give it')
 check('name="sms_consent"' in html and 'Text me' in html, 'a text is still its own, separate, unticked box')
 check("phone.addEventListener('blur', note)" in html and 'phone: (phone.value' in html,

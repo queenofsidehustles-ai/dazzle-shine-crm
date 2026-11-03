@@ -321,10 +321,11 @@ def signup():
         if error:
             return again(error)
 
-        # Kept the way a text can be sent to it: +1XXXXXXXXXX. _validate has
-        # already refused anything that is not a US number.
+        # Kept the way a text can be sent to it: +1XXXXXXXXXX, or None when it
+        # was left blank. _validate has already refused anything else.
         import lead_outreach
         form['phone'] = lead_outreach.us_number(form['phone'])
+        sms_consent = sms_consent and bool(form['phone'])
         came_from = _came_from()
         try:
             token = _create_everything(slug, form, password,
@@ -385,9 +386,8 @@ def signup():
         except Exception as _e:
             print(f'  ⚠️  welcome email not sent for {slug!r}: {_e}')
         # The text, if they asked for one. After the email, and after the
-        # account exists, so it can only ever add to a signup. The number is
-        # always given now (it is how we ring them); consent to a text is not
-        # the same thing and is still its own box.
+        # account exists, so it can only ever add to a signup. Only when a
+        # number was given; consent to a text is still its own box.
         if sms_consent:
             try:
                 ok, detail = lead_outreach.send_welcome_text(
@@ -447,12 +447,14 @@ def _validate(form, slug, password, terms_accepted=False):
     if not notifications.looks_like_email(form['email']):
         return 'That email address does not look right.'
     # Asked for so that a person can ring them to welcome them and see how
-    # setup is going. A US number, like the ZIP below: that is where the
-    # product is sold, and a number that cannot be rung is no use to anyone.
+    # setup is going -- but optional. Making it required (Oct 29) coincided
+    # with ad visitors reaching the form and leaving without finishing; a
+    # signup without a number is worth more than no signup. A number that IS
+    # typed must still be a US number that can be rung.
     import lead_outreach
-    if not lead_outreach.us_number(form.get('phone')):
-        return ('What phone number can we reach you on? Ten digits with the '
-                'area code, so we can call to welcome you and check setup is going well.')
+    if (form.get('phone') or '').strip() and not lead_outreach.us_number(form.get('phone')):
+        return ('That phone number does not look right. Ten digits with the '
+                'area code, or leave it blank.')
     # Refused here rather than fixed up later: a ZIP we cannot place is a
     # timezone we cannot work out, and that is the one setting whose being
     # wrong never announces itself.

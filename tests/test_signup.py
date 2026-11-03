@@ -231,15 +231,13 @@ print("OK")
 ''', f'validation {data.get("slug")}')
     check('MATCH: True' in out, f'{expect.decode()!r} — refused with a useful message')
 
-print('\n6b. A phone number is required, so somebody can ring to welcome them')
+print('\n6b. A phone number is optional, but one that is typed must be usable')
 good = {'business': 'B', 'name': 'A', 'email': 'a@b.test', 'password': 'a-good-password',
         'terms_accepted': '1', 'zip_code': '32801'}
-for slug, phone in (('phone-none', None), ('phone-blank', '   '), ('phone-short', '555-0123'),
+for slug, phone in (('phone-short', '555-0123'),
                     ('phone-words', 'call me'), ('phone-area-code-0', '0075550123'),
                     ('phone-exchange-1', '4071550123'), ('phone-long', '14075550123999')):
-    data = dict(good, slug=slug)
-    if phone is not None:
-        data['phone'] = phone
+    data = dict(good, slug=slug, phone=phone)
     out = run(STUB + f'''
 from app import create_app
 import control_plane, provisioning
@@ -252,6 +250,25 @@ print("OK")
 ''', f'phone {slug}')
     check('MATCH: True STATUS: 200' in out and 'NOTHING MADE: True' in out,
           f'{phone!r} is refused, says why, and creates no company')
+for slug, phone in (('phone-none', None), ('phone-blank', '   ')):
+    data = dict(good, slug=slug)
+    if phone is not None:
+        data['phone'] = phone
+    data['sms_consent'] = '1'
+    out = run(STUB + '''
+from app import create_app
+import control_plane, provisioning, lead_outreach
+sent = []
+lead_outreach.send_welcome_text = lambda *a, **k: (sent.append(a), (True, ""))[1]
+app = create_app()
+c = app.test_client()
+r = c.post("/signup", data=%r, headers={"Host": "rollcall.test"})
+org = control_plane.find(provisioning._engine(), %r)
+print("STATUS:", r.status_code, "PHONE:", org and org["owner_phone"], "TEXTS:", len(sent))
+print("OK")
+''' % (data, slug), f'phone {slug}')
+    check('STATUS: 302 PHONE: None TEXTS: 0' in out,
+          f'{phone!r} still creates the company, with no number and no text sent')
 out = run(STUB + '''
 from app import create_app
 import control_plane, provisioning
@@ -277,9 +294,9 @@ print("SCHEMAS:", schemas)
 print("ORGS:", orgs)
 print("OK")
 ''', 'no orphans')
-check("SCHEMAS: ['tenant_phone_ok', 'tenant_sparkle']" in out,
-      'every refused attempt left no schema behind: only the two companies that were made exist')
-check("ORGS: ['phone-ok', 'sparkle']" in out, 'and no half-recorded companies')
+check("SCHEMAS: ['tenant_phone_blank', 'tenant_phone_none', 'tenant_phone_ok', 'tenant_sparkle']" in out,
+      'every refused attempt left no schema behind: only the four companies that were made exist')
+check("ORGS: ['phone-blank', 'phone-none', 'phone-ok', 'sparkle']" in out, 'and no half-recorded companies')
 
 print('\n8. The address check answers as somebody types')
 out = run(STUB + '''
