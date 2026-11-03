@@ -231,6 +231,10 @@ def charge_balances():
         return _charge_balances_work()
 
 
+CATCH_UP_DAYS = 3      # how far back a never-tried job is still collected
+CATCH_UP_MAX = 50      # per run, per company
+
+
 def _charge_balances_work():
     """Charge every outstanding balance due today. Called holding the lock."""
     import scheduling
@@ -290,6 +294,34 @@ def _charge_balances_work():
         results.append({'booking_id': b.id, 'name': b.name, 'ok': ok, 'error': err, 'autopay': True})
     db.session.commit()
 
+    # Catch-up: a job whose day passed without its first attempt, because every
+    # run that day was late, missing or down. The collector only looks at today,
+    # so without this it would never be tried. Strictly never-tried jobs (see
+    # Booking.charge_tried_at): a declined card is not retried here, and
+    # nothing is reached for that is held, cancelled, already paid, or already
+    # waiting on Stripe. Bounded in age and in count.
+    from datetime import date, timedelta
+    floor = (date.fromisoformat(today) - timedelta(days=CATCH_UP_DAYS)).isoformat()
+    late = Booking.query.filter(
+        Booking.preferred_date >= floor,
+        Booking.preferred_date < today,
+        Booking.status.in_(['confirmed', 'pending']),
+        Booking.balance_collected == False,
+        Booking.paid_at.is_(None),
+        Booking.charge_pending.is_(None),
+        Booking.charge_tried_at.is_(None),
+        Booking.stripe_customer_id != None,
+        Booking.stripe_payment_method_id != None,
+    ).order_by(Booking.preferred_date, Booking.id).limit(CATCH_UP_MAX).all()
+    for b in late:
+        if b.id in tried:
+            continue
+        ok, err = do_charge(b)
+        tried.add(b.id)
+        results.append({'booking_id': b.id, 'name': b.name, 'ok': ok,
+                        'error': err, 'catch_up': True})
+    db.session.commit()
+
     # Charges Stripe never answered, on jobs not being charged today. Today's
     # are settled by repeating the request above; these would otherwise wait
     # forever on a webhook that may not be set up. Looked up, never repeated.
@@ -307,6 +339,7 @@ def _charge_balances_work():
     automations.record('charge-balances', items=charged, ok=not failed,
                        detail='; '.join(str(r.get('error')) for r in failed) or None)
     return jsonify({'ok': True, 'charged': charged,
+                    'failed': len(failed),
                     'results': results,
                     'waiting_for_their_appointment': waiting})
 

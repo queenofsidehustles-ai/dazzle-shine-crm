@@ -192,6 +192,8 @@ def _offsession(booking, customer_id, pm_id, cents, loud):
             'at': datetime.utcnow().isoformat(timespec='seconds'),
         }
         booking.charge_pending = json.dumps(pending)
+        if not booking.charge_tried_at:
+            booking.charge_tried_at = datetime.utcnow()
         db.session.commit()
 
     try:

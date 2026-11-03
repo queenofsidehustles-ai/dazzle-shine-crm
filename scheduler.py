@@ -172,7 +172,41 @@ def overdue(now=None, engine=None):
 
 def call(slug, job, base, key):
     """Wake one job for one company. Returns (ok, detail)."""
-    return _post(f'https://{slug}.{base}/api/{job}', key)
+    ok, detail = _post(f'https://{slug}.{base}/api/{job}', key, raw=True)
+    if not ok:
+        return ok, detail
+    return _judge(detail)
+
+
+def _judge(body_text):
+    """Did the job do its work, not merely answer?
+
+    A 200 from the app means the request was processed. The charge job answers
+    200 with a list of results in which a card can have been declined, and
+    reminder jobs say how many sends failed. Read as success, a declined
+    payment sat inside a green workflow. Reduced to counts: the reply names
+    customers, and this lands in a CI log."""
+    try:
+        body = json.loads(body_text)
+    except ValueError:
+        return True, body_text[:160]
+    if not isinstance(body, dict):
+        return True, body_text[:160]
+    if body.get('ok') is False:
+        return False, str(body.get('error') or 'not ok')[:160]
+    results = body.get('results')
+    if isinstance(results, list):
+        bad = [r for r in results if isinstance(r, dict) and r.get('ok') is False]
+        if bad:
+            why = sorted({str(r.get('error') or 'no reason')[:50] for r in bad})[:3]
+            return False, f'{len(bad)} of {len(results)} failed: ' + '; '.join(why)
+        return True, f'{len(results)} ok'
+    failed = body.get('failed')
+    if isinstance(failed, list) and failed:
+        return False, f'{len(failed)} failed'
+    if isinstance(failed, int) and not isinstance(failed, bool) and failed:
+        return False, f'{failed} failed'
+    return True, json.dumps(body)[:160]
 
 
 def product_host(base):
