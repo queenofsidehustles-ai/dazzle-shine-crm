@@ -1,16 +1,11 @@
-"""The seam between the first three steps and connecting payments reads straight.
+"""Payments is offered after setup, not as its last step, and says so.
 
-Since 2026-10-24 payments is the fourth and last required step (details,
-team, prices, payments). With three done, the meter says "3 of 4 done", so
-the chat must not say setup is finished or that the owner can already take
-bookings -- that is what the old wording did, back when payments was an
-optional extra. It also used to call payments "the last thing, and it needs
-you" and, on a reload, prefixed it with a redundant "That step is done."
-
-This holds that at that seam the chat agrees with the meter: it calls
-payments the last step, says why (ready to be paid before the first booking),
-keeps the reassurance about bank details, still lets the owner put it off,
-and does not prepend the generic done line.
+Until 2026-11-03 payments was the fourth and last required step, and the chat
+said "Last step". Sign-ups stopped, and asking for a bank account on the first
+evening was the likeliest reason. With business, team and prices done the meter
+now says 3 of 3 and setup is complete; payments is offered later in the chat,
+without a step number, in words that tie it to the first customer paying, with
+the reassurance about bank details and a way to put it off.
 """
 import os, sys, tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -50,42 +45,42 @@ with app.app_context():
     BusinessSetting.set('team_confirmed', '1')
     db.session.commit()
 
-print('\n1. With three of the four done, the next step is payments, the last required one')
+print('\n1. With three of three done, setup is complete and payments is not required')
 with app.app_context():
     p = onboarding.progress()
-    reqs = [s for s in p['steps'] if s.get('required')]
-    check([s['key'] for s in reqs if not s['done']] == ['payments'],
-          'business, team and prices are done; only payments is left')
-    check((p['done'], p['total']) == (3, 4), f"the meter says {p['done']} of {p['total']}")
+    check((p['done'], p['total']) == (3, 3), f"the meter says {p['done']} of {p['total']}")
+    check(p['complete'] is True, 'setup is complete')
+    check(p['payments'] == '', 'and nothing nags about payments before a first booking')
 with app.app_context(), app.test_request_context():
     from flask import session
     session['role'] = 'owner'
+    for k in ('terms', 'balance', 'booking_page'):
+        setup_assistant.skip(k)
     text, cards, key = setup_assistant.next_message()
-check(key == 'payments', f'payments is next ({key})')
+check(key == 'payments', f'payments is offered once the go-live checks are passed over ({key})')
 
-print('\n2. It says this is the last step, not that setup is already done')
+print('\n2. It ties payments to the first customer paying')
 low = text.lower()
-check(low.startswith('last step'), f'it opens with "Last step" ({text[:40]!r})')
-check('needs you' not in low,
-      'it does not say payments "needs you"')
-check('essentials done' not in low and 'take bookings right now' not in low,
-      'and does not claim setup is finished while the meter says 3 of 4')
-check('before your first customer books' in low,
-      'it says why: be ready to be paid before the first booking')
-check('bank details stay with you' in low,
-      'and keeps the reassurance about bank details')
+check('last step' not in low, 'it is not called the last step')
+check('before your first customer pays' in low, 'it says why')
+check('bank details stay with you' in low, 'it keeps the reassurance about bank details')
 check('skip' in low and any(c.get('kind') == 'skip' for c in cards),
-      'and it can still be put off for tonight, with a Skip button')
+      'and it can be put off, with a Skip button')
+check('first booking comes in' in low, 'and says when the reminder comes')
 
-print('\n3. The redundant "That step is done." prefix is dropped at this seam')
-with app.app_context(), app.test_request_context():
-    from flask import session
-    session['role'] = 'owner'
-    prefixed, _c, _k = setup_assistant.next_message('That step is done.')
-check(not prefixed.startswith('That step is done.'),
-      'the catch-up does not stack a generic done line before "Last step"')
+print('\n3. A first booking starts the reminder')
+with app.app_context():
+    from models import Booking
+    db.session.add(Booking(service_type='deep', name='First Customer', email='f@x.test',
+                           phone='4075550101', address='1 Main', price=100.0, status='confirmed',
+                           preferred_date='2030-01-01', preferred_time='9:00 AM'))
+    db.session.commit()
+    check(onboarding.payments_state() == 'amber', 'amber once a booking exists')
+    BusinessSetting.set('payments_asked_at', '2000-01-01T00:00:00')
+    db.session.commit()
+    check(onboarding.payments_state() == 'red', 'red once it has been put off for three days')
 
 if failures:
     print(f'\n❌ {len(failures)} finish-wording check(s) failed')
     sys.exit(1)
-print('\n✅ Reaching payments, the last step, reads as one straight line.')
+print('\n✅ Payments waits for the first customer, and says so.')

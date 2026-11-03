@@ -231,7 +231,7 @@ def journey():
          'title': 'Check your details',
          'why': 'What customers see on every quote, invoice and reminder.',
          'cta': 'Check them', 'link': '/settings/business'},
-        # Step 2 of 4, as agreed with William on 2026-10-24: the owner sets
+        # Step 2 of 3, as agreed with William on 2026-10-24: the owner sets
         # herself up as a cleaner. Signup already made her row (#158), so the
         # row existing proves nothing -- the step is done when she has looked
         # at it and pressed Save (`team_confirmed`), or when there is a hired
@@ -250,18 +250,6 @@ def journey():
          'title': 'Confirm your prices',
          'why': 'Until you look, Akye is quoting somebody else’s numbers.',
          'cta': 'Confirm prices', 'link': '/settings/pricing'},
-        # Required now, where it used to be tracked-but-optional. The owner's
-        # point, and the right one: being ready to be paid is the purpose of
-        # setting up before the first job, not something to discover after
-        # it. It is still skippable in the chat -- connecting Stripe wants a
-        # bank account and an SSN or EIN, which nobody has to hand on the
-        # first evening -- but it is not finished until it is done.
-        {'key': 'payments', 'required': True, 'urgent': True,
-         'done': integrations.stripe_mode() == 'live',
-         'title': 'Connect payments',
-         'why': 'Be ready before your first customer books. It takes a few '
-                'minutes, and your bank details stay with you.',
-         'cta': 'Connect payments', 'link': '/settings/connections'},
         # ── Before you go live: both already have a safe default ──────────
         #
         # A standard draft of the terms is in force until the owner writes
@@ -291,6 +279,19 @@ def journey():
                 'price and book themselves. It just needs to be somewhere they '
                 'will see it.',
          'cta': 'Show me my page', 'link': '/settings/booking-page'},
+        # Not part of setup. Required from 2026-10-24 until 2026-11-03, when
+        # sign-ups stopped: the last of four steps asked for a bank account and
+        # an SSN or EIN on the first evening, before the owner had seen any of
+        # the product work, and it was skipped or abandoned more than it was
+        # done. Now the ask comes when it means something: the moment a first
+        # booking exists (payments_state), and it is offered in the chat after
+        # the booking page, never before the owner's first win.
+        {'key': 'payments', 'required': False,
+         'done': integrations.stripe_mode() == 'live',
+         'title': 'Connect payments',
+         'why': 'Do this before your first customer pays. It takes a few '
+                'minutes, and your bank details stay with you.',
+         'cta': 'Connect payments', 'link': '/settings/connections'},
         {'key': 'client', 'video': 'team_and_customer', 'required': False,
          'done': has_client,
          'title': 'Add a customer',
@@ -316,21 +317,31 @@ PAYMENTS_RED_AFTER_DAYS = 3
 def payments_state():
     """How loudly to ask about payments: '', 'amber' or 'red'.
 
-    Amber from the start, red once it has been put off for
-    three days. Never blocking either way -- the business can work, it just
-    cannot be paid by card, and that is a fact to keep in front of somebody
-    rather than a door to hold shut.
+    Silent until there is something to be paid for: the first booking. From
+    then amber, and red once it has been put off for three days (the clock
+    starts the first time a booking is seen here). Never blocking -- the
+    business can work, it just cannot be paid by card, and that is a fact to
+    keep in front of somebody rather than a door to hold shut.
     """
     from datetime import datetime, timedelta
     import integrations
-    from models import BusinessSetting
+    from extensions import db
+    from models import BusinessSetting, Booking
     if integrations.stripe_mode() == 'live':
         return ''
-    ready = (BusinessSetting.get('ready_at') or '').strip()
-    if not ready:
+    if Booking.query.count() == 0:
+        return ''
+    asked = (BusinessSetting.get('payments_asked_at') or '').strip()
+    if not asked:
+        try:
+            BusinessSetting.set('payments_asked_at',
+                                datetime.utcnow().isoformat(timespec='seconds'))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
         return 'amber'
     try:
-        since = datetime.fromisoformat(ready)
+        since = datetime.fromisoformat(asked)
     except ValueError:
         return 'amber'
     return 'red' if datetime.utcnow() - since > timedelta(
@@ -376,11 +387,8 @@ def progress():
     """
     steps = journey()
     required = [s for s in steps if s.get('required')]
-    # `ready_at` is when the basics were done -- everything required except
-    # payments -- because it is the clock the payments bar escalates on
-    # (amber, then red three days later). Stamped on payments as well, it
-    # could only ever be stamped once payments no longer needed asking about.
-    if all(s['done'] for s in required if s['key'] != 'payments'):
+    # `ready_at` is when the required steps were done.
+    if all(s['done'] for s in required):
         _mark_ready()
     optional = [s for s in steps if not s.get('required')]
     done = sum(1 for s in required if s['done'])
@@ -405,8 +413,8 @@ def progress():
         # nothing working end to end.
         'activated': by_key.get('client', False) and (
             by_key.get('job', False) or by_key.get('team', False)),
-        # How hard to push about payments: required, but skippable on the
-        # first evening, so it is kept in front of her. '' once connected.
+        # How hard to push about payments: nothing until a first booking
+        # exists, then kept in front of her. '' once connected.
         'payments': payments_state(),
         # Able to trade. The optional steps are offered after this and never
         # hold the card open: a business waiting on its first customer has

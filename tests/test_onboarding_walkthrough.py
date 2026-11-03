@@ -18,8 +18,8 @@ of this was built:
 - tapping what is offered advances the step, every time;
 - setup reaches the end rather than looping.
 
-Since 2026-10-24 the required walk is details, team (the owner confirming
-herself as a cleaner, on the row signup made), prices, payments, and the
+Since 2026-11-03 the required walk is details, team (the owner confirming
+herself as a cleaner, on the row signup made), prices, and the
 go-live checks -- terms, then balances -- follow in the same chat, so the walk
 carries on through those two as well. Payments is the one step the chat
 cannot finish: it is a link to Connections (bank details never go in the
@@ -180,10 +180,10 @@ for label, fixture in (
     p = progress()
     check(p['complete'] is True,
           f'reaches the end: {p["done"]}/{p["total"]} after {seen}')
-    check(seen[:4] == ['business', 'team', 'pricing', 'payments'],
-          f'in the agreed order: details, team, prices, payments ({seen[:4]})')
-    check(seen[4:6] == ['terms', 'balance'],
-          f'then the go-live checks, terms and balances ({seen[4:6]})')
+    check(seen[:3] == ['business', 'team', 'pricing'],
+          f'in the agreed order: details, team, prices ({seen[:3]})')
+    check(seen[3:5] == ['terms', 'balance'],
+          f'then the go-live checks, terms and balances ({seen[3:5]})')
     with app.app_context():
         rows = Staff.query.all()
         check(len(rows) == 1 and rows[0].is_owner and rows[0].is_active

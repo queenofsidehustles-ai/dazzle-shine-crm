@@ -55,7 +55,7 @@ with c.session_transaction() as s:
 print('\n1. No chat, and step 2 is next')
 check(not setup_assistant.configured(), 'the setup chat is not available (no API key)')
 html = c.get('/settings/getting-started').get_data(as_text=True)
-check('1 of 4 done' in html, 'one of four done')
+check('1 of 3 done' in html, 'one of three done')
 check('id="teamStepForm"' in html and 'value="Mo Lewis"' in html and 'I clean jobs myself' in html,
       'the team card is on the list as a form, filled in from her row')
 
@@ -72,7 +72,7 @@ with app.app_context():
     p = onboarding.progress()
     check(p['next']['key'] == 'pricing', f'and the next step is prices ({p["next"]["key"]})')
 html = c.get('/settings/getting-started').get_data(as_text=True)
-check('2 of 4 done' in html and 'id="teamStepForm"' not in html, 'two of four, and the form has gone')
+check('2 of 3 done' in html and 'id="teamStepForm"' not in html, 'two of three, and the form has gone')
 
 print('\n3. Saving again makes no second row')
 c.post('/settings/getting-started/team', data={'me_name': 'Mo Lewis', 'me_cleans': '1'}, headers=H)

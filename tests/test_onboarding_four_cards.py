@@ -14,18 +14,19 @@ So setup is not filling in blanks. It is confirming the handful of defaults
 that are wrong for this particular business, and the software fills in
 everything it can work out by itself.
 
-Since 2026-10-24 the four are details, team, prices and payments. The team
+Since 2026-11-03 the three are details, team and prices; payments was the
+fourth until sign-ups stopped, and now waits for the first booking. The team
 step is the owner setting herself up as a cleaner: signup already made her row
 (owner_cleaner.py), so the row alone does not tick it -- confirming it does.
 Terms and balances keep their one-tap cards, straight after, as go-live checks.
 
 What this holds:
-- Four required steps, and the timezone is not one of them: the ZIP decides.
+- Three required steps, and the timezone is not one of them: the ZIP decides.
 - Every required step arrives with its card already built, with no model call
   -- except payments, which is a link to Connections: bank details are never
   typed into the chat.
-- Payments is required but skippable -- amber, then red on a clock that
-  starts when the other three are done, never blocking the rest.
+- Payments is offered, not required -- silent until a first booking exists,
+  then amber, then red three days later, never blocking anything.
 - A business too new for a Google listing gets the same card, not a failure.
 """
 import os, sys, tempfile
@@ -74,8 +75,8 @@ check(zip_zones.zone_for_zip('78751') == 'America/Chicago',
       'an Austin ZIP is Central, worked out rather than asked')
 with app.app_context():
     keys = [s['key'] for s in onboarding.journey() if s.get('required')]
-check(keys == ['business', 'team', 'pricing', 'payments'],
-      f'four required steps, and timezone is not one of them: {keys}')
+check(keys == ['business', 'team', 'pricing'],
+      f'three required steps, and timezone is not one of them: {keys}')
 with app.app_context():
     check(BusinessSetting.get('timezone') == 'America/Chicago',
           'and it is already set before the owner sees anything')
@@ -166,12 +167,11 @@ with app.app_context(), app.test_request_context():
     check(any('Central' in l for l in lines) if lines else True,
           'including the timezone, as a word rather than a zone name')
 
-print('\n4. Payments is required but skippable, and gets louder')
+print('\n4. Payments is offered, waits for a first booking, then gets louder')
 with app.app_context():
     p = onboarding.progress()
     pay = next(s for s in onboarding.journey() if s['key'] == 'payments')
-check(pay.get('required') is True and pay.get('urgent') is True,
-      'payments is required now, and still flagged urgent')
+check(not pay.get('required'), 'payments is offered, not required')
 with app.app_context(), app.test_request_context():
     from flask import session
     session['role'] = 'owner'
@@ -182,15 +182,25 @@ with app.app_context(), app.test_request_context():
     db.session.commit()
 check(skipped and still['done'] is False,
       'it can be skipped for tonight, and skipping it is "not now", never "done"')
-check(p['payments'] == 'amber', 'it is amber before setup is even finished')
+check(p['payments'] == '', 'it is silent while there is no booking to be paid for')
 with app.app_context():
-    BusinessSetting.set('ready_at',
+    from models import Booking
+    db.session.add(Booking(service_type='deep', name='First Customer', email='f@x.test',
+                           phone='4075550101', address='1 Main', price=100.0,
+                           status='confirmed', preferred_date='2030-01-01',
+                           preferred_time='9:00 AM'))
+    db.session.commit()
+    check(onboarding.payments_state() == 'amber', 'amber once a first booking exists')
+    BusinessSetting.set('payments_asked_at',
                         (datetime.utcnow() - timedelta(days=4)).isoformat(timespec='seconds'))
     db.session.commit()
     check(onboarding.payments_state() == 'red',
           'and red once it has been put off for three days')
+    Booking.query.delete()
+    BusinessSetting.set('payments_asked_at', '')
+    db.session.commit()
 
-print('\n5. Finishing the four is being able to trade')
+print('\n5. Finishing the three is being able to trade')
 with app.app_context(), app.test_request_context():
     from flask import session
     session['role'] = 'owner'
@@ -209,30 +219,26 @@ with app.app_context(), app.test_request_context():
           and not me.pay_rate,
           'on the row signup made: no second row, active, her cell added, still not paid')
     p = onboarding.progress()
-    check(p['done'] == 3 and p['complete'] is False
-          and p['next_required']['key'] == 'payments',
-          f"three of four, and payments is what is left ({p['done']}/{p['total']})")
+    check(p['done'] == 3 and p['complete'] is True and p['next_required'] is None,
+          f"three of three, able to trade without payments ({p['done']}/{p['total']})")
     check((BusinessSetting.get('ready_at') or '').strip() != '',
-          'the payments clock starts once the other three are done')
-    check(p['payments'] in ('amber', 'red'),
-          'with payments being asked for, because it is not done')
+          'and the moment is recorded')
+    check(p['payments'] == '', 'with no payments nag before a first booking')
     ok, _said = setup_assistant.accept_terms({'accepted': '1'})
     check(ok, 'the terms card still accepts them, as a go-live check')
     ok, _said = setup_assistant.set_balance_mode({'mode': 'auto'})
     check(ok and automations.is_enabled('charge-balances'),
           'and the balance card really switches charging on')
-    check(onboarding.progress()['complete'] is False,
-          'terms and balances do not finish setup while payments is outstanding')
     import integrations
     integrations.set('stripe_secret_key', 'sk_live_fourcards')
     db.session.commit()
     p = onboarding.progress()
-check(p['complete'] is True and p['done'] == p['total'] == 4,
-      f"four of four, and able to trade ({p['done']}/{p['total']})")
+check(p['complete'] is True and p['done'] == p['total'] == 3,
+      f"three of three, and able to trade ({p['done']}/{p['total']})")
 check(p['payments'] == '', 'and the payments bar goes quiet once it is connected')
 check(p['next'] is not None, 'and something left to offer, one at a time')
 
 if failures:
     print(f'\n❌ {len(failures)} check(s) failed')
     sys.exit(1)
-print('\n✅ Four cards, one tap each, and the ZIP did the rest.')
+print('\n✅ Three cards, one tap each, and the ZIP did the rest.')

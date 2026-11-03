@@ -136,9 +136,9 @@ with app.app_context():
         BusinessSetting.query.filter_by(key="team_confirmed").delete(); db.session.commit()
 print("OK")
 ''', 'journey')
-check("REQUIRED: ['business', 'team', 'pricing', 'payments']" in out,
-      'four required steps: details, you as a cleaner, prices, payments')
-check("ORDER: ['terms', 'balance', 'booking_page', 'client', 'job']" in out,
+check("REQUIRED: ['business', 'team', 'pricing']" in out,
+      'three required steps: details, you as a cleaner, prices')
+check("ORDER: ['terms', 'balance', 'booking_page', 'payments', 'client', 'job']" in out,
       'then a customer and a job as offers, with no second team step at the end')
 check('TEAM TITLE: Set yourself up as a cleaner' in out, 'the team step is the owner setting herself up')
 check('TEAM DONE: False' in out and 'HIRED: 0' in out,

@@ -72,7 +72,7 @@ with app.app_context():
     p = onboarding.progress()
 check(p['complete'] is False, 'they are not finished after all')
 missing = [s['key'] for s in p['steps'] if s.get('required') and not s['done']]
-check(missing == ['team', 'payments'],
+check(missing == ['team'],
       f'and the required steps they never finished are open: {missing}')
 open_after = [s['key'] for s in p['steps']
               if not s.get('required') and not s['done'] and s['key'] in ('terms', 'balance')]

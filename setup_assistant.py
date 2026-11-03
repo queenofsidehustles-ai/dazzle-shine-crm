@@ -120,10 +120,10 @@ STEP_PROMPTS = {
     'pricing': 'What do you charge for a standard clean of a 2-bed, 2-bath?',
     'terms': 'Your customer terms are ready. Have a look and accept them.',
     'balance': 'When a job’s finished, should the rest come off the card on file?',
-    'payments': ('Last step: connect payments, so you’re ready to be paid before '
-                 'your first customer books. It takes a few minutes and your bank '
-                 'details stay with you. No bank details to hand? Skip it for '
-                 'tonight and it will be first on your list tomorrow.'),
+    'payments': ('Connect payments before your first customer pays. It takes a '
+                 'few minutes and your bank details stay with you. No bank '
+                 'details to hand? Skip it, and we’ll remind you when your '
+                 'first booking comes in.'),
     'booking_page': 'Want to put your booking page where customers can find it?',
     'team': 'Next, you. Check your details and tap Save.',
     'client': 'Add a customer you already clean for?',
@@ -226,11 +226,6 @@ def next_message(done_line=''):
         # The business prompt reads differently with boxes already filled in
         # than with blank ones to complete.
         text = text(any(c.get('prefilled') for c in cards))
-    # The payments step is the last of the four required ones, and its own
-    # wording opens with "Last step", so a generic "That step is done." in
-    # front of it is the same news twice. Drop the prefix here only.
-    if step.get('key') == 'payments':
-        done_line = ''
     # A choice card asks its own question, in the card. Saying it again in a
     # bubble above is the same words twice.
     if any(c.get('kind') == 'choice' for c in cards):
@@ -238,11 +233,11 @@ def next_message(done_line=''):
     link = STEP_LINKS.get(step['key'])
     if link and not cards:
         cards.append(_link_card(*link))
-    # "Step 2 of 4": counted over the REQUIRED steps only, the same four the
+    # "Step 2 of 3": counted over the REQUIRED steps only, the same three the
     # progress meter counts, so the card and the meter never disagree. The
     # go-live checks and extras that come after (terms, balance, booking
     # page...) get no
-    # number -- they are not step five of four, they are what's left to do once
+    # number -- they are not step four of three, they are what's left to do once
     # setup is already finished.
     try:
         import onboarding
