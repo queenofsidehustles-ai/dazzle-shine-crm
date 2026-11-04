@@ -431,6 +431,33 @@ feedback = Table(
 )
 
 
+# Answers to the "what got in the way" survey (survey.py), one row per company.
+#
+# In the control plane for the same reason feedback is: the point is to read it
+# across every company in one place. A company that answers twice updates its
+# row rather than adding a second one, so a counted answer is a counted company.
+# `segment` and the three context columns are what was true when they answered,
+# not what is true when somebody reads it, because "never set up" is a different
+# bottleneck from "set up, then stopped" and a later activation must not move a
+# stale answer from one pile to the other.
+survey_responses = Table(
+    'survey_responses', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('org_slug', String(80), index=True, unique=True),
+    Column('segment', String(1)),              # 'A' never set up, 'B' went quiet
+    Column('blockers', String(200)),           # comma-separated keys, at most two
+    Column('stuck_at', String(40)),
+    Column('other_text', Text),                # the "what is missing / which tool" follow-up
+    Column('wish', Text),                      # what would make you use it next week
+    Column('wants_call', Boolean),
+    Column('org_age_days', Integer),
+    Column('days_away', Integer),
+    Column('activated', Boolean),
+    Column('created_at', DateTime, default=datetime.utcnow),
+    Column('updated_at', DateTime, default=datetime.utcnow),
+)
+
+
 # Who can see across every company: you, and whoever you bring in.
 #
 # Its own accounts, separate from any company's owner login, because this is a
@@ -757,7 +784,7 @@ def ensure_table(engine):
                         product_messages, product_switches,
                         affiliates, affiliate_logins, affiliate_clicks,
                         affiliate_commissions, affiliate_payouts,
-                        platform_runs, howto_misses])
+                        platform_runs, howto_misses, survey_responses])
     ensure_columns(engine)
 
 

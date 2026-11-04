@@ -130,7 +130,7 @@ lapsed = dict(running(22), created_at=NOW - timedelta(days=38),
 check(tn.due(lapsed) == 'winback', 'a week on — here is what you would get back')
 check(tn.due(dict(lapsed, nudges_sent=lapsed['nudges_sent'] + ',winback')) is None,
       'and only once')
-check(tn.due(dict(lapsed, activated_at=None)) is None,
+check(tn.due(dict(lapsed, activated_at=None, nudges_sent=lapsed['nudges_sent'] + ',survey')) is None,
       'never to a trial that lapsed without being started')
 check(tn.due(dict(lapsed, created_at=NOW - timedelta(days=200),
                   trial_ends_at=NOW - timedelta(days=90))) is None,
@@ -149,7 +149,7 @@ away = lambda d: NOW - timedelta(days=d)          # noqa: E731
 quiet = running(10, nudges_sent='activated,day2,feature', owner_active_at=away(8))
 check(tn.due(quiet) == 'quiet', 'on a trial, set up, away 8 days: did the week get away?')
 check(tn.due(dict(quiet, owner_active_at=away(3))) is None, 'not after a few days away')
-check(tn.due(dict(quiet, owner_active_at=away(20))) is None,
+check(tn.due(dict(quiet, owner_active_at=away(20), nudges_sent=quiet['nudges_sent'] + ',survey')) is None,
       'not once they are long gone: the window ends')
 check(tn.due(dict(quiet, owner_active_at=None)) is None,
       'never on a guess: no recorded activity is not "away"')
@@ -171,7 +171,7 @@ free = dict(running(30), created_at=NOW - timedelta(days=60),
             nudges_sent='activated,day2,ending,ended,winback', owner_active_at=away(20))
 check(tn.due(free) == 'free_quiet', 'free plan, set up, away 20 days: need a hand?')
 check(tn.due(dict(free, owner_active_at=away(10))) is None, 'not after 10 days away')
-check(tn.due(dict(free, owner_active_at=away(45))) is None, 'not after a month and a half')
+check(tn.due(dict(free, owner_active_at=away(45), nudges_sent=free['nudges_sent'] + ',survey')) is None, 'not after a month and a half')
 check(tn.due(dict(free, owner_active_at=None)) is None, 'and not without recorded activity')
 check(tn.due(dict(free, nudges_sent=free['nudges_sent'] + ',free_quiet')) is None, 'only once')
 
@@ -181,7 +181,7 @@ check(tn.due(never) == 'free_start', 'free plan, never set up, 16 days on: still
 check(tn.due(dict(never, created_at=NOW - timedelta(days=120),
                   trial_ends_at=NOW - timedelta(days=90))) is None,
       'never to a trial that ended months ago')
-check(tn.due(dict(never, trial_ends_at=NOW - timedelta(days=5))) is None, 'nor in its first week')
+check(tn.due(dict(never, trial_ends_at=NOW - timedelta(days=5), nudges_sent='survey')) is None, 'nor in its first week')
 check(tn.due(dict(never, nudges_sent=never['nudges_sent'] + ',free_start')) is None, 'only once')
 for label, o in (('test account', dict(free, is_test=True)), ('demo', dict(free, is_demo=True)),
                  ('opted out', dict(free, nudges_opted_out=True)),

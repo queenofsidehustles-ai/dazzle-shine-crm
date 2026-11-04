@@ -259,6 +259,8 @@ def create_app():
     app.register_blueprint(confirm_bp)
     from blueprints.confirm_email import email_confirm_bp
     app.register_blueprint(email_confirm_bp)
+    from blueprints.survey import survey_bp
+    app.register_blueprint(survey_bp)
     app.register_blueprint(money_bp)
     app.register_blueprint(team_bp)
     app.register_blueprint(availability_bp)

@@ -95,6 +95,7 @@ from datetime import datetime
 import billing
 import control_plane
 import product
+import survey
 
 
 # When each nudge is due, as a window of days since signup rather than an
@@ -141,9 +142,23 @@ FREE_START = (14, 21)
 # the next is still "the next day".
 ONE_A_DAY_HOURS = 20
 
+# The "what got in the way" survey (survey.py). Windows chosen to sit in the
+# gaps between the other notes, so it never competes with one for a day:
+#   A, never set up, on the trial: days 14 to 20 (start_7 ends at 13,
+#      start_21 begins at 21)
+#   A, never set up, trial over: 4 to 13 days after it lapsed (`ended` covers
+#      0 to 3, `free_start` begins at 14)
+#   B, went quiet, on the trial: away 14 to 30 days (`quiet` covers 7 to 13)
+#   B, went quiet, free plan: away 31 to 60 (`free_quiet` covers 14 to 30)
+SURVEY_A = (14, 20)
+SURVEY_A_LAPSED = (4, 13)
+SURVEY_B = (14, 30)
+SURVEY_B_FREE = (31, 60)
+
 ALL = ('start_7', 'start_21', 'ending', 'ended',
        'day1', 'day2', 'day4', 'day5', 'activated', 'feature',
-       'first_booking', 'winback', 'quiet', 'free_quiet', 'free_start')
+       'first_booking', 'winback', 'quiet', 'free_quiet', 'free_start',
+       'survey')
 # Sent when something happens, not on a timetable.
 EVENTS = ('activated', 'first_booking')
 
@@ -235,6 +250,15 @@ def due(org, now=None, next_step=None, skip=()):
         # with an end, so the first run does not write to every old account.
         if not org.get('activated_at') and open_(FREE_START, 'free_start', lapsed):
             return 'free_start'
+        # Last, so every note above keeps its day. The windows do not overlap,
+        # but a switched-off note passes over into this one through `skip`.
+        if 'survey' not in already:
+            seg = survey.segment(org, now)
+            if seg == 'A' and SURVEY_A_LAPSED[0] <= lapsed <= SURVEY_A_LAPSED[1]:
+                return 'survey'
+            if seg == 'B' and away is not None \
+                    and SURVEY_B_FREE[0] <= away <= SURVEY_B_FREE[1]:
+                return 'survey'
         return None
 
     # Every trial is running now, so there is one sequence rather than two.
@@ -251,6 +275,10 @@ def due(org, now=None, next_step=None, skip=()):
         # Got it working, then stopped coming back.
         if away is not None and open_(QUIET, 'quiet', away):
             return 'quiet'
+        # Still away two weeks on: ask what stopped it being useful.
+        if away is not None and survey.segment(org, now) == 'B' \
+                and open_(SURVEY_B, 'survey', away):
+            return 'survey'
         # Everything in the first-week run is some version of "add a cleaner
         # and a customer", which is no letter to send to somebody who has.
         # day2 is about the booking page, which is still worth telling them.
@@ -267,6 +295,10 @@ def due(org, now=None, next_step=None, skip=()):
         return 'start_21'
     if START_7[0] <= age <= START_7[1] and 'start_7' not in already:
         return 'start_7'
+    # Between start_7 and start_21: a fortnight in, nothing set up, and the
+    # reminders have not worked. Time to ask instead of telling.
+    if survey.segment(org, now) == 'A' and open_(SURVEY_A, 'survey'):
+        return 'survey'
     # The first week, earliest first: a run that missed yesterday sends
     # yesterday's note today and today's tomorrow, rather than skipping one.
     for window, kind in ((DAY1, 'day1'), (DAY2, 'day2'),
@@ -571,6 +603,37 @@ def compose(org, kind, next_step=None):
             <p>If something put you off, reply and tell us. This is the last
             note about getting started.</p>''',
             'Add a customer', f'{url}/bookings/clients/new'))
+
+    if kind == 'survey':
+        seg = survey.segment(org) or ('B' if org.get('activated_at') else 'A')
+        slug = org.get('slug') or ''
+        # One-tap answers. Plain links, not buttons: the one button below is
+        # the whole form, and a column of buttons reads as a sales page.
+        taps = ''.join(
+            f'<li style="margin:0 0 8px"><a href="{survey.link(url, slug, seg, key)}" '
+            f'style="color:#16213a">{survey.BLOCKER_LABELS[key]}</a></li>'
+            for key in survey.EMAIL_OPTIONS[seg])
+        if seg == 'A':
+            subject = f'{name}: what got in the way?'
+            heading = 'What got in the way?'
+            lead = f'''<p>You signed up for {brand} a couple of weeks ago and it
+            has not got going yet. That is normal when you are running a
+            cleaning business, and it is not a mistake on your part.</p>
+            <p>We would like to know what stopped it, so we can fix that part.
+            Tap whichever is closest. It takes about a minute.</p>'''
+        else:
+            subject = f'{name}: did it stop being useful?'
+            heading = 'Did it stop being useful?'
+            lead = f'''<p>You had {brand} working for your business, and then we
+            stopped seeing you. That tells us something, and we would rather
+            hear it from you than guess.</p>
+            <p>What changed? Tap whichever is closest. It takes about a
+            minute.</p>'''
+        return (subject, wrap(
+            heading,
+            lead + f'''<ul style="padding-left:18px;margin:14px 0">{taps}</ul>
+            <p>Or reply to this email in your own words. A person reads it.</p>''',
+            'Answer in a minute', survey.link(url, slug, seg)))
 
     raise ValueError(f'unknown nudge: {kind}')
 

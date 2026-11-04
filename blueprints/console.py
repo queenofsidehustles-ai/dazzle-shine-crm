@@ -240,6 +240,31 @@ def inbox():
         counts=_counts(engine))
 
 
+@console_bp.route('/survey')
+@console_required
+def survey_view():
+    """What got in the way, for owners who signed up and went quiet.
+
+    Counted per group (never set up / went quiet), most common first, with the
+    owners' own words below and the ones who said we may call.
+    """
+    import survey
+    engine = _engine()
+    rows = survey.responses(engine)
+    owners = {o['slug']: o for o in control_plane.all_orgs(engine)}
+    for r in rows:
+        o = owners.get(r['org_slug']) or {}
+        r['company'] = o.get('name') or r['org_slug']
+        r['email'] = o.get('owner_email')
+        r['phone'] = o.get('owner_phone')
+        r['blocker_labels'] = [survey.BLOCKER_LABELS.get(k, k)
+                               for k in (r.get('blockers') or '').split(',') if k]
+        r['stuck_label'] = survey.STUCK_LABELS.get(r.get('stuck_at') or '')
+    return render_template('console/survey.html', tally=survey.tally(rows),
+                           rows=rows, me=request.console_user,
+                           counts=_counts(engine))
+
+
 @console_bp.route('/feedback/<int:feedback_id>/done', methods=['POST'])
 @console_required
 def mark_done(feedback_id):
