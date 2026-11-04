@@ -161,8 +161,10 @@ with app.app_context():
     os.environ['ENVOY_SINGLE_BUSINESS'] = '1'
     check(envoy.released(), 'ENVOY_SINGLE_BUSINESS=1 releases it on purpose')
     os.environ['BASE_DOMAIN'] = 'akye.test'
-    check(envoy.cohort() == {'dazzleandshine'}, 'the default cohort is the Dazzle & Shine tenant only')
-    check(envoy.released('dazzleandshine') and not envoy.released('brightnest'),
+    check(envoy.cohort() == {'dazzleandshine', 'cleaningwonder'},
+          'the default cohort is the two founders\' companies, Dazzle & Shine and Cleaning Wonder')
+    check(envoy.released('dazzleandshine') and envoy.released('cleaningwonder')
+          and not envoy.released('brightnest'),
           'on hosted Akye, only a company in the cohort is released')
     check(not envoy.released(''), 'no company named means not released')
     os.environ['ENVOY_TENANTS'] = 'dazzleandshine, brightnest'

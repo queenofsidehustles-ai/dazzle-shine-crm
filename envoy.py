@@ -28,7 +28,7 @@ back, and an answer that breaks one is thrown away for the plain template.
 Three locks, all of which must be open:
 
   release     the company is in Envoy's cohort (ENVOY_TENANTS, default the
-              Dazzle & Shine tenant only). A new cohort is a new release
+              two founders' own companies, DEFAULT_COHORT). A new cohort is a new release
               decision, like every expansion in AKYE_COHORT_RELEASE_CONTROL.md.
   plan        the plan includes Find Leads (entitlements 'lead_finder'),
               because every morning spends one of its lead searches.
@@ -62,7 +62,11 @@ from legacy_brands import LEGACY_TENANT_SLUG
 FEATURE = 'lead_finder'          # the plan feature Envoy rides on
 # Released first to the original business, named in legacy_brands.py -- the
 # one module allowed to name it -- rather than here.
-DEFAULT_COHORT = (LEGACY_TENANT_SLUG,)
+#
+# Then the co-founder's own company, Cleaning Wonder (cleaningwonder.akyehq.com,
+# confirmed by Monica, Nov 2026). Both are the founders' own businesses: the
+# first customers Envoy is tried on are the people who built it.
+DEFAULT_COHORT = (LEGACY_TENANT_SLUG, 'cleaningwonder')
 RUN_AFTER_HOUR = 6               # local time; before this a run does nothing
 DEFAULT_DAILY_LIMIT = 10
 MAX_DAILY_LIMIT = 25
