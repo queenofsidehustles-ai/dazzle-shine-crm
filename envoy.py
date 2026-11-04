@@ -8,11 +8,14 @@ those three things once a morning and puts the result on one page.
 
 ## What it never does
 
-It never sends anything to a prospect. Every word it writes is a draft with a
-copy button. A send still goes through the call sheet (prospecting.send_outreach,
-which enforces the company's own sending domain) or the owner's own mail.
-Cold outreach that goes out without a person reading it first is how a
-cleaning company's domain ends up on a block list.
+It never sends anything by itself. Every word it writes is a draft, with a
+Copy button and a Send button. Send is one email, to one business, because the
+owner read it and pressed it -- through prospecting.send_outreach (the company's
+own sending domain, as on the call sheet), with the postal address and a
+one-click unsubscribe added, and never to anybody unsubscribed or marked
+do-not-contact (see send() at the bottom). Cold outreach that goes out without
+a person reading it first is how a cleaning company's domain ends up on a
+block list.
 
 It never invents. Contact names, email addresses and facts about a business
 come from the Google listing or the business's own website, or they are not
@@ -25,7 +28,7 @@ back, and an answer that breaks one is thrown away for the plain template.
 Three locks, all of which must be open:
 
   release     the company is in Envoy's cohort (ENVOY_TENANTS, default the
-              Dazzle & Shine tenant only). A new cohort is a new release
+              two founders' own companies, DEFAULT_COHORT). A new cohort is a new release
               decision, like every expansion in AKYE_COHORT_RELEASE_CONTROL.md.
   plan        the plan includes Find Leads (entitlements 'lead_finder'),
               because every morning spends one of its lead searches.
@@ -59,7 +62,11 @@ from legacy_brands import LEGACY_TENANT_SLUG
 FEATURE = 'lead_finder'          # the plan feature Envoy rides on
 # Released first to the original business, named in legacy_brands.py -- the
 # one module allowed to name it -- rather than here.
-DEFAULT_COHORT = (LEGACY_TENANT_SLUG,)
+#
+# Then the co-founder's own company, Cleaning Wonder (cleaningwonder.akyehq.com,
+# confirmed by Monica, Nov 2026). Both are the founders' own businesses: the
+# first customers Envoy is tried on are the people who built it.
+DEFAULT_COHORT = (LEGACY_TENANT_SLUG, 'cleaningwonder')
 RUN_AFTER_HOUR = 6               # local time; before this a run does nothing
 DEFAULT_DAILY_LIMIT = 10
 MAX_DAILY_LIMIT = 25
@@ -1018,12 +1025,13 @@ def followups(day=None, limit=30):
         first = touched.get(p.id)
         if first is None and p.last_emailed_at:
             first = p.last_emailed_at.date()
-        which, text = None, None
+        which, text, kind = None, None, None
         if d is not None and first is not None:
             days = (day - first).days
-            which, text = ('day 7', d.followup_day7) if days >= 7 else ('day 3', d.followup_day3)
+            which, text, kind = (('day 7', d.followup_day7, 'day7') if days >= 7
+                                 else ('day 3', d.followup_day3, 'day3'))
         rows.append({'prospect': p, 'overdue': (p.next_action_date or iso) < iso,
-                     'followup_label': which, 'followup': text})
+                     'followup_label': which, 'followup': text, 'kind': kind, 'draft': d})
     return rows
 
 
@@ -1170,3 +1178,115 @@ def send_morning_email(day, cfg):
         return False
     ok, _detail = send_email(to, cfg['company'] or branding.biz_name(), subject, html)
     return bool(ok)
+
+
+# ── Sending, because the owner pressed Send ─────────────────────────────────
+#
+# Envoy itself still sends nothing. This is one email, to one business, that a
+# person read, edited if she wanted, and chose to send. It goes through
+# prospecting.send_outreach -- the one way a prospect is emailed, which the
+# call sheet uses too -- so the own-sending-domain rule, the reply address that
+# files the answer on this lead, and the follow-up date all apply unchanged.
+# What Envoy adds is the rest of what cold email owes the person reading it
+# (the rules lead_outreach.py holds for Akye's own outreach): the company's
+# postal address and a one-click unsubscribe on every message, nobody who
+# unsubscribed is ever emailed again, nobody marked do-not-contact is emailed,
+# and nobody twice in two days.
+
+SENDABLE = {
+    # kind: (label, the draft field holding the body)
+    'intro': ('Intro email', 'email_body'),
+    'day3': ('Day 3 follow-up', 'followup_day3'),
+    'day7': ('Day 7 follow-up', 'followup_day7'),
+}
+RESEND_GAP = timedelta(hours=48)
+
+
+def mailing_address():
+    """The company's postal address on one line, or '' if it is not filled in.
+    US law (CAN-SPAM) puts one on every commercial email."""
+    street = setting('address').strip()
+    city, state = setting('city').strip(), setting('state').strip()
+    zip_code = setting('zip_code').strip()
+    if not (street and city and state):
+        return ''
+    return f'{street}, {city}, {state} {zip_code}'.strip()
+
+
+def unsubscribe_link(email):
+    import branding
+    from notifications import unsubscribe_token
+    return f"{(branding.crm_base() or '').rstrip('/')}/api/unsubscribe/{unsubscribe_token(email)}"
+
+
+def send_footer(to, cfg=None):
+    cfg = cfg or settings()
+    return (f'\n\n--\n{cfg["company"]} · {mailing_address()}\n'
+            f'Not interested? Unsubscribe here and we will not email you again: '
+            f'{unsubscribe_link(to)}')
+
+
+def default_to(prospect, draft=None):
+    """The address the Send box starts with: one somebody saved on the lead,
+    else the first one the business's own website shows."""
+    if (prospect.email or '').strip():
+        return prospect.email.strip()
+    found = site_emails(draft) if draft is not None else []
+    return found[0] if found else ''
+
+
+def subject_for(kind, draft):
+    base = (draft.email_subject or '').strip() if draft is not None else ''
+    if kind == 'intro' or not base:
+        return base
+    return base if base.lower().startswith('re:') else f'Re: {base}'
+
+
+def send_block(prospect, kind, to, subject, body, now=None):
+    """Why this email cannot be sent, or None."""
+    from notifications import is_opted_out
+    if kind not in SENDABLE:
+        return 'That draft is not an email.'
+    if not switched_on():
+        return 'Envoy is paused for every company from the Akye console.'
+    to = (to or '').strip()
+    if not EMAIL_RE.fullmatch(to):
+        return 'Put in the email address to send it to.'
+    if (prospect.stage or 'new') in ('lost', 'won') or prospect.status == 'do_not_contact':
+        return f'{prospect.business_name} is marked not to be contacted.'
+    if is_opted_out(to):
+        return f'{to} has unsubscribed. It will not be emailed again.'
+    if not (subject or '').strip() or not (body or '').strip():
+        return 'The email needs a subject and a message.'
+    if PRICE_RE.search(f'{subject}\n{body}'):
+        return ('Take the price out first. Envoy emails never quote one; they offer '
+                'a free walkthrough and a written quote.')
+    if not mailing_address():
+        return ('Add your business mailing address in Settings first. The law '
+                'requires it on business emails, and Envoy adds it for you.')
+    last = prospect.last_emailed_at
+    if last and last > (now or datetime.utcnow()) - RESEND_GAP:
+        return f'{prospect.business_name} was emailed in the last two days. Give it a little time.'
+    return None
+
+
+def send(prospect, kind, to, subject, body, sent_by=None, user_id=None):
+    """Send one draft, as the owner edited it, to one address. (ok, sentence).
+
+    A send writes a ProspectActivity 'email' row, which is what the call
+    list's history and Envoy's scoreboard ('contacted') count."""
+    import prospecting
+    from extensions import db
+    from models import ProspectActivity
+    to = (to or '').strip()
+    why = send_block(prospect, kind, to, subject, body)
+    if why:
+        return False, why
+    full = (body or '').strip() + send_footer(to)
+    ok, said = prospecting.send_outreach(prospect, subject.strip(), full, to=to)
+    if ok:
+        db.session.add(ProspectActivity(
+            prospect_id=prospect.id, business_name=(prospect.business_name or '')[:200],
+            user_id=user_id, user_name=(sent_by or 'Owner')[:120], kind='email'))
+        db.session.commit()
+    return ok, said
