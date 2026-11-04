@@ -29,6 +29,38 @@
 </div>
 {%- endmacro %}
 
+{# One email, edited if she likes, sent because she pressed Send. The legal
+   footer (address and unsubscribe) is added on the way out, not typed here. #}
+{% macro sendbox(p, d, kind, label, body, rows=8) -%}
+{% set key = 's' ~ p.id ~ kind %}
+<form class="env-draft" method="post" action="{{ url_for('envoy.send_draft', prospect_id=p.id) }}"
+      onsubmit="return confirm('Send this email to ' + this.to.value + '?')">
+  <input type="hidden" name="kind" value="{{ kind }}">
+  <div class="env-draft-head">
+    <span>{{ label }}</span>
+    <button type="button" class="btn btn-outline btn-sm env-copy" data-copy="{{ key }}">Copy</button>
+  </div>
+  <div class="env-grid" style="margin:4px 0 6px">
+    <input type="email" name="to" value="{{ default_to(p, d) }}" placeholder="their email address"
+           aria-label="Send to" required>
+    <input type="text" name="subject" value="{{ subject_for(kind, d) }}" aria-label="Subject" required>
+  </div>
+  <textarea id="{{ key }}" name="body" rows="{{ rows }}" aria-label="{{ label }}">{{ body }}</textarea>
+  <div class="env-row" style="justify-content:space-between;margin-top:6px">
+    <span class="env-meta"><small>Your address and an unsubscribe link are added when it sends.</small></span>
+    <button type="submit" class="btn btn-gold btn-sm">Send</button>
+  </div>
+</form>
+{%- endmacro %}
+
+{% if made and not mailing_address %}
+<div class="card" style="border-left:4px solid var(--amber);background:var(--amber-soft);margin-bottom:18px">
+  <strong>Add your business mailing address before sending.</strong>
+  <div class="env-meta" style="margin-top:6px">The law puts it on every business email, and Envoy adds it
+    for you. <a href="{{ url_for('settings.business') }}">Add it in Settings</a>.</div>
+</div>
+{% endif %}
+
 {% if not st.ready %}
 <div class="card" style="border-left:4px solid var(--amber);background:var(--amber-soft);margin-bottom:18px">
   <strong>{{ st.reason }}</strong>
@@ -94,12 +126,11 @@
   </div>
   {{ copybox('First line', d.first_line, 'd' ~ p.id ~ 'first') }}
   {{ copybox('Call script (30 seconds)', d.call_script, 'd' ~ p.id ~ 'call', 4) }}
-  {{ copybox('Email subject', d.email_subject, 'd' ~ p.id ~ 'subj', 1) }}
-  {{ copybox('Intro email', d.email_body, 'd' ~ p.id ~ 'email', 10) }}
+  {{ sendbox(p, d, 'intro', 'Intro email', d.email_body, 10) }}
   <details class="env-more" style="margin-top:10px">
     <summary>Follow-ups for day 3 and day 7</summary>
-    {{ copybox('Day 3 follow-up', d.followup_day3, 'd' ~ p.id ~ 'f3') }}
-    {{ copybox('Day 7 follow-up', d.followup_day7, 'd' ~ p.id ~ 'f7') }}
+    {{ sendbox(p, d, 'day3', 'Day 3 follow-up', d.followup_day3, 5) }}
+    {{ sendbox(p, d, 'day7', 'Day 7 follow-up', d.followup_day7, 5) }}
   </details>
   {% else %}
   <p class="env-meta" style="margin:10px 0 0">Drafts not written yet.</p>
@@ -129,7 +160,7 @@
       <a href="{{ url_for('places_finder.call_sheet', prospect_id=p.id) }}" class="btn btn-outline btn-sm">Open</a>
     </div>
     {% if f.followup %}
-    {{ copybox(f.followup_label | capitalize ~ ' follow-up', f.followup, 'f' ~ p.id) }}
+    {{ sendbox(p, f.draft, f.kind, f.followup_label | capitalize ~ ' follow-up', f.followup, 5) }}
     {% endif %}
   </div>
   {% endfor %}
@@ -220,7 +251,8 @@
       </label>
     </div>
     <p class="env-meta">Drafts never quote a price. They offer a free walkthrough and a written quote,
-      and only use what the business's listing and website say.</p>
+      and only use what the business's listing and website say. Nothing is emailed
+      unless you press Send.</p>
     <button type="submit" class="btn btn-gold">Save</button>
   </form>
 </div>
