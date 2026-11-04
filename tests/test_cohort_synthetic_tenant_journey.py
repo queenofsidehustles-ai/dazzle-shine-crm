@@ -116,7 +116,7 @@ with app.app_context():
         'slug': SLUG_A,
         'name': 'Robin Owner',
         'email': OWNER_EMAIL,
-        'password': OWNER_PASSWORD,
+        'password': OWNER_PASSWORD, 'confirm': OWNER_PASSWORD,
         'terms_accepted': '1', 'zip_code': '32801', 'phone': '4075550123',
     }, follow_redirects=False)
     check(r.status_code == 302, 'signup redirects on success')

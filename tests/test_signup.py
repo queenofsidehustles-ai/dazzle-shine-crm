@@ -101,7 +101,7 @@ c = app.test_client()
 r = c.post("/signup", data={
     "business": "Sparkle Cleaning Services", "slug": "sparkle",
     "name": "Dana Reed", "email": "dana@sparkle.test",
-    "password": "a-perfectly-fine-password", "terms_accepted": "1",
+    "password": "a-perfectly-fine-password", "confirm": "a-perfectly-fine-password", "terms_accepted": "1",
     "zip_code": "32801", "phone": "(407) 555-0123",
 }, headers={"Host": "rollcall.test"})
 print("REDIRECT:", r.status_code, r.headers.get("Location"))
@@ -185,7 +185,7 @@ app = create_app()
 c = app.test_client()
 r = c.post("/signup", data={
     "business": "Someone Else Entirely", "slug": "sparkle",
-    "name": "Imposter", "email": "nope@x.test", "password": "another-password",
+    "name": "Imposter", "email": "nope@x.test", "password": "another-password", "confirm": "another-password",
     "zip_code": "32801", "phone": "4075550123",
 }, headers={"Host": "rollcall.test"})
 print("STATUS:", r.status_code)
@@ -220,7 +220,8 @@ cases = [
       'password': 'a-good-password', 'zip_code': '00042'}, b'US ZIP code'),
 ]
 for data, expect in cases:
-    data = dict({'phone': '4075550123'}, **data)      # every case is a good number but the one under test
+    # every case is a good number, and a password typed twice, but the one under test
+    data = dict({'phone': '4075550123', 'confirm': data.get('password', '')}, **data)
     out = run(STUB + f'''
 from app import create_app
 app = create_app()
@@ -231,9 +232,31 @@ print("OK")
 ''', f'validation {data.get("slug")}')
     check('MATCH: True' in out, f'{expect.decode()!r} — refused with a useful message')
 
+print('\n6a. The password is typed twice, and the two must match')
+for slug, extra, expect in (
+        ('pw-differs', {'confirm': 'a-good-passworD'}, b'do not match'),
+        ('pw-missing', {'confirm': ''}, b'do not match'),
+        ('pw-absent', {'confirm': None}, b'do not match'),
+        ('pw-qwerty', {'password': 'qwertyui', 'confirm': 'qwertyui'}, b'too easy')):
+    data = {'business': 'B', 'slug': slug, 'name': 'A', 'email': 'a@b.test', 'password': 'a-good-password',
+            'confirm': 'a-good-password', 'terms_accepted': '1', 'zip_code': '32801', 'phone': '4075550123'}
+    data.update(extra)
+    data = {k: v for k, v in data.items() if v is not None}
+    out = run(STUB + f'''
+from app import create_app
+import control_plane, provisioning
+app = create_app()
+r = app.test_client().post("/signup", data={data!r}, headers={{"Host": "rollcall.test"}})
+print("MATCH:", {expect!r} in r.data, "STATUS:", r.status_code)
+print("NOTHING MADE:", control_plane.find(provisioning._engine(), {slug!r}) is None)
+print("PASSWORD NOT SENT BACK:", b"a-good-passworD" not in r.data and b"a-good-password" not in r.data)
+print("OK")
+''', f'confirm {slug}')
+    check('MATCH: True STATUS: 200' in out and 'NOTHING MADE: True' in out and 'PASSWORD NOT SENT BACK: True' in out,
+          f'{slug}: refused with a reason, nothing created, and no password is sent back to the page')
 print('\n6b. A phone number is required, so somebody can ring to welcome them')
 good = {'business': 'B', 'name': 'A', 'email': 'a@b.test', 'password': 'a-good-password',
-        'terms_accepted': '1', 'zip_code': '32801'}
+        'confirm': 'a-good-password', 'terms_accepted': '1', 'zip_code': '32801'}
 for slug, phone in (('phone-none', None), ('phone-blank', '   '), ('phone-short', '555-0123'),
                     ('phone-words', 'call me'), ('phone-area-code-0', '0075550123'),
                     ('phone-exchange-1', '4071550123'), ('phone-long', '14075550123999')):
