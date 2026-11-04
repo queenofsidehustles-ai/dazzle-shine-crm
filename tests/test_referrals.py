@@ -83,14 +83,27 @@ CALLS = []
 FAIL = {'on': False}
 
 
+STRIPE = []                 # what Stripe really holds, whatever we heard back
+LOSE_ANSWER = {'on': False}  # Stripe does the work, the answer never gets here
+
+
 def fake_balance(customer, cents, description, key, metadata):
     if FAIL['on']:
         raise RuntimeError('Stripe is down')
     CALLS.append({'customer': customer, 'cents': cents, 'key': key})
-    return {'id': f'cbtxn_{len(CALLS)}'}
+    STRIPE.append({'id': f'cbtxn_{len(STRIPE) + 1}', 'customer': customer,
+                   'amount': cents, 'metadata': metadata})
+    if LOSE_ANSWER['on']:
+        raise TimeoutError('no answer from Stripe')
+    return {'id': f'cbtxn_{len(STRIPE)}'}
+
+
+def fake_recent(customer):
+    return [t for t in STRIPE if t['customer'] == customer]
 
 
 referrals._balance_transaction = fake_balance
+referrals._recent_balance_transactions = fake_recent
 
 with app.app_context():
     engine = provisioning._engine()
@@ -268,6 +281,79 @@ n = len(CALLS)
 with app.app_context():
     referrals.reverse(engine, f'in_{TAG}_joe')
 check(len(CALLS) == n, 'reversing twice takes back once')
+
+print('\n7b. A refund that arrives before its payment still undoes it')
+early = company(f'early{TAG}', referred_by=dana)
+CALLS.clear()
+with app.app_context():
+    billing.apply_event({'type': 'charge.refunded', 'data': {'object': {
+        'invoice': f'in_{TAG}_early', 'customer': f'cus_{early}', 'refunded': True,
+        'metadata': {'slug': early}}}})
+    paid(early, f'in_{TAG}_early')
+check(all(x['status'] == 'reversed' for x in rows(referred=early)) and CALLS == [],
+      'the refunded invoice earns and credits nothing, whichever order they arrive')
+
+print('\n7c. A clawback Stripe cannot make yet is not forgotten')
+late = company(f'late{TAG}', referred_by=dana)
+with app.app_context():
+    paid(late, f'in_{TAG}_late')
+FAIL['on'] = True
+refund = {'type': 'charge.refunded', 'data': {'object': {
+    'invoice': f'in_{TAG}_late', 'customer': f'cus_{late}', 'refunded': True,
+    'metadata': {'slug': late}}}}
+raised = False
+with app.app_context():
+    try:
+        billing.apply_event(refund)
+    except referrals.ReversalIncomplete:
+        raised = True
+check(raised, 'the refund event fails, so Stripe sends it again')
+check(all(x['status'] == 'applied' for x in rows(referred=late)), 'the credits are still recorded as given')
+FAIL['on'] = False
+n = len(STRIPE)
+with app.app_context():
+    billing.apply_event(refund)
+check(all(x['status'] == 'reversed' for x in rows(referred=late)) and len(STRIPE) == n + 2,
+      'the redelivery takes both back, once each')
+
+print('\n7d. A credit and a refund meeting in the middle')
+mid = company(f'mid{TAG}', referred_by=dana)
+FAIL['on'] = True
+with app.app_context():
+    paid(mid, f'in_{TAG}_mid')
+FAIL['on'] = False
+with engine.begin() as conn:
+    conn.execute(text("update public.referral_rewards set status = 'applying', attempted_at = :t "
+                      "where referred_slug = :s"), {'t': datetime.utcnow(), 's': mid})
+raised = False
+with app.app_context():
+    try:
+        referrals.reverse(engine, f'in_{TAG}_mid')
+    except referrals.ReversalIncomplete:
+        raised = True
+check(raised and all(x['status'] == 'applying' for x in rows(referred=mid)),
+      'a credit being made right now is not recorded as reversed from under it')
+with engine.begin() as conn:
+    conn.execute(text("update public.referral_rewards set status = 'reversed' where referred_slug = :s"),
+                 {'s': mid})
+    conn.execute(text("delete from public.referral_refunds"))
+
+print('\n7e. A credit whose answer was lost is looked up, not sent twice')
+lost = company(f'lost{TAG}', referred_by=dana)
+LOSE_ANSWER['on'] = True
+n = len(STRIPE)
+with app.app_context():
+    paid(lost, f'in_{TAG}_lost')
+LOSE_ANSWER['on'] = False
+check(len(STRIPE) == n + 2 and all(x['status'] == 'pending' for x in rows(referred=lost)),
+      'Stripe made both credits but we never heard: both are still pending here')
+n = len(STRIPE)
+with app.app_context():
+    referrals.apply_pending(engine, lost)
+    referrals.apply_pending(engine, dana)
+check(len(STRIPE) == n, f'the retry finds them at Stripe and sends nothing more ({len(STRIPE) - n} new)')
+check(all(x['status'] == 'applied' and x['stripe_balance_txn'] for x in rows(referred=lost)),
+      'and records them as given')
 
 print('\n8. The switch')
 os.environ['REFERRAL_REWARDS_OPEN'] = '0'

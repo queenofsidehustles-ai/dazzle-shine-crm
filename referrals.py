@@ -49,18 +49,21 @@ Nothing here changes a plan, a status or what a company can do. A failed Stripe
 call leaves the reward `pending` with the error written down; it is retried on
 that company's next paid invoice.
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import func, insert, select, update
 
 import control_plane
-from control_plane import organizations, referral_rewards
+from control_plane import organizations, referral_refunds, referral_rewards
 
 MONTHS_CAP = 12
 MAX_CREDIT_CENTS = 50000          # no single credit is ever more than $500
 SWITCH = 'referral_rewards'
 
-LIVE = ('pending', 'applied')
+LIVE = ('pending', 'applying', 'applied')
+
+# A claimed credit whose answer never came back is looked at again after this.
+CLAIM_STALE = timedelta(minutes=10)
 
 
 # ---------------------------------------------------------------------------
@@ -141,8 +144,16 @@ def earn(engine, slug, invoice, now=None):
         conn.execute(select(organizations.c.slug).where(
             organizations.c.slug == referrer_slug).with_for_update())
 
+        refunded = conn.execute(select(referral_refunds.c.stripe_invoice_id).where(
+            referral_refunds.c.stripe_invoice_id == invoice_id)).first()
         why = _same_person(org, referrer)
-        if why:
+        if refunded:
+            # Refunded before this payment event reached us (they can arrive in
+            # either order): earn nothing, and do not let a later invoice take
+            # the place of the one that was refunded.
+            plan = [('referred', 0, 'reversed', 'refunded before it was recorded'),
+                    ('referrer', 0, 'reversed', 'refunded before it was recorded')]
+        elif why:
             plan = [('referred', 0, 'blocked', why), ('referrer', 0, 'blocked', why)]
         else:
             used = conn.execute(select(func.count()).select_from(referral_rewards).where(
@@ -183,16 +194,47 @@ def _balance_transaction(customer_id, cents, description, key, metadata):
         metadata=metadata, idempotency_key=key)
 
 
+def _recent_balance_transactions(customer_id):
+    """The customer's latest balance entries, as dicts. Replaced in tests."""
+    import stripe
+    import billing
+    stripe.api_key = billing.stripe_key()
+    page = stripe.Customer.list_balance_transactions(customer_id, limit=100)
+    return [dict(t) for t in page.get('data', [])]
+
+
+def _already_at_stripe(customer_id, reward_id, credit):
+    """The balance entry this reward already made at Stripe, or None.
+
+    Stripe forgets an idempotency key after a day, so an attempt whose answer
+    never came back and is retried later could otherwise be made twice. The
+    reward's id travels in the entry's metadata; look for it before resending."""
+    for t in _recent_balance_transactions(customer_id):
+        meta = t.get('metadata') or {}
+        if meta.get('referral_reward_id') != str(reward_id):
+            continue
+        amount = t.get('amount') or 0
+        if (amount < 0) == credit:
+            return t
+    return None
+
+
 def _beneficiary(row):
     return row['referred_slug'] if row['side'] == 'referred' else row['referrer_slug']
+
+
+def _txn_id(txn):
+    return txn.get('id') if hasattr(txn, 'get') else getattr(txn, 'id', None)
 
 
 def apply_pending(engine, slug, now=None):
     """Credit whatever is waiting for this company. Never raises.
 
-    A Stripe failure leaves the reward pending, with the error written down,
-    and the next paid invoice from this company tries again. The idempotency key
-    is the reward's own id, so a retry after a timeout cannot credit twice."""
+    Each reward is claimed first (pending -> applying, in one statement), so
+    two workers, or a credit and a refund, cannot both act on it. A Stripe
+    failure puts it back to pending with the error written down; the next paid
+    invoice from this company tries again. A reward that has been attempted
+    before is looked up at Stripe before it is sent again."""
     now = now or datetime.utcnow()
     done = []
     try:
@@ -204,34 +246,48 @@ def apply_pending(engine, slug, now=None):
             return done
         with engine.connect() as conn:
             rows = [dict(r) for r in conn.execute(
-                select(referral_rewards).where(referral_rewards.c.status == 'pending',
-                                               referral_rewards.c.amount_cents > 0))
+                select(referral_rewards).where(
+                    referral_rewards.c.status.in_(('pending', 'applying')),
+                    referral_rewards.c.amount_cents > 0))
                     .mappings() if _beneficiary(r) == slug]
     except Exception:
         return done
     for row in rows:
         try:
-            who = row['referrer_slug'] if row['side'] == 'referred' else row['referred_slug']
-            note = ('Referral: a month on us for joining through a friend'
-                    if row['side'] == 'referred'
-                    else 'Referral: a month on us, thanks for telling a friend')
-            txn = _balance_transaction(
-                customer, -row['amount_cents'], note, f'referral-reward-{row["id"]}',
-                {'referral_reward_id': str(row['id']), 'side': row['side'],
-                 'other_company': who})
-            txn_id = txn.get('id') if hasattr(txn, 'get') else getattr(txn, 'id', None)
+            with engine.begin() as conn:
+                claimed = conn.execute(update(referral_rewards).where(
+                    referral_rewards.c.id == row['id'],
+                    (referral_rewards.c.status == 'pending') |
+                    ((referral_rewards.c.status == 'applying') &
+                     (referral_rewards.c.attempted_at < now - CLAIM_STALE)))
+                    .values(status='applying', attempted_at=now)).rowcount
+            if not claimed:
+                continue                     # somebody else has it
+            txn = _already_at_stripe(customer, row['id'], True) \
+                if row['attempted_at'] else None
+            if txn is None:
+                who = row['referrer_slug'] if row['side'] == 'referred' else row['referred_slug']
+                note = ('Referral: a month on us for joining through a friend'
+                        if row['side'] == 'referred'
+                        else 'Referral: a month on us, thanks for telling a friend')
+                txn = _balance_transaction(
+                    customer, -row['amount_cents'], note, f'referral-reward-{row["id"]}',
+                    {'referral_reward_id': str(row['id']), 'side': row['side'],
+                     'other_company': who})
             with engine.begin() as conn:
                 conn.execute(update(referral_rewards).where(
                     referral_rewards.c.id == row['id'],
-                    referral_rewards.c.status == 'pending').values(
+                    referral_rewards.c.status == 'applying').values(
                         status='applied', applied_at=now, last_error=None,
-                        stripe_balance_txn=txn_id))
+                        stripe_balance_txn=_txn_id(txn)))
             done.append(row['id'])
         except Exception as e:                          # noqa: BLE001
             try:
                 with engine.begin() as conn:
                     conn.execute(update(referral_rewards).where(
-                        referral_rewards.c.id == row['id']).values(
+                        referral_rewards.c.id == row['id'],
+                        referral_rewards.c.status == 'applying').values(
+                            status='pending',
                             last_error=f'{type(e).__name__}: {e}'[:300]))
             except Exception:
                 pass
@@ -242,35 +298,59 @@ def apply_pending(engine, slug, now=None):
 # Taking it back
 # ---------------------------------------------------------------------------
 
+class ReversalIncomplete(RuntimeError):
+    """A refund could not be fully carried out yet. Raised to the Stripe
+    webhook so it answers 500 and Stripe sends the refund again."""
+
+
 def reverse(engine, invoice_id, reason='refunded', now=None):
     """Undo the rewards a fully refunded first invoice earned. Returns the ids.
 
-    Not yet credited: cancelled. Already credited: a matching charge to the
-    customer's balance, so a refund does not leave a free month behind."""
+    Not yet credited: cancelled in one statement, so a credit being made at
+    that moment cannot be left recorded as reversed. Already credited: a
+    matching charge to the customer's balance. The refund is also written
+    down, so if the payment it undoes has not been recorded yet, it never earns.
+
+    Raises ReversalIncomplete when a credit is mid-flight or a clawback failed:
+    nothing is lost, the rows stay as they were, and the refund event is
+    redelivered."""
     now = now or datetime.utcnow()
-    out = []
+    out, problems = [], []
+    with engine.begin() as conn:
+        if not conn.execute(select(referral_refunds.c.stripe_invoice_id).where(
+                referral_refunds.c.stripe_invoice_id == invoice_id)).first():
+            conn.execute(insert(referral_refunds).values(
+                stripe_invoice_id=invoice_id, created_at=now))
     with engine.connect() as conn:
         rows = [dict(r) for r in conn.execute(select(referral_rewards).where(
             referral_rewards.c.stripe_invoice_id == invoice_id,
             referral_rewards.c.status.in_(LIVE))).mappings()]
     for row in rows:
+        if row['status'] == 'applying':
+            problems.append(f'reward {row["id"]} is being credited right now')
+            continue
         try:
             if row['status'] == 'applied' and row['amount_cents'] > 0:
                 org = control_plane.find(engine, _beneficiary(row))
                 customer = org and org.get('stripe_customer_id')
-                if customer:
+                if customer and not _already_at_stripe(customer, row['id'], False):
                     _balance_transaction(
                         customer, row['amount_cents'],
                         f'Referral credit taken back ({reason})',
                         f'referral-clawback-{row["id"]}',
                         {'referral_reward_id': str(row['id'])})
             with engine.begin() as conn:
-                conn.execute(update(referral_rewards).where(
-                    referral_rewards.c.id == row['id']).values(
+                changed = conn.execute(update(referral_rewards).where(
+                    referral_rewards.c.id == row['id'],
+                    referral_rewards.c.status == row['status']).values(
                         status='reversed', reversed_at=now,
-                        reason=(f'{reason}')[:200]))
-            out.append(row['id'])
+                        reason=(f'{reason}')[:200])).rowcount
+            if changed:
+                out.append(row['id'])
+            else:
+                problems.append(f'reward {row["id"]} changed while being reversed')
         except Exception as e:                          # noqa: BLE001
+            problems.append(f'reward {row["id"]}: {type(e).__name__}: {e}')
             try:
                 with engine.begin() as conn:
                     conn.execute(update(referral_rewards).where(
@@ -278,6 +358,8 @@ def reverse(engine, invoice_id, reason='refunded', now=None):
                             last_error=f'reversal: {type(e).__name__}: {e}'[:300]))
             except Exception:
                 pass
+    if problems:
+        raise ReversalIncomplete('; '.join(problems)[:400])
     return out
 
 
