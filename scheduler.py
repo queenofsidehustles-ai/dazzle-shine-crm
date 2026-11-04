@@ -33,6 +33,7 @@ failure is recorded and reported at the end, not raised in the middle.
     python3 scheduler.py --cadence hourly       # every job due hourly
     python3 scheduler.py --cadence daily        # every job due daily
     python3 scheduler.py --cadence daily --only kojo    # one company, for testing
+    python3 scheduler.py --check                # run nothing; exit 1 if a timetable stopped reporting
 
 Needs three things in the environment:
 
@@ -91,15 +92,31 @@ def product_jobs_for(cadence=None):
     return [key for key, cad in PRODUCT_JOBS if cadence is None or cad == cadence]
 
 
-def companies():
-    """Every company that should have its automations run, from the registry.
+def runnable(org, only=None):
+    """Whether this company's automations run: the one answer, used wherever a
+    list of companies is made.
 
-    Read from the control plane rather than a list kept anywhere else: a company
-    that exists is a company whose customers are expecting reminders, and the
-    registry is the only thing that knows.
-    """
-    import control_plane
+    Only an active company. A demo company never: nothing it sends could go
+    anywhere (demo_guard.py), and running it would still move its seeded data
+    away from the state the demo is meant to show. A test company (one marked
+    in the console as made to try the product out) not in the ordinary run
+    either: it is left out of every count and every trial email already, and
+    its customers are not customers, so it must not be texted or charged on a
+    timetable. It runs only when it is asked for by name (--only), which is how
+    somebody tests with it on purpose."""
+    if (org.get('status') or 'active') not in RUNNABLE:
+        return False
+    if org.get('is_demo'):
+        return False
+    if org.get('is_test') and org.get('slug') != only:
+        return False
+    return True
+
+
+def _control_engine():
+    """The control plane's engine, from the same URL the console uses."""
     from sqlalchemy import create_engine
+    import control_plane
     url = os.environ.get('AKYE_DATABASE_URL') or os.environ.get('DATABASE_URL') or ''
     if not url:
         sys.exit('AKYE_DATABASE_URL is not set — nothing to read the companies from.')
@@ -109,11 +126,48 @@ def companies():
         url = url.replace('postgresql://', 'postgresql+psycopg2://', 1)
     engine = create_engine(url)
     control_plane.ensure_table(engine)
-    # A demo company's automations never run: nothing it sends could go
-    # anywhere (demo_guard.py), and running them would still move its seeded
-    # data away from the state the demo is meant to show.
-    return [o for o in control_plane.all_orgs(engine)
-            if (o.get('status') or 'active') in RUNNABLE and not o.get('is_demo')]
+    return engine
+
+
+def companies(only=None):
+    """Every company that should have its automations run, from the registry.
+
+    Read from the control plane rather than a list kept anywhere else: a company
+    that exists is a company whose customers are expecting reminders, and the
+    registry is the only thing that knows.
+    """
+    import control_plane
+    return [o for o in control_plane.all_orgs(_control_engine()) if runnable(o, only)]
+
+
+def overdue(now=None, engine=None):
+    """Scheduled runs that have stopped reporting, as lines of text; empty when
+    every timetable has reported inside its window (platform_health's, the
+    same ones the console's Health page uses).
+
+    A GitHub schedule is best-effort: it can fire late or not at all, and the
+    only trace of a run that never started is the absence of one. Something has
+    to notice an absence, and it cannot be the run that did not happen.
+
+    Judged by the age of the newest report, whether it succeeded or not. A run
+    that reported a failure just now is not this: that run's own job fails, and
+    the console shows it. But a timetable whose last report was a failure and
+    then nothing, for longer than its window, has stopped all the same, and
+    Health calls it 'failed' rather than 'stale', so reading only 'stale' would
+    let that outage pass for ever. 'Never reported' is not this either: a
+    deployment that has not run yet is not late."""
+    import platform_health
+    engine = engine or _control_engine()
+    late = []
+    for r in platform_health.scheduler(engine, now):
+        window, age = r['stale_hours'], r['age_hours']
+        if r['state'] == 'stale':
+            late.append(f'{r["label"]}: last good run {r["last_ok_ago"]} (expected within '
+                        f'{window} hours)')
+        elif r['state'] == 'failed' and window and age is not None and age > window:
+            late.append(f'{r["label"]}: its last report was a failure {platform_health.ago(age)}, '
+                        f'and nothing has reported since (expected within {window} hours)')
+    return late
 
 
 def call(slug, job, base, key):
@@ -196,9 +250,8 @@ def run(jobs, only=None, quiet=False, product_jobs=()):
     # Filtered here as well as in companies(). A suspended company's customers
     # must not be texted, and that guarantee should not depend on which piece of
     # code assembled the list -- including a future caller that builds it some
-    # other way.
-    orgs = [o for o in companies()
-            if (o.get('status') or 'active') in RUNNABLE and not o.get('is_demo')]
+    # other way. The same rule both times (runnable).
+    orgs = [o for o in (companies(only) if only else companies()) if runnable(o, only)]
     if only:
         orgs = [o for o in orgs if o['slug'] == only]
         if not orgs:
@@ -252,9 +305,20 @@ def main():
     g.add_argument('--cadence', choices=['hourly', 'daily'],
                    help='every job that runs on this timetable')
     g.add_argument('--all', action='store_true', help='every job, whatever its cadence')
+    g.add_argument('--check', action='store_true',
+                   help='run nothing; exit 1 if a timetable has stopped reporting')
     p.add_argument('--only', help='a single company slug, for testing')
     p.add_argument('--quiet', action='store_true')
     args = p.parse_args()
+
+    if args.check:
+        late = overdue()
+        for line in late:
+            print(f'❌ {line}')
+        print('✅ Every timetable has reported on time.' if not late else
+              '\nThe scheduled run did not start, or did not finish reporting. '
+              'Look at the Actions tab and the console\'s Health page.')
+        return 1 if late else 0
 
     if args.job:
         product = [args.job] if args.job in product_jobs_for() else []

@@ -9,7 +9,7 @@ import scheduler
 def test_scheduler_calls_each_active_tenant_on_its_own_host(monkeypatch):
     monkeypatch.setenv('BASE_DOMAIN', 'akyehq.com')
     monkeypatch.setenv('REMINDER_API_KEY', 'test-key')
-    monkeypatch.setattr(scheduler, 'companies', lambda: [
+    monkeypatch.setattr(scheduler, 'companies', lambda only=None: [
         {'slug': 'alpha', 'status': 'active'},
         {'slug': 'bravo', 'status': 'active'},
         {'slug': 'suspended', 'status': 'suspended'},
@@ -36,7 +36,7 @@ def test_scheduler_calls_each_active_tenant_on_its_own_host(monkeypatch):
 def test_one_tenant_failure_does_not_stop_other_tenants(monkeypatch):
     monkeypatch.setenv('BASE_DOMAIN', 'akyehq.com')
     monkeypatch.setenv('REMINDER_API_KEY', 'test-key')
-    monkeypatch.setattr(scheduler, 'companies', lambda: [
+    monkeypatch.setattr(scheduler, 'companies', lambda only=None: [
         {'slug': 'alpha', 'status': 'active'},
         {'slug': 'bravo', 'status': 'active'},
         {'slug': 'charlie', 'status': 'active'},
@@ -62,7 +62,7 @@ def test_one_tenant_failure_does_not_stop_other_tenants(monkeypatch):
 def test_only_never_falls_back_to_another_tenant(monkeypatch):
     monkeypatch.setenv('BASE_DOMAIN', 'akyehq.com')
     monkeypatch.setenv('REMINDER_API_KEY', 'test-key')
-    monkeypatch.setattr(scheduler, 'companies', lambda: [
+    monkeypatch.setattr(scheduler, 'companies', lambda only=None: [
         {'slug': 'alpha', 'status': 'active'},
         {'slug': 'bravo', 'status': 'active'},
     ])

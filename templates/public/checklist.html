@@ -302,6 +302,7 @@
     {% endif %}
   </div>
 
+  <script src="{{ url_for('static', filename='photo-resize.js') }}"></script>
   <script>
     const TOKEN = '{{ checklist.token }}';
     const TOTAL = {{ checklist.get_items()|length }};
@@ -466,25 +467,48 @@
       if (list.length > 0) { tag.textContent = list.length + ' added'; tag.classList.add('done-tag'); }
       else { tag.textContent = 'Optional'; tag.classList.remove('done-tag'); }
     }
+    // A phone photo is several megabytes and the signal in a client's house is
+    // not always good, so: make it small first (photo-resize.js), give the
+    // upload a limit shorter than the server's, and try once more if nothing
+    // came back or the server said to. Before this, one stall ran the server's
+    // whole minute and ended in an error page.
     async function uploadPhoto(input, phase) {
       if (!input.files || !input.files[0]) return;
-      const file = input.files[0];
+      let file = input.files[0];
       $('uploading').style.display = 'block';
       $('photo-err').style.display = 'none';
       try {
-        const fd = new FormData();
-        fd.append('photo', file);
-        fd.append('phase', phase);
-        const res = await fetch('/workorders/checklist/' + TOKEN + '/add-photo', {
-          method: 'POST', body: fd,
-        });
-        const data = await res.json();
-        if (!res.ok || !data.ok || !data.url) throw new Error(data.error || 'Upload failed');
+        try { file = await AkyePhoto.shrink(file); } catch (e) {}
+        // One name for this photo, sent with every attempt: if the first got as
+        // far as being saved and its answer was lost, the second is told so
+        // instead of saving it twice.
+        const uploadId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+          : (Date.now().toString(16) + Math.random().toString(16).slice(2));
+        const send = async () => {
+          const fd = new FormData();
+          fd.append('photo', file);
+          fd.append('phase', phase);
+          fd.append('upload_id', uploadId);
+          const stop = new AbortController();
+          const timer = setTimeout(() => stop.abort(), 40000);
+          try {
+            return await fetch('/workorders/checklist/' + TOKEN + '/add-photo', {
+              method: 'POST', body: fd, signal: stop.signal,
+            });
+          } catch (e) {
+            return null;                // no signal, or it took too long
+          } finally { clearTimeout(timer); }
+        };
+        let res = await send();
+        if (!res || [502, 503, 504].includes(res.status)) res = await send();
+        if (!res) throw new Error('The photo did not get through. Check your signal and try again.');
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok || !data.url) throw new Error(data.error || 'The photo could not be saved. Please try again.');
         if (phase === 'before') beforePhotos.push(data.url); else afterPhotos.push(data.url);
         render();
       } catch (e) {
         const err = $('photo-err');
-        err.textContent = 'Could not upload that photo. Please try again. (' + e.message + ')';
+        err.textContent = e.message;
         err.style.display = 'block';
       } finally { $('uploading').style.display = 'none'; input.value = ''; }
     }

@@ -187,6 +187,36 @@ try:
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM public.error_log"))
 
+    print('\n2c. A watchdog can tell that a timetable stopped')
+    import scheduler
+    with app.app_context():
+        run_at('scheduler:hourly', 5)             # the only hourly run so far: five hours old
+        late = scheduler.overdue(NOW, engine)
+    check(any('hourly' in l and 'within 3 hours' in l for l in late),
+          f'an hourly run last good five hours ago is named, with the window ({late})')
+    check(any('daily' in l for l in late), 'and so is the daily one from section 2, forty hours old')
+    with app.app_context():
+        run_at('scheduler:hourly', 0.5)
+        run_at('scheduler:daily', 1)
+        check(scheduler.overdue(NOW, engine) == [], 'once both have reported lately nothing is overdue')
+
+    # A timetable whose newest report is an old failure: Health calls that 'failed', not
+    # 'stale', so watching only for 'stale' would let it pass for ever.
+    real_rows = platform_health.scheduler
+    row = lambda state, age: {'label': 'Scheduler, hourly', 'state': state, 'age_hours': age,
+                              'stale_hours': 3, 'last_ok_ago': '9 days ago'}
+    platform_health.scheduler = lambda e, n=None: [row('failed', 168)]
+    old_fail = scheduler.overdue(NOW, engine)
+    platform_health.scheduler = lambda e, n=None: [row('failed', 0.4)]
+    new_fail = scheduler.overdue(NOW, engine)
+    platform_health.scheduler = lambda e, n=None: [row('never', None)]
+    never = scheduler.overdue(NOW, engine)
+    platform_health.scheduler = real_rows
+    check(len(old_fail) == 1 and 'failure' in old_fail[0] and 'nothing has reported since' in old_fail[0],
+          'a last report that was a failure a week ago, and silence since, is overdue')
+    check(new_fail == [], 'a failure reported a few minutes ago is not: that run\'s own job failed and says so')
+    check(never == [], 'and never reported is still not late')
+
     print('\n3. Reporting in: the endpoint')
     c = app.test_client()
     body = {'kind': 'backup:akye', 'ok': True, 'items': 123, 'detail': 'nightly'}

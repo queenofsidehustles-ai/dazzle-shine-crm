@@ -1,0 +1,37 @@
+# Says so when the automations stop running.
+#
+# A GitHub schedule is best-effort: a run can start late or not at all, and the
+# only trace of one that never started is the missing one. Nothing inside the
+# run can report its own absence, so this is a second, independent schedule
+# that looks at when the automations last reported to the console and fails if
+# an hourly run is more than three hours old, or the daily one more than thirty
+# (the same windows as the console's Health page). A failed scheduled workflow
+# is emailed by GitHub to whoever last edited its schedule.
+#
+# It reads, it never acts: it checks out main, not the release, because it
+# touches no customer.
+#
+# Secret: AKYE_DATABASE_URL, the same one the automations use.
+name: Automations watchdog
+
+on:
+  schedule:
+    - cron: '47 */3 * * *'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Have the automations reported lately?
+        env:
+          AKYE_DATABASE_URL: ${{ secrets.AKYE_DATABASE_URL }}
+        run: python3 scheduler.py --check

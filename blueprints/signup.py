@@ -347,7 +347,8 @@ def signup():
         control_plane.record_signup_attempt(_engine(), security.client_ip())
         # They finished, so they are not a half-finished signup any more. By the
         # address or the number they gave (a row holding a STOP is kept).
-        control_plane.clear_abandoned_signup(_engine(), form.get('email'), form.get('phone'))
+        control_plane.clear_abandoned_signup(_engine(), form.get('email'), form.get('phone'),
+                                             form.get('name'))
         _tell_us(slug, form, base)
         # Tell Meta an ad produced an account. Sent here, before the
         # attribution cookie is forgotten below, and from `came_from` --

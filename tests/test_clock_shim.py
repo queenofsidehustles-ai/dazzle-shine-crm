@@ -59,6 +59,10 @@ print('\n4. The workflow uses it')
 wf = open(os.path.join(ROOT, '.github', 'workflows', 'clock-check.yml')).read()
 check('tests/clock_shim' in wf and 'FAKE_NOW' in wf and "2028-02-29T12:00:00" in wf and "2027-01-01T00:30:00" in wf,
       'the weekly check sets FAKE_NOW and puts the shim on PYTHONPATH, with a leap day and a night after midnight UTC')
+check("'2026-11-01T05:30:00'" in wf and "'2026-11-01T06:30:00'" in wf,
+      'both occurrences of 1:30 AM New York on the night the clocks go back')
+check("'2027-03-14T06:30:00'" in wf and "'2027-03-14T07:30:00'" in wf,
+      'and the two instants either side of the hour that never happens in spring')
 
 print()
 if failures:

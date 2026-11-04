@@ -17,6 +17,8 @@ import hashlib
 import hmac
 import io
 import json
+import logging
+import time
 from typing import Any
 
 import requests
@@ -139,9 +141,32 @@ def _assert_job_photo_mutable(kind: str, scope_id: int | str | None) -> None:
         raise Conflict(description="Submitted checklist photo evidence is immutable")
 
 
+# How long this server waits for Cloudinary to take an image. Well inside the web
+# worker's own limit (gunicorn.conf.py, 60 seconds): Cloudinary's client waits a
+# minute by default, which is exactly as long as the worker is allowed, so a
+# stalled upload used to be the worker being killed -- an HTTP 500 and every other
+# request on that worker dropped with it -- rather than an answer the phone could
+# act on.
+UPLOAD_TIMEOUT_SECONDS = 25
+# Slower than this is written to the log, so a slow day has a cause on record.
+SLOW_UPLOAD_SECONDS = 8
+
+log = logging.getLogger(__name__)
+
+
+class UploadUnavailable(RuntimeError):
+    """Cloudinary did not take the image in time, or at all. Nothing wrong with
+    the image: the person should try again. A RuntimeError, so a caller that does
+    not know about it treats it as the failure it is."""
+
+
 def upload_image(file_storage, *, tenant_slug: str, kind: str,
-                 scope_id: int | str | None = None) -> str:
-    """Upload one image as a Cloudinary authenticated asset and return its ref."""
+                 scope_id: int | str | None = None,
+                 upload_id: str | None = None) -> str:
+    """Upload one image as a Cloudinary authenticated asset and return its ref.
+
+    `upload_id` is the caller's name for this one upload, kept inside the signed
+    reference so a repeat of it can be recognised later (see workorders.add_photo)."""
     if not tenant_slug or not kind:
         raise ValueError("tenant_slug and kind are required")
     if file_storage is None or not getattr(file_storage, "filename", ""):
@@ -161,15 +186,27 @@ def upload_image(file_storage, *, tenant_slug: str, kind: str,
     _configure()
     import cloudinary.uploader
     folder = f"akye-private/{tenant_slug}/{kind}"
-    result = cloudinary.uploader.upload(
-        io.BytesIO(raw),
-        resource_type="image",
-        type="authenticated",
-        folder=folder,
-        use_filename=False,
-        unique_filename=True,
-        overwrite=False,
-    )
+    started = time.monotonic()
+    try:
+        result = cloudinary.uploader.upload(
+            io.BytesIO(raw),
+            resource_type="image",
+            type="authenticated",
+            folder=folder,
+            use_filename=False,
+            unique_filename=True,
+            overwrite=False,
+            timeout=UPLOAD_TIMEOUT_SECONDS,
+        )
+    except Exception as exc:  # noqa: BLE001 -- timeouts, resets, Cloudinary's own errors
+        took = time.monotonic() - started
+        log.warning("image upload to Cloudinary failed after %.1fs (%d bytes, %s): %s",
+                    took, len(raw), kind, type(exc).__name__)
+        raise UploadUnavailable(
+            "The photo could not be saved just now. Please try again.") from exc
+    took = time.monotonic() - started
+    if took > SLOW_UPLOAD_SECONDS:
+        log.warning("slow Cloudinary upload: %.1fs for %d bytes (%s)", took, len(raw), kind)
     payload = {
         "v": 1,
         "tenant": tenant_slug,
@@ -180,6 +217,8 @@ def upload_image(file_storage, *, tenant_slug: str, kind: str,
         "format": result["format"],
         "resource_type": result.get("resource_type", "image"),
     }
+    if upload_id:
+        payload["uid"] = str(upload_id)
     return _encode(payload)
 
 

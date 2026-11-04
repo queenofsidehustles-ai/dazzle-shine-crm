@@ -86,6 +86,33 @@ check([c[0] for c in CALLED] == ['acme'],
       'only the active one is called')
 
 
+print('\n3b. A test company is not texted or charged on a timetable')
+# Marked in the console as made to try the product out. Its customers are not
+# customers; it is already left out of every count and every trial email.
+ORGS = [{'slug': 'acme', 'status': 'active'},
+        {'slug': 'trial', 'status': 'active', 'is_test': True},
+        {'slug': 'demo', 'status': 'active', 'is_demo': True}]
+scheduler.companies = lambda only=None: [o for o in ORGS if scheduler.runnable(o, only)]
+CALLED.clear()
+scheduler.run(['reminders'], quiet=True)
+check([c[0] for c in CALLED] == ['acme'], 'the ordinary run skips a test company, and a demo one')
+CALLED.clear()
+scheduler.run(['reminders'], only='trial', quiet=True)
+check([c[0] for c in CALLED] == ['trial'], 'but asked for by name it runs, which is how somebody tests with it on purpose')
+check(not scheduler.runnable({'slug': 'demo', 'is_demo': True}, only='demo'),
+      'a demo company does not, even by name')
+check(not scheduler.runnable({'slug': 'x', 'status': 'suspended'}, only='x'),
+      'nor a suspended one')
+check(scheduler.runnable({'slug': 'x'}), 'a company with no status yet is active, as it always was')
+check(scheduler.run.__code__.co_names.count('runnable') >= 1 and 'is_demo' not in scheduler.run.__code__.co_names,
+      'run() and companies() use the one rule, not two copies of it')
+scheduler.companies = lambda: [
+    {'slug': 'first', 'status': 'active'},
+    {'slug': 'broken', 'status': 'active'},
+    {'slug': 'last', 'status': 'active'},
+]
+
+
 print('\n4. One company failing does not stop the rest')
 # The whole reason for per-company calls. A bad Stripe key at one business must
 # not mean nine others get no reminders that night.
@@ -173,6 +200,30 @@ check('cron:' in y and "'5 * * * *'" in y, 'hourly for balances')
 check("'0 22 * * *'" in y, 'and daily for the rest, the evening before')
 check('concurrency:' in y, 'one at a time, so balances cannot be charged twice')
 check('python-version: \'3.12\'' in y, 'on the version production runs')
+
+print('\n9. A failed run fails the job, in the workflow as well as in Python')
+import subprocess
+scheduler.run = lambda *a, **k: [('acme', 'reminders', 'HTTP 500')]
+sys.argv = ['scheduler.py', '--cadence', 'daily', '--only', 'acme']
+check(scheduler.main() == 1, 'the scheduler exits 1 when any company\'s job failed')
+fail = "python3 -c 'import sys; sys.exit(1)' | tee /dev/null"
+check(subprocess.run(['bash', '-ec', fail]).returncode == 0,
+      'but through "| tee" under bash -e the step still succeeds (the masking the workflow had)')
+check(subprocess.run(['bash', '-ec', 'set -o pipefail; ' + fail]).returncode == 1,
+      'and with pipefail it fails')
+check('set -eo pipefail' in y and 'shell: bash' in y, 'so the workflow sets pipefail')
+
+print('\n10. The timetable is hard to lose')
+check("'5 * * * *'" in y and "'35 * * * *'" in y,
+      'balances are charged on two hourly triggers (a second chance if GitHub drops one)')
+check('exit 1' in y.split('Work out which timetable')[1].split('Run them')[0],
+      'a trigger the workflow does not know stops the run instead of becoming "daily"')
+group = [l for l in y.splitlines() if l.strip().startswith('group:')][0]
+check('github.event.schedule' in group and 'daily' in group,
+      'the hourly and daily runs do not share a concurrency group: a waiting daily run was replaced by the next hourly one')
+wd = open(os.path.join(os.path.dirname(wf), 'automations-watchdog.yml')).read()
+check('--check' in wd and "'47 */3 * * *'" in wd and 'AKYE_DATABASE_URL' in wd,
+      'and a separate schedule fails loudly when the automations stop reporting')
 
 print()
 if failures:

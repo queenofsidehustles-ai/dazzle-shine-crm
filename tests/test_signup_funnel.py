@@ -329,15 +329,24 @@ check(early['source'] == 'early_access' and early['do_not_text_at'] is None
       'somebody already on the list as an early-access request is not changed by it: still textable by the rules they came in under')
 
 print('\n10c. Finishing clears the half-finished row by address or by number, and never a refusal')
-control_plane.add_lead(engine, source='abandoned_signup', email='pat@old.test', phone='+14075550177')
+# Two people sharing a number (a household, an office), each half-way through signing up:
+# the form notes the email first and the number after, which is how both come to hold it.
+for who, email in (('Pat   Lee', 'pat@old.test'), ('Sam Lee', 'sam@old.test'), ('', 'noname@old.test')):
+    control_plane.find_or_add_abandoned_signup(engine, email, name=who or None)
+    control_plane.find_or_add_abandoned_signup(engine, email, name=who or None, phone='+14075550177')
 control_plane.add_lead(engine, source='abandoned_signup', email='other@x.test', phone='+14075550155')
 control_plane.add_lead(engine, source='abandoned_signup', email='stop@old.test', phone='+14075550133')
 control_plane.set_leads_sms_opt_out(engine, '+14075550133')
 control_plane.add_lead(engine, source='abandoned_signup', email='dnt@old.test', phone='+14075550122',
                        do_not_text=True)
-gone = control_plane.clear_abandoned_signup(engine, 'pat@new.test', '(407) 555-0177')
+gone = control_plane.clear_abandoned_signup(engine, 'pat@new.test', '(407) 555-0177', 'Pat  LEE')
 check(gone == 1 and not leads_for('pat@old.test'),
-      'finishing with a different address but the same number clears the row')
+      'finishing with a different address but the same number and name clears the row, however the name was spaced')
+check(leads_for('sam@old.test') and leads_for('noname@old.test'),
+      'but not somebody else who shares the number (a different name), nor a row with no name to match')
+control_plane.clear_abandoned_signup(engine, 'nobody@new.test', '(407) 555-0177')
+check(leads_for('sam@old.test') and leads_for('noname@old.test'),
+      'and a number with no name behind it clears nothing')
 control_plane.clear_abandoned_signup(engine, 'nobody@x.test', '407-555-0166')
 check(leads_for('early@x.test') and leads_for('other@x.test'),
       'an early-access request on the same number, and somebody else\'s half-finished signup, are left alone')
@@ -351,7 +360,7 @@ check(leads_for('dnt@old.test') and control_plane.number_text_block(engine, '+14
 with engine.begin() as conn:
     conn.execute(text("DELETE FROM public.product_leads WHERE email IN "
                       "('new@sparkle.test', 'nonumber@sparkle.test', 'other@x.test', 'early@x.test', "
-                      "'stop@old.test', 'dnt@old.test')"))
+                      "'stop@old.test', 'dnt@old.test', 'sam@old.test', 'noname@old.test')"))
 
 print('\n11. Finishing signup sends the address, the code, and clears the lead')
 SENT.clear()

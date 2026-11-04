@@ -37,6 +37,12 @@ on:
     # on charges nobody who hasn't opted in -- it stops being a no-op only for
     # whoever already asked for it.
     - cron: '5 * * * *'
+    # The same timetable again at :35. GitHub starts a scheduled run when it
+    # can, not when it is told: in a day it kept only five of the day's twenty-
+    # five hourly runs, and a balance waited for whichever came next. The job
+    # is safe to run twice (one charge per obligation, an advisory lock around
+    # it), so the second trigger is a catch-up for the first, not a duplicate.
+    - cron: '35 * * * *'
     # Everything else once a day, early enough that a day-before reminder
     # arrives the evening before rather than the morning of.
     - cron: '0 22 * * *'
@@ -52,8 +58,12 @@ on:
         type: string
         default: ''
 
+# One run of each timetable at a time. Not one run of anything at a time: with a
+# single group a queued daily run was replaced by the next hourly one (GitHub
+# keeps one waiting run per group and cancels the one before it), which is a way
+# for the evening's reminders not to start.
 concurrency:
-  group: automations
+  group: automations-${{ github.event.schedule == '0 22 * * *' && 'daily' || (github.event.schedule && 'hourly') || inputs.cadence }}
   cancel-in-progress: false
 
 jobs:
@@ -91,10 +101,15 @@ jobs:
         run: |
           if [ -n "${{ inputs.cadence }}" ]; then
             echo "cadence=${{ inputs.cadence }}" >> $GITHUB_OUTPUT
-          elif [ "${{ github.event.schedule }}" = "5 * * * *" ]; then
+          elif [ "${{ github.event.schedule }}" = "0 22 * * *" ]; then
+            echo "cadence=daily" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.schedule }}" = "5 * * * *" ] || [ "${{ github.event.schedule }}" = "35 * * * *" ]; then
             echo "cadence=hourly" >> $GITHUB_OUTPUT
           else
-            echo "cadence=daily" >> $GITHUB_OUTPUT
+            # A timetable added to the top of this file and not here must stop
+            # the run, not quietly become one of the other two.
+            echo "No cadence for trigger '${{ github.event.schedule }}'" >&2
+            exit 1
           fi
 
       - name: Run them
@@ -102,7 +117,11 @@ jobs:
           AKYE_DATABASE_URL: ${{ secrets.AKYE_DATABASE_URL }}
           REMINDER_API_KEY: ${{ secrets.REMINDER_API_KEY }}
           BASE_DOMAIN: akyehq.com
+        # pipefail: without it the step's status is tee's, which is always
+        # success, and a scheduler that failed every company's job went green.
+        shell: bash
         run: |
+          set -eo pipefail
           python3 scheduler.py --cadence ${{ steps.which.outputs.cadence }} \
             ${{ inputs.only && format('--only {0}', inputs.only) || '' }} \
             | tee run.log

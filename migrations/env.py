@@ -18,7 +18,11 @@ sys.path.insert(0, ROOT)
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Not disable_existing_loggers (its default): this runs inside the app, on
+    # every start and for every company's migration, after modules have made
+    # their own loggers. The default switched every one of them off, so a
+    # module-level `log = logging.getLogger(__name__)` wrote nothing, ever.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 
 def database_url():
