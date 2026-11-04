@@ -50,6 +50,7 @@ def page():
         run=run,
         made=made,
         drafts=envoy.drafts_for(made),
+        site_emails=envoy.site_emails,
         followups=envoy.followups(day),
         score=envoy.scoreboard(day),
         ai_used=envoy.ai_used(day),
@@ -107,7 +108,7 @@ def redraft(prospect_id):
     if p.source != 'envoy':
         abort(404)
     st = envoy.state()
-    if not st['switched_on']:
+    if not st['ready']:
         flash(st['reason'], 'error')
         return redirect(url_for('envoy.page'))
     row = envoy.write_draft(p)

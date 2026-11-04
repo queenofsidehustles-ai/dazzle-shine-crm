@@ -76,7 +76,7 @@
       <div class="env-row" style="margin-top:6px">
         {% if p.phone %}<a href="tel:{{ p.phone }}">{{ p.phone }}</a>{% endif %}
         {% if p.website and p.website.startswith(('http://', 'https://')) %}<a href="{{ p.website }}" target="_blank" rel="noopener noreferrer">Website</a>{% endif %}
-        {% if p.email %}<span class="env-meta">{{ p.email }} <small>(from their website)</small></span>{% endif %}
+        {% for e in (site_emails(d) if d else []) %}<span class="env-meta">{{ e }} <small>(shown on their website)</small></span>{% endfor %}
         <span class="badge badge-muted">{{ p.stage_label }}</span>
       </div>
     </div>

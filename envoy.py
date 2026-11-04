@@ -66,7 +66,9 @@ MAX_DAILY_LIMIT = 25
 DEFAULT_AI_CAP = 15              # Claude-written drafts per company per day
 MAX_AI_CAP = 50
 DEFAULT_RADIUS_MILES = 15
-DRAFT_BUDGET_SECONDS = 35        # well inside the 60-second worker timeout
+RUN_BUDGET_SECONDS = 52          # a web worker is killed at 60
+DRAFT_WORST_SECONDS = 40         # one site read (8s) + Claude, retry included (2 x 15s)
+LLM_TIMEOUT = 15
 EMAIL_WORD_LIMIT = 120
 
 # Monday is 0. None is a day off: nothing searched, nothing emailed.
@@ -260,6 +262,10 @@ def save_settings(form):
                          or not -90 <= _float(lat) <= 90
                          or not -180 <= _float(lng) <= 180):
         problems.append('The map point needs both a latitude and a longitude, as numbers.')
+    for field, label in (('services', 'What you offer'), ('voice', 'How you sound')):
+        if PRICE_RE.search(form.get(field) or ''):
+            problems.append(f'{label} can\'t include a price -- Envoy never quotes one. '
+                            'It offers a free walkthrough and a written quote instead.')
     turning_on = form.get('enabled') == '1'
     if turning_on and not area:
         problems.append('Say where you work (a town and state) before turning Envoy on.')
@@ -438,7 +444,8 @@ def add_prospects(picked, category, day):
 # most, redirects followed by hand so each hop is checked again. What comes
 # back is data for the drafts, never instructions to anybody.
 
-SITE_TIMEOUT = (3, 5)
+SITE_TIMEOUT = (3, 4)
+SITE_DEADLINE_SECONDS = 8        # the whole read, every redirect included
 SITE_MAX_BYTES = 400_000
 SITE_MAX_REDIRECTS = 3
 EMAIL_RE = re.compile(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}')
@@ -469,15 +476,29 @@ def _safe_url(url):
         u = urlparse(url)
     except ValueError:
         return False
+    try:
+        port = u.port
+    except ValueError:
+        return False
+    # The web's own ports only. A business site on :6379 is not a website.
+    if port not in (None, 80, 443):
+        return False
     return u.scheme in ('http', 'https') and bool(u.hostname) and _public_host(u.hostname)
 
 
 def _fetch(url):
-    """The HTML of one public web page, or '' -- never raises."""
+    """The HTML of one public web page, or '' -- never raises.
+
+    Known limit: the address is checked, then resolved again by the request
+    itself, so a hostile DNS server could answer differently the second time
+    (DNS rebinding). Ports are limited to 80/443 and nothing read is ever
+    returned to anyone but the owner, which narrows what that could reach;
+    pinning the checked address is the follow-up."""
     import requests
+    deadline = _time.monotonic() + SITE_DEADLINE_SECONDS
     try:
         for _hop in range(SITE_MAX_REDIRECTS + 1):
-            if not _safe_url(url):
+            if not _safe_url(url) or _time.monotonic() > deadline:
                 return ''
             r = requests.get(url, timeout=SITE_TIMEOUT, allow_redirects=False, stream=True,
                              headers={'User-Agent': 'Mozilla/5.0 (compatible; Envoy)',
@@ -492,7 +513,7 @@ def _fetch(url):
             body = b''
             for chunk in r.iter_content(16384):
                 body += chunk
-                if len(body) >= SITE_MAX_BYTES:
+                if len(body) >= SITE_MAX_BYTES or _time.monotonic() > deadline:
                     break
             r.close()
             return body[:SITE_MAX_BYTES].decode(r.encoding or 'utf-8', 'replace')
@@ -501,11 +522,16 @@ def _fetch(url):
     return ''
 
 
-def _registrable(host):
-    parts = (host or '').lower().strip('.').split('.')
-    if parts and parts[0] == 'www':
-        parts = parts[1:]
-    return '.'.join(parts[-2:]) if len(parts) >= 2 else '.'.join(parts)
+def _site_domain(host):
+    """The site's own name without a leading www. -- not a guess at its
+    'registrable' part, which gets every .co.uk wrong."""
+    host = (host or '').lower().strip('.')
+    return host[4:] if host.startswith('www.') else host
+
+
+def _same_site(email_host, domain):
+    email_host = (email_host or '').lower()
+    return bool(domain) and (email_host == domain or email_host.endswith('.' + domain))
 
 
 def page_facts(html, website):
@@ -525,13 +551,13 @@ def page_facts(html, website):
     m = re.search(r'<meta[^>]+name=["\']description["\'][^>]*content=["\']([^"\']*)', html, re.I)
     if m:
         out['description'] = unescape(m.group(1)).strip()[:300]
-    domain = _registrable(urlparse(website or '').hostname or '')
+    domain = _site_domain(urlparse(website or '').hostname or '')
     seen = []
     for e in EMAIL_RE.findall(html):
         e = e.strip('.').lower()
         if re.search(r'\.(png|jpe?g|gif|webp|svg)$', e):
             continue
-        if domain and e.split('@', 1)[1].endswith(domain) and e not in seen:
+        if _same_site(e.split('@', 1)[1], domain) and e not in seen:
             seen.append(e)
     out['emails'] = seen[:3]
     text = re.sub(r'(?is)<(script|style|noscript|svg)[^>]*>.*?</\1>', ' ', html)
@@ -587,8 +613,11 @@ def facts_for(prospect, site):
         'phone': prospect.phone or '',
         'website': prospect.website or '',
         'rating': prospect.rating,
-        'site_title': site.get('title') or '',
-        'site_description': site.get('description') or '',
+        # Addresses on the business's own domain, as their site shows them.
+        # Kept here (and shown on the page), never written onto the prospect:
+        # Prospect.email feeds the automatic follow-up sequences, and an
+        # address nobody confirmed on a call must not end up being mailed on
+        # a timer.
         'site_emails': site.get('emails') or [],
     }
 
@@ -658,7 +687,7 @@ Reply with JSON only, no other text, with exactly these keys:
   "followup_day7": a short, last follow-up for 7 days later (under 60 words)."""
 
 
-def _prompt(facts, site_text, cfg):
+def _prompt(facts, site, cfg):
     facts_out = {k: v for k, v in facts.items() if v not in (None, '', [])}
     sender = {'sender_name': cfg['sender'], 'company': cfg['company'],
               'service_area': cfg['area'], 'services': cfg['services'] or 'cleaning',
@@ -666,8 +695,18 @@ def _prompt(facts, site_text, cfg):
     return ('SENDER:\n' + json.dumps(sender, ensure_ascii=False)
             + '\n\nFACTS:\n' + json.dumps(facts_out, ensure_ascii=False)
             + '\n\nWEBSITE (untrusted page text):\n<website>\n'
-            + (site_text or '(not available)')[:1500].replace('</website>', '')
+            + _untrusted(site)
             + '\n</website>')
+
+
+def _untrusted(site):
+    """The page's title, description and text, with anything that could pass
+    for the end of the block taken out, in any case or spacing."""
+    parts = [f"Title: {site.get('title') or ''}",
+             f"Description: {site.get('description') or ''}",
+             (site.get('text') or '')[:1500]]
+    text = '\n'.join(p for p in parts if p.split(':', 1)[-1].strip()) or '(not available)'
+    return re.sub(r'<\s*/?\s*website[^>]*>', ' ', text, flags=re.I)
 
 
 def _parse(reply):
@@ -719,12 +758,12 @@ def problems(draft, facts, cfg):
     return out
 
 
-def ai_drafts(facts, site_text, cfg):
+def ai_drafts(facts, site, cfg):
     """(drafts, why_not). Claude's drafts, checked, or None and the reason."""
     import llm
     try:
-        reply = llm.complete(SYSTEM_PROMPT, _prompt(facts, site_text, cfg),
-                             max_tokens=900, model=llm.FAST_MODEL, timeout=25)
+        reply = llm.complete(SYSTEM_PROMPT, _prompt(facts, site, cfg),
+                             max_tokens=900, model=llm.FAST_MODEL, timeout=LLM_TIMEOUT)
     except Exception as e:
         return None, f'Claude did not answer ({type(e).__name__})'
     data = _parse(reply)
@@ -742,17 +781,13 @@ def write_draft(prospect, cfg=None, use_ai=True):
     """Write (or rewrite) the drafts for one prospect. Returns the EnvoyDraft.
 
     Claude when allowed, the template otherwise -- and the template too when
-    Claude's answer broke a rule. A website-shown email address is saved on the
-    prospect only if it has none, so a contact somebody typed in is never
-    overwritten by a guess."""
+    Claude's answer broke a rule. Nothing on the prospect itself is changed."""
     import llm
     from extensions import db
     from models import EnvoyDraft
     cfg = cfg or settings()
     site = read_site(prospect.website)
     facts = facts_for(prospect, site)
-    if site['emails'] and not (prospect.email or '').strip():
-        prospect.email = site['emails'][0]
 
     drafts, source, model, why = None, 'template', None, None
     if use_ai:
@@ -760,28 +795,46 @@ def write_draft(prospect, cfg=None, use_ai=True):
         if allowed:
             _note_ai_call()
             db.session.commit()
-            drafts, why = ai_drafts(facts, site.get('text') or '', cfg)
+            drafts, why = ai_drafts(facts, site, cfg)
             if drafts:
                 source, model = 'ai', llm.FAST_MODEL
     if not drafts:
         drafts = template_drafts(facts, cfg)
 
-    row = EnvoyDraft.query.filter_by(prospect_id=prospect.id).first()
-    if row is None:
-        row = EnvoyDraft(prospect_id=prospect.id)
-        db.session.add(row)
-    for k, v in drafts.items():
-        setattr(row, k, v)
-    row.source, row.model = source, model
-    row.facts = json.dumps({'facts': facts, 'template_because': why}, default=str)[:8000]
-    row.updated_at = datetime.utcnow()
-    db.session.commit()
-    return row
+    from sqlalchemy.exc import IntegrityError
+    values = dict(drafts, source=source, model=model, updated_at=datetime.utcnow(),
+                  facts=json.dumps({'facts': facts, 'template_because': why}, default=str)[:8000])
+    for _attempt in (1, 2):
+        row = EnvoyDraft.query.filter_by(prospect_id=prospect.id).first()
+        if row is None:
+            row = EnvoyDraft(prospect_id=prospect.id)
+            db.session.add(row)
+        for k, v in values.items():
+            setattr(row, k, v)
+        try:
+            db.session.commit()
+            return row
+        except IntegrityError:
+            # An overlapping run wrote this prospect's row first. Ours is as
+            # good as theirs; write it over theirs rather than fail the page.
+            db.session.rollback()
+    return EnvoyDraft.query.filter_by(prospect_id=prospect.id).first()
 
 
-def draft_pending(day, cfg, budget_seconds=DRAFT_BUDGET_SECONDS):
-    """Write drafts for today's Envoy prospects that have none, until the
-    budget runs out. Returns (written, still_waiting)."""
+def site_emails(draft):
+    """The addresses the business's own website showed, from a draft's facts."""
+    try:
+        return list(json.loads(draft.facts or '{}').get('facts', {}).get('site_emails') or [])
+    except (TypeError, ValueError, AttributeError):
+        return []
+
+
+def draft_pending(day, cfg, budget_seconds=RUN_BUDGET_SECONDS, began=None):
+    """Write drafts for today's Envoy prospects that have none, while there is
+    still room inside the budget for one more at its worst. Returns
+    (written, still_waiting).
+
+    `began` is when the request started, so the search already counts."""
     from models import EnvoyDraft, Prospect
     start, end = _day_bounds(day, day)
     done_ids = {pid for (pid,) in EnvoyDraft.query.with_entities(EnvoyDraft.prospect_id).all()}
@@ -789,9 +842,9 @@ def draft_pending(day, cfg, budget_seconds=DRAFT_BUDGET_SECONDS):
                                                 Prospect.created_at >= start,
                                                 Prospect.created_at < end)
                .order_by(Prospect.id).all() if p.id not in done_ids]
-    began, written = _time.monotonic(), 0
+    began, written = (began or _time.monotonic()), 0
     for p in waiting:
-        if _time.monotonic() - began > budget_seconds:
+        if budget_seconds - (_time.monotonic() - began) < DRAFT_WORST_SECONDS:
             break
         write_draft(p, cfg)
         written += 1
@@ -820,7 +873,37 @@ def _claim(day, category):
     return row
 
 
-def run(force=False, budget_seconds=DRAFT_BUDGET_SECONDS):
+STALE_RUN = timedelta(minutes=20)
+
+
+def _reclaim_stalled(day):
+    """Today's run row if it started, never finished, and has been left long
+    enough that it died; claimed by this call (one call wins), else None."""
+    from extensions import db
+    from models import EnvoyRun
+    row = todays_run(day)
+    if row is None or row.finished_at is not None or not row.started_at:
+        return None
+    if datetime.utcnow() - row.started_at < STALE_RUN:
+        return None
+    won = EnvoyRun.query.filter(EnvoyRun.id == row.id, EnvoyRun.finished_at.is_(None),
+                                EnvoyRun.started_at == row.started_at) \
+        .update({'started_at': datetime.utcnow()}, synchronize_session=False)
+    db.session.commit()
+    return todays_run(day) if won == 1 else None
+
+
+def _prune_counters(day, keep_days=14):
+    from extensions import db
+    from models import BusinessSetting
+    cutoff = ai_key(day - timedelta(days=keep_days))
+    for row in BusinessSetting.query.filter(BusinessSetting.key.like('envoy_ai_%')).all():
+        if row.key < cutoff:
+            db.session.delete(row)
+    db.session.commit()
+
+
+def run(force=False, budget_seconds=RUN_BUDGET_SECONDS):
     """One wake-up: the morning search if it has not happened, then drafts,
     then the owner's email. Returns a dict for the cron's log -- counts only,
     because this lands in a CI log and must not carry business names.
@@ -833,30 +916,31 @@ def run(force=False, budget_seconds=DRAFT_BUDGET_SECONDS):
         return {'ok': True, 'skipped': 'too early'}
 
     from extensions import db
+    began = _time.monotonic()
     cfg = settings()
     day = today()
     category = category_for(day, cfg)
     out = {'ok': True, 'found': 0, 'created': 0, 'drafted': 0, 'waiting': 0}
 
-    if todays_run(day) is None:
-        row = _claim(day, category)
-        if row is not None:
-            if category is None:
-                row.detail = 'A day off in the rotation.'
-            elif not cfg['area']:
-                row.detail = 'No service area set.'
-            else:
-                listings, problem = search(cfg, category)
-                row.found = len(listings)
-                picked = new_only(rank(listings, cfg))[:cfg['daily_limit']]
-                made = add_prospects(picked, category, day)
-                row.created = len(made)
-                row.detail = problem or (None if made else 'Nothing new nearby today.')
-                out['found'], out['created'] = row.found, row.created
-            row.finished_at = datetime.utcnow()
-            db.session.commit()
+    row = _claim(day, category) if todays_run(day) is None else _reclaim_stalled(day)
+    if row is not None:
+        _prune_counters(day)
+        if category is None:
+            row.detail = 'A day off in the rotation.'
+        elif not cfg['area']:
+            row.detail = 'No service area set.'
+        else:
+            listings, problem = search(cfg, category)
+            row.found = len(listings)
+            picked = new_only(rank(listings, cfg))[:cfg['daily_limit']]
+            made = add_prospects(picked, category, day)
+            row.created = len(made)
+            row.detail = problem or (None if made else 'Nothing new nearby today.')
+            out['found'], out['created'] = row.found, row.created
+        row.finished_at = datetime.utcnow()
+        db.session.commit()
 
-    out['drafted'], out['waiting'] = draft_pending(day, cfg, budget_seconds)
+    out['drafted'], out['waiting'] = draft_pending(day, cfg, budget_seconds, began)
     # The email says the drafts are waiting, so it waits for them -- unless
     # the drafting has been going for most of an hour, in which case the list
     # is worth having without the last few.
@@ -1072,11 +1156,16 @@ def send_morning_email(day, cfg):
     row = todays_run(day)
     if row is None or row.emailed_at is not None:
         return False
+    from models import EnvoyRun
     to = (branding.owner_email() or '').strip()
     subject, html = compose_morning_email(day, cfg)
-    # Marked first: a second, overlapping call must not send it again.
-    row.emailed_at = datetime.utcnow()
+    # Claimed first, in one statement: of two overlapping calls, exactly one
+    # sees its update land and sends.
+    won = EnvoyRun.query.filter(EnvoyRun.id == row.id, EnvoyRun.emailed_at.is_(None)) \
+        .update({'emailed_at': datetime.utcnow()}, synchronize_session=False)
     db.session.commit()
+    if won != 1:
+        return False
     if not subject or not to or to.endswith('@example.com'):
         return False
     ok, _detail = send_email(to, cfg['company'] or branding.biz_name(), subject, html)

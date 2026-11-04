@@ -250,6 +250,17 @@ CLAUDE['calls'] = 0
 cron.post('/api/envoy-daily', base_url=host(B), headers=KEY)
 check(CLAUDE['calls'] == 4, f'switched back on, Claude writes them again ({CLAUDE["calls"]})')
 
+print('\n4b. A draft goes with its prospect')
+with app.app_context():
+    from models import EnvoyDraft, Prospect
+    with tenancy.use_tenant(B):
+        gone = Prospect.query.filter_by(source='envoy').first()
+        gid = gone.id
+        db.session.delete(gone); db.session.commit()
+        check(EnvoyDraft.query.filter_by(prospect_id=gid).count() == 0,
+              'deleting a business deletes what Envoy wrote about it')
+        db.session.remove()
+
 print('\n5. The console\'s Envoy switch stops it for every company')
 platform_switches.set_switch(engine, 'envoy', False, by='test')
 with app.app_context():

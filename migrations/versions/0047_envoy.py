@@ -47,7 +47,8 @@ def upgrade():
         op.create_table(
             'envoy_draft',
             sa.Column('id', sa.Integer, primary_key=True),
-            sa.Column('prospect_id', sa.Integer, nullable=False, unique=True, index=True),
+            sa.Column('prospect_id', sa.Integer, sa.ForeignKey('prospect.id', ondelete='CASCADE'),
+                      nullable=False, unique=True, index=True),
             sa.Column('first_line', sa.Text),
             sa.Column('email_subject', sa.String(200)),
             sa.Column('email_body', sa.Text),

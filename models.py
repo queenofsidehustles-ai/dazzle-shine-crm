@@ -2480,7 +2480,10 @@ class EnvoyDraft(db.Model):
     """
     __tablename__ = 'envoy_draft'
     id = db.Column(db.Integer, primary_key=True)
-    prospect_id = db.Column(db.Integer, unique=True, nullable=False, index=True)
+    # Goes with its prospect: deleting or erasing the business deletes what
+    # Envoy wrote about it, including the website facts kept below.
+    prospect_id = db.Column(db.Integer, db.ForeignKey('prospect.id', ondelete='CASCADE'),
+                            unique=True, nullable=False, index=True)
     first_line = db.Column(db.Text)
     email_subject = db.Column(db.String(200))
     email_body = db.Column(db.Text)
