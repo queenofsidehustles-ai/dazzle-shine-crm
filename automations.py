@@ -50,6 +50,14 @@ JOBS = [
     ('owner-digest', 'Morning digest',
      'Emails you each morning with what actually needs you today — the same '
      'specific list Nana can read back, sent before you open the app.', 'daily'),
+    # Hourly, though it works once a day: the scheduler's daily run is the
+    # evening, and this one has to be a morning email. envoy.run_daily acts
+    # on the first call at or after 7am where the business is. On and off is
+    # Envoy's own switch (see is_enabled), and the row is shown only to a
+    # company Envoy has been released to (see overview).
+    ('envoy', 'Envoy',
+     'Each morning, finds a few new businesses to call, writes the drafts and '
+     'emails you the list. Never sends anything to them.', 'hourly'),
 ]
 
 # Everything above defaults to on. This one is the exception: an inbox that
@@ -89,6 +97,14 @@ def is_enabled(job):
     """
     if job == 'charge-balances':
         return balance_mode() == 'auto'
+    if job == 'envoy':
+        # Its own three locks (released, on the plan, switched on), so there
+        # is one switch to it and not two that can disagree.
+        try:
+            import envoy
+            return envoy.is_on()
+        except Exception:
+            return False
     if job in DEFAULT_OFF:
         return _setting(f'automation_{job}_on') == '1'
     return _setting(f'automation_{job}_off') != '1'
@@ -221,6 +237,16 @@ def overview():
     out = []
 
     for key, label, blurb, cadence in JOBS:
+        if key == 'envoy':
+            # Released to named companies one at a time. Everybody else should
+            # not see a row for a feature they do not have, and their health
+            # must not read 'never ran' for it (console_data reads this too).
+            try:
+                import envoy
+                if not envoy.available():
+                    continue
+            except Exception:
+                continue
         last = (CronRun.query.filter_by(job=key)
                 .order_by(CronRun.ran_at.desc()).first())
         hours = None if not last else (now - last.ran_at).total_seconds() / 3600.0

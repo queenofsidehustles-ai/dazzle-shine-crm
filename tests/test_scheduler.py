@@ -41,8 +41,10 @@ print('\n1. It runs what the Automations page says runs')
 import automations
 check(set(scheduler.all_jobs()) == {k for k, _l, _b, _c in automations.JOBS},
       f'every job, from one list ({len(scheduler.all_jobs())})')
-check(scheduler.jobs_for('hourly') == ['charge-balances'],
-      'balances are the hourly one — they are charged at each job\'s start time')
+# Envoy joined in November 2026: the daily run is the evening, and its email
+# has to be a morning one, so it is called hourly and works once a day.
+check(scheduler.jobs_for('hourly') == ['charge-balances', 'envoy'],
+      'balances are hourly — charged at each job\'s start time — and Envoy, for its 7am run')
 # Counted from the list rather than written down, so adding a job does not
 # fail a test for the wrong reason -- what matters is that every job has a
 # cadence and lands in exactly one of the two runs.

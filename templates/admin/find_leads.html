@@ -23,6 +23,13 @@ data-kind="{{ 'commercial' if p.is_commercial else 'residential' }}"
 data-smsstop="{{ '1' if p.id in sms_stopped else '' }}"
 {%- endmacro %}
 
+{% if envoy_link %}
+<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;padding:12px 16px">
+  <div><strong>Envoy</strong> <span style="color:var(--softer)">· today's businesses to call, with the words ready</span></div>
+  <a class="btn btn-gold btn-sm" href="{{ url_for('envoy.page') }}">Open Envoy →</a>
+</div>
+{% endif %}
+
 {% if demo %}
 <div class="card" style="border-left:4px solid var(--amber);background:rgba(211,168,79,0.10);margin-bottom:18px">
   {% if demo_reason == 'demo_company' %}

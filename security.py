@@ -85,6 +85,7 @@ CRON_PATHS = frozenset({
     '/api/lifecycle-emails',
     '/api/owner-digest',
     '/api/rental-turnovers',
+    '/api/envoy',
 })
 # The product's own jobs (scheduler.PRODUCT_JOBS, and the demo rebuild), run at
 # the product's address rather than a company's.

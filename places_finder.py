@@ -92,11 +92,16 @@ def api_key_present():
     return not demo_guard.active() and bool(integrations.google_places_api_key())
 
 
-def search_businesses(category, location, api_key=None):
+def search_businesses(category, location, api_key=None, bias=None):
     """Search public business listings for one category in one place.
 
     Returns (success: bool, listings: list[dict], error: str).
     Each listing: {place_id, business_name, phone, website, address, city, rating}.
+
+    `bias` is an optional (latitude, longitude, radius_metres) circle. Google
+    treats it as a preference, not a fence, so listings then also carry their
+    own latitude/longitude and the caller decides what is too far (Envoy does).
+    Without it the request is exactly what it always was.
     """
     import demo_guard
     if demo_guard.active():
@@ -108,15 +113,24 @@ def search_businesses(category, location, api_key=None):
         return False, [], 'Google Places API key not configured'
 
     text_query = f"{CATEGORY_QUERIES.get(category, category)} in {location}".strip()
+    body = {'textQuery': text_query, 'maxResultCount': 20}
+    mask = FIELD_MASK
+    if bias:
+        lat, lng, radius = bias
+        body['locationBias'] = {'circle': {
+            'center': {'latitude': float(lat), 'longitude': float(lng)},
+            # Google's ceiling for a bias circle is 50 km.
+            'radius': float(min(max(radius, 1), 50000))}}
+        mask = FIELD_MASK + ',places.location'
     try:
         resp = requests.post(
             PLACES_URL,
             headers={
                 'Content-Type': 'application/json',
                 'X-Goog-Api-Key': api_key,
-                'X-Goog-FieldMask': FIELD_MASK,
+                'X-Goog-FieldMask': mask,
             },
-            json={'textQuery': text_query, 'maxResultCount': 20},
+            json=body,
             timeout=15,
         )
         if resp.status_code != 200:
@@ -129,7 +143,7 @@ def search_businesses(category, location, api_key=None):
 
         listings = []
         for p in resp.json().get('places', []):
-            listings.append({
+            row = {
                 'place_id': p.get('id', ''),
                 'business_name': (p.get('displayName') or {}).get('text', 'Unknown'),
                 'phone': p.get('nationalPhoneNumber', ''),
@@ -137,10 +151,49 @@ def search_businesses(category, location, api_key=None):
                 'address': p.get('formattedAddress', ''),
                 'city': location,
                 'rating': p.get('rating'),
-            })
+            }
+            where = p.get('location') or {}
+            if bias and 'latitude' in where and 'longitude' in where:
+                row['lat'], row['lng'] = where['latitude'], where['longitude']
+            listings.append(row)
         return True, listings, ''
     except requests.RequestException as e:
         return False, [], f'Network error reaching Google Places: {e}'
+
+
+def locate(text, api_key=None):
+    """Where a typed place is: (ok, (latitude, longitude, address) or None, error).
+
+    One Places text search for the place itself, asking only for where it is.
+    Used to turn a service area someone typed ("Lake Nona, FL") into the
+    centre of a circle, once, when it is saved -- not on every search.
+    """
+    import demo_guard
+    if demo_guard.active() or not (text or '').strip():
+        return False, None, 'nothing to look up'
+    if not api_key:
+        import integrations
+        api_key = integrations.google_places_api_key()
+    if not api_key:
+        return False, None, 'Google Places API key not configured'
+    try:
+        resp = requests.post(
+            PLACES_URL,
+            headers={'Content-Type': 'application/json', 'X-Goog-Api-Key': api_key,
+                     'X-Goog-FieldMask': 'places.location,places.formattedAddress'},
+            json={'textQuery': text.strip(), 'maxResultCount': 1},
+            timeout=15,
+        )
+        if resp.status_code != 200:
+            return False, None, f'Google Places error ({resp.status_code})'
+        places = resp.json().get('places') or []
+        where = (places[0].get('location') or {}) if places else {}
+        if 'latitude' not in where:
+            return False, None, 'Google did not recognise that place'
+        return True, (where['latitude'], where['longitude'],
+                      places[0].get('formattedAddress', '')), ''
+    except requests.RequestException as e:
+        return False, None, f'Network error reaching Google Places: {e}'
 
 
 _DEMO_NAMES = {

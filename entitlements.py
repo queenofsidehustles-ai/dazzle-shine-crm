@@ -149,6 +149,11 @@ FEATURE_LABELS = {
     'team_logins': 'Extra office logins',
     'commercial': 'Commercial accounts and quotes',
     'lead_finder': 'Find Leads',
+    # Scale, like Find Leads, because every daily run spends one of the same
+    # lead searches. Deliberately not in billing_routes.SCALE_ONLY_FEATURES:
+    # that list is what the upgrade page advertises, and Envoy is released to
+    # named companies one at a time (envoy.admitted), not sold to everybody.
+    'envoy': 'Envoy',
     'multi_brand': 'A second brand',
     'content_studio': 'Content Studio',
     'va_commissions': 'VA commissions',

@@ -1,0 +1,208 @@
+{% extends "base_admin.html" %}
+{% block title %}Envoy — {{ BIZ }}{% endblock %}
+{% block page_title %}Envoy{% endblock %}
+
+{% block content %}
+{% set s = data.settings %}
+{% set kind_labels = {'first_line': 'Personal first line', 'intro_email': 'Intro email',
+                      'call_script': '30-second call script', 'followup_3': 'Day-3 follow-up',
+                      'followup_7': 'Day-7 follow-up'} %}
+
+{% macro draft_block(d, label) -%}
+<div class="envoy-draft">
+  <div class="envoy-draft-head">
+    <span>{{ label }}{% if d.source == 'template' %} <em class="envoy-tag">template</em>{% endif %}</span>
+    <button type="button" class="btn btn-outline btn-sm" data-copy="envoy-d{{ d.id }}">Copy</button>
+  </div>
+  {% if d.subject %}<div class="envoy-subject">Subject: {{ d.subject }}</div>{% endif %}
+  <pre class="envoy-body" id="envoy-d{{ d.id }}">{% if d.subject %}Subject: {{ d.subject }}
+
+{% endif %}{{ d.body }}</pre>
+</div>
+{%- endmacro %}
+
+<div class="topbar">
+  <div>
+    <h1>Envoy</h1>
+    <div style="font-size:0.85rem;color:var(--softer);margin-top:2px">
+      New businesses to call today, with the words ready. Nothing here is sent for you.
+    </div>
+  </div>
+  {% if not data.why_off %}
+  <form method="POST" action="{{ url_for('envoy.run_now') }}">
+    <button type="submit" class="btn btn-gold">Run this morning's search now</button>
+  </form>
+  {% endif %}
+</div>
+
+<div class="content">
+
+  {% if data.why_off %}
+  <div class="card" style="border-left:4px solid var(--amber);margin-bottom:18px">{{ data.why_off }}</div>
+  {% endif %}
+  {% if not data.ai_ready %}
+  <div class="card" style="margin-bottom:18px;color:var(--softer)">
+    AI writing is off right now, so drafts come from the plain templates. They are still ready to use.
+  </div>
+  {% endif %}
+
+  <!-- ── Scoreboard ─────────────────────────────────────────── -->
+  <div class="card" style="margin-bottom:18px">
+    <h2 class="envoy-h2">Scoreboard</h2>
+    <div class="envoy-table-wrap">
+    <table class="envoy-score">
+      <thead><tr><th></th><th>Found</th><th>Contacted</th><th>Walkthroughs</th><th>Quotes</th><th>Won</th><th>New monthly</th></tr></thead>
+      <tbody>
+      {% for key, label in [('week', 'This week'), ('month', 'This month')] %}
+      {% set t = data.score[key] %}
+      <tr><th>{{ label }}</th><td>{{ t.found }}</td><td>{{ t.contacted }}</td><td>{{ t.walkthroughs }}</td>
+          <td>{{ t.quotes }}</td><td>{{ t.won }}</td><td>${{ '{:,.0f}'.format(t.mrr) }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <p class="envoy-note">Counted from the call list, quotes and accounts, for businesses Envoy found.</p>
+  </div>
+
+  <!-- ── Today's list ───────────────────────────────────────── -->
+  <h2 class="envoy-h2">Today ({{ data.todays|length }})</h2>
+  {% if not data.todays %}
+  <div class="card" style="margin-bottom:18px;color:var(--softer)">
+    {% if data.last_find == data.today.isoformat() %}Nothing new today.{% else %}Today's search has not run yet. It runs each morning after 7am.{% endif %}
+  </div>
+  {% endif %}
+  {% for p in data.todays %}
+  {% set mine = data.drafts.get(p.id, {}) %}
+  <div class="card envoy-card" id="p{{ p.id }}">
+    <div class="envoy-card-head">
+      <div>
+        <strong>{{ p.business_name }}</strong>
+        <div class="envoy-note">{{ p.category_label }}{% if p.rating %} · ★ {{ p.rating }}{% endif %}{% if p.address %} · {{ p.address }}{% endif %}</div>
+        <div class="envoy-note">
+          {% if p.phone %}<a href="tel:{{ p.phone }}">{{ p.phone }}</a>{% else %}No phone listed{% endif %}
+          {% if p.website %} · <a href="{{ p.website }}" target="_blank" rel="noopener">website</a>{% endif %}
+        </div>
+      </div>
+      <div class="envoy-actions">
+        <a class="btn btn-gold btn-sm" href="{{ url_for('places_finder.lead_page', prospect_id=p.id) }}">Open lead to call or email</a>
+        <form method="POST" action="{{ url_for('envoy.redraft', prospect_id=p.id) }}">
+          <button type="submit" class="btn btn-outline btn-sm">Redraft</button>
+        </form>
+      </div>
+    </div>
+    {% if mine %}
+      {% for kind in data.kinds %}{% if mine.get(kind) %}{{ draft_block(mine[kind], kind_labels[kind]) }}{% endif %}{% endfor %}
+    {% else %}
+      <p class="envoy-note">Drafts are being written. Refresh in a moment.</p>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  <!-- ── Follow-ups ─────────────────────────────────────────── -->
+  <h2 class="envoy-h2" style="margin-top:24px">Follow-ups due ({{ data.followups|length }})</h2>
+  {% if not data.followups %}
+  <div class="card" style="margin-bottom:18px;color:var(--softer)">No follow-ups due today.</div>
+  {% endif %}
+  {% for p, d in data.followups %}
+  <div class="card envoy-card">
+    <div class="envoy-card-head">
+      <div>
+        <strong>{{ p.business_name }}</strong>
+        <div class="envoy-note">{{ p.next_action or 'Follow up' }} · due {{ p.next_action_date or 'now' }}{% if p.phone %} · <a href="tel:{{ p.phone }}">{{ p.phone }}</a>{% endif %}</div>
+      </div>
+      <div class="envoy-actions">
+        <a class="btn btn-outline btn-sm" href="{{ url_for('places_finder.lead_page', prospect_id=p.id) }}">Open lead</a>
+      </div>
+    </div>
+    {% if d %}{{ draft_block(d, kind_labels[d.kind]) }}{% endif %}
+  </div>
+  {% endfor %}
+
+  <!-- ── Settings ───────────────────────────────────────────── -->
+  <details class="card" style="margin-top:24px" {% if not s.enabled or not s.area %}open{% endif %}>
+    <summary style="cursor:pointer;font-weight:700">Settings</summary>
+    <form method="POST" action="{{ url_for('envoy.save') }}" style="margin-top:14px">
+      <label style="display:flex;gap:10px;align-items:center;font-weight:600;margin:0 0 14px">
+        <input type="checkbox" name="enabled" value="1" {% if s.enabled %}checked{% endif %}>
+        Envoy is on (searches each morning and emails you the list)
+      </label>
+      <div class="form-group">
+        <label>Service area</label>
+        <input type="text" name="area" value="{{ s.area }}" placeholder="A town and state, e.g. Winter Park, FL">
+        {% if s.area_found %}<div class="envoy-note">Centred on {{ s.area_found }}</div>{% endif %}
+      </div>
+      <div class="form-group">
+        <label>Radius (miles)</label>
+        <input type="number" name="radius_miles" min="1" max="30" value="{{ s.radius_miles }}">
+      </div>
+      <div class="form-group">
+        <label>What to search each day</label>
+        <div class="envoy-rotation">
+        {% for day in data.weekdays %}
+          <label>{{ day }}
+            <select name="day_{{ loop.index0 }}">
+              <option value="">Off</option>
+              {% for key, lbl in categories %}
+              <option value="{{ key }}" {% if s.rotation.get(loop.index0) == key %}selected{% endif %}>{{ lbl }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        {% endfor %}
+        </div>
+      </div>
+      <div class="form-group">
+        <label>New businesses a day</label>
+        <input type="number" name="daily_limit" min="1" max="25" value="{{ s.daily_limit }}">
+      </div>
+      <div class="form-group">
+        <label>Sign drafts as</label>
+        <input type="text" name="sender_name" value="{{ s.sender_name }}" placeholder="Your first name">
+      </div>
+      <div class="form-group">
+        <label>How drafts should sound</label>
+        <input type="text" name="voice" value="{{ s.voice }}" maxlength="300">
+      </div>
+      <div class="form-group">
+        <label>Most AI-written drafts a day</label>
+        <input type="number" name="ai_daily_cap" min="0" max="50" value="{{ s.ai_daily_cap }}">
+        <div class="envoy-note">{{ data.ai_used }} used today. Past this, drafts come from the plain template.</div>
+      </div>
+      <button type="submit" class="btn btn-gold">Save</button>
+    </form>
+  </details>
+</div>
+
+<style>
+  .envoy-h2 { font-size:0.8rem; font-weight:700; color:var(--softer); text-transform:uppercase;
+              letter-spacing:0.12em; margin:0 0 10px; }
+  .envoy-note { font-size:0.82rem; color:var(--softer); line-height:1.5; }
+  .envoy-card { margin-bottom:14px; }
+  .envoy-card-head { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:10px; }
+  .envoy-actions { display:flex; gap:8px; align-items:flex-start; flex-wrap:wrap; }
+  .envoy-draft { border-top:1px solid var(--line, rgba(127,127,127,0.2)); padding-top:10px; margin-top:10px; }
+  .envoy-draft-head { display:flex; justify-content:space-between; align-items:center; gap:8px;
+                      font-size:0.82rem; font-weight:600; margin-bottom:6px; }
+  .envoy-tag { font-style:normal; font-weight:500; color:var(--softer); }
+  .envoy-subject { display:none; }
+  .envoy-body { white-space:pre-wrap; word-break:break-word; font-family:inherit; font-size:0.9rem;
+                line-height:1.55; margin:0; }
+  .envoy-table-wrap { overflow-x:auto; }
+  .envoy-score { width:100%; border-collapse:collapse; font-size:0.9rem; }
+  .envoy-score th, .envoy-score td { padding:6px 8px; text-align:right; white-space:nowrap; }
+  .envoy-score th:first-child { text-align:left; }
+  .envoy-score thead th { color:var(--softer); font-weight:600; font-size:0.78rem; }
+  .envoy-rotation { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:8px; }
+  .envoy-rotation label { font-size:0.82rem; display:flex; flex-direction:column; gap:4px; }
+</style>
+<script>
+document.addEventListener('click', function (e) {
+  var b = e.target.closest('[data-copy]');
+  if (!b) return;
+  var el = document.getElementById(b.getAttribute('data-copy'));
+  if (!el || !navigator.clipboard) return;
+  navigator.clipboard.writeText(el.textContent.trim()).then(function () {
+    var was = b.textContent; b.textContent = 'Copied'; setTimeout(function () { b.textContent = was; }, 1600);
+  });
+});
+</script>
+{% endblock %}

@@ -255,9 +255,20 @@ def _view_args(view, prospects, **extra):
         commercial_categories=list(brands._COMMERCIAL_CATEGORIES),
         brand_primary=brands.PRIMARY,
         brand_commercial=brands.COMMERCIAL,
+        # Only for an owner of a company Envoy has been released to; for
+        # everybody else the link does not exist (blueprints/envoy.py).
+        envoy_link=_is_owner() and _envoy_available(),
     )
     args.update(extra)
     return args
+
+
+def _envoy_available():
+    try:
+        import envoy
+        return envoy.available()
+    except Exception:
+        return False
 
 
 def _sms_stopped(prospects):

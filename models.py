@@ -2445,6 +2445,36 @@ class ProspectActivity(db.Model):
     NO_CONVERSATION = ('no_answer', 'voicemail', 'new', None, '')
 
 
+class EnvoyDraft(db.Model):
+    """One piece of outreach Envoy wrote for one prospect, for a person to send.
+
+    Envoy writes and never sends (envoy.py). Each prospect gets one row per
+    kind -- the personal first line, the intro email, the call script and the
+    two follow-ups -- replaced in place when redrafted, so the page always
+    shows exactly one current version of each. `source` says whether Claude
+    wrote it or the plain template did (AI off, the daily cap reached, or a
+    draft that failed the checks), because an owner deciding what to send is
+    owed the difference. Migration 0047.
+    """
+    __tablename__ = 'envoy_draft'
+    id = db.Column(db.Integer, primary_key=True)
+    prospect_id = db.Column(db.Integer, nullable=False, index=True)
+    kind = db.Column(db.String(20), nullable=False)       # see KINDS
+    subject = db.Column(db.String(200))
+    body = db.Column(db.Text, nullable=False)
+    source = db.Column(db.String(10), default='template')  # 'ai' or 'template'
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (db.UniqueConstraint('prospect_id', 'kind', name='uq_envoy_draft_prospect_kind'),)
+
+    KINDS = [
+        ('first_line', 'Personal first line'),
+        ('intro_email', 'Intro email'),
+        ('call_script', '30-second call script'),
+        ('followup_3', 'Day-3 follow-up'),
+        ('followup_7', 'Day-7 follow-up'),
+    ]
+
+
 class User(db.Model):
     """A person who can log into the CRM.
     role 'owner'  → sees everything, money included (that's Monica).

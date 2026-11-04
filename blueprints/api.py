@@ -690,6 +690,33 @@ def owner_digest():
     return jsonify({'ok': True, 'sent': sent, 'detail': detail})
 
 
+@api_bp.route('/envoy', methods=['POST'])
+def envoy_run():
+    """Envoy's morning: find today's businesses, write their drafts, email the
+    owner the list. Called hourly; does the work once, after 7am local time.
+
+    Sends nothing to any prospect (envoy.py). Does nothing at all for a
+    company Envoy has not been released to, and records nothing either, so
+    its Automations page has no row for a feature it does not have.
+    """
+    if not _cron_key_ok():
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 403
+
+    import envoy
+    if not envoy.is_on():
+        return jsonify({'ok': True, 'skipped': 'Envoy is not on for this business'}), 200
+    try:
+        out = envoy.run_daily()
+    except Exception as e:  # noqa: BLE001
+        from extensions import db
+        db.session.rollback()
+        automations.record('envoy', ok=False, detail=f'{type(e).__name__}: {e}'[:300])
+        return jsonify({'ok': False, 'error': f'{type(e).__name__}'}), 200
+    automations.record('envoy', items=out.get('found', 0) + out.get('drafted', 0),
+                       detail=(out.get('detail') or out.get('skipped') or '')[:300])
+    return jsonify(out)
+
+
 # ── Applicant interview follow-ups (cron — run once daily) ────────────────────
 # Re-sends the bilingual video interview link every 2 days to applicants who
 # haven't responded (up to 2 extra nudges), then marks them "No Response".

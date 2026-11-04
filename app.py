@@ -41,6 +41,7 @@ from blueprints.voice import voice_bp
 from blueprints.payments import payments_bp
 from blueprints.claims import claims_bp
 from blueprints.places_finder import places_finder_bp
+from blueprints.envoy import envoy_bp
 from blueprints.team_logins import team_logins_bp
 from blueprints.migration import migration_bp
 from blueprints.commercial import commercial_bp
@@ -247,6 +248,7 @@ def create_app():
     app.register_blueprint(payments_bp)
     app.register_blueprint(claims_bp)
     app.register_blueprint(places_finder_bp)
+    app.register_blueprint(envoy_bp)
     app.register_blueprint(team_logins_bp)
     app.register_blueprint(migration_bp)
     app.register_blueprint(commercial_bp)

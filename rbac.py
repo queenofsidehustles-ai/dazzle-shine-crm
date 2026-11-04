@@ -175,6 +175,11 @@ OWNER_ONLY_ENDPOINTS = frozenset({
     ('places_finder.assign_many', 'POST'),
     ('places_finder.team', 'GET'),
     ('places_finder.set_targets', 'POST'),
+    # Envoy is the owner's morning list, its settings and its AI spend.
+    ('envoy.page', 'GET'),
+    ('envoy.save', 'POST'),
+    ('envoy.run_now', 'POST'),
+    ('envoy.redraft', 'POST'),
     ('messages.request_bgcheck', 'POST'),
     ('staff.index', 'GET'),
     ('staff.edit', 'POST'),
