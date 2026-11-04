@@ -22,6 +22,12 @@ never touched by this.
 
 LEGACY_NAME = 'Dazzle & Shine Maids'
 
+# The original business's company address on hosted Akye (adopt_tenant.py moved
+# it there). Named here, the one module allowed to name it, so a feature can
+# be released to it first without the name being written anywhere else --
+# envoy.DEFAULT_COHORT reads it.
+LEGACY_TENANT_SLUG = 'dazzleandshine'
+
 LEGACY_SETTINGS = {
     # The residential brand — the business's own name and gold palette.
     'brand_tagline': 'Professional Cleaning Proposal',

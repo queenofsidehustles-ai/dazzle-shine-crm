@@ -1,0 +1,244 @@
+{% extends "base_admin.html" %}
+{% block title %}Envoy — {{ BIZ }} CRM{% endblock %}
+
+{% block content %}
+<style>
+  .env-grid { display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); }
+  .env-draft { margin:10px 0 0; }
+  .env-draft-head { display:flex; justify-content:space-between; align-items:center; gap:8px;
+                    font-size:var(--t-xs); text-transform:uppercase; letter-spacing:.04em; color:var(--softer); }
+  .env-draft textarea { width:100%; font-size:var(--t-sm); line-height:1.5;
+                        resize:vertical; background:var(--ground, #f7f8fb); }
+  .env-meta { color:var(--softer); font-size:var(--t-sm); }
+  .env-pros { margin:0 0 18px; }
+  .env-pros h3 { margin:0 0 4px; font-size:1.05rem; }
+  .env-row { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; }
+  .env-score td, .env-score th { padding:6px 10px; text-align:right; }
+  .env-score td:first-child, .env-score th:first-child { text-align:left; }
+  .env-days { display:grid; gap:8px; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); }
+  details.env-more summary { cursor:pointer; color:var(--amber-deep); font-size:var(--t-sm); }
+</style>
+
+{% macro copybox(label, text, key, rows=3) -%}
+<div class="env-draft">
+  <div class="env-draft-head">
+    <span>{{ label }}</span>
+    <button type="button" class="btn btn-outline btn-sm env-copy" data-copy="{{ key }}">Copy</button>
+  </div>
+  <textarea id="{{ key }}" readonly rows="{{ rows }}" aria-label="{{ label }}">{{ text }}</textarea>
+</div>
+{%- endmacro %}
+
+{% if not st.ready %}
+<div class="card" style="border-left:4px solid var(--amber);background:var(--amber-soft);margin-bottom:18px">
+  <strong>{{ st.reason }}</strong>
+  {% if not st.enabled and st.switched_on %}
+  <div class="env-meta" style="margin-top:6px">Envoy finds up to {{ cfg.daily_limit }} businesses each
+    weekday morning in your area, reads their listing and website, and drafts the first
+    email and call for you. Nothing goes out until you send it.</div>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- ── Today ─────────────────────────────────────────────── -->
+<div class="card" style="margin-bottom:18px">
+  <div class="env-row" style="justify-content:space-between">
+    <div>
+      <h2 style="margin:0">Today, {{ day.strftime('%A %b %-d') }}</h2>
+      <div class="env-meta">
+        {% if category %}{{ audience.get(category, category) | capitalize }}{% if cfg.area %} around {{ cfg.area }}{% endif %}{% else %}A day off in your rotation{% endif %}
+        {% if run and run.detail %} · {{ run.detail }}{% endif %}
+        · {{ ai_used }} of {{ cfg.ai_cap }} AI drafts used today
+      </div>
+    </div>
+    {% if st.ready %}
+    <form method="post" action="{{ url_for('envoy.run_now') }}">
+      <button type="submit" class="btn btn-gold">{% if run %}Finish today's drafts{% else %}Find today's businesses now{% endif %}</button>
+    </form>
+    {% endif %}
+  </div>
+  {% if st.ready and not run %}
+  <p class="env-meta" style="margin:10px 0 0">This runs on its own after {{ run_after }}am. The button does it now.</p>
+  {% endif %}
+</div>
+
+{% for p in made %}
+{% set d = drafts.get(p.id) %}
+<div class="card env-pros" id="p{{ p.id }}">
+  <div class="env-row" style="justify-content:space-between">
+    <div>
+      <h3>{{ p.business_name }}</h3>
+      <div class="env-meta">
+        {{ category_labels.get(p.category, p.category) }}
+        {% if p.rating %} · ★ {{ '%.1f'|format(p.rating) }}{% endif %}
+        {% if p.address %} · {{ p.address }}{% endif %}
+      </div>
+      <div class="env-row" style="margin-top:6px">
+        {% if p.phone %}<a href="tel:{{ p.phone }}">{{ p.phone }}</a>{% endif %}
+        {% if p.website and p.website.startswith(('http://', 'https://')) %}<a href="{{ p.website }}" target="_blank" rel="noopener noreferrer">Website</a>{% endif %}
+        {% if p.email %}<span class="env-meta">{{ p.email }} <small>(from their website)</small></span>{% endif %}
+        <span class="badge badge-muted">{{ p.stage_label }}</span>
+      </div>
+    </div>
+    <div class="env-row">
+      <a href="{{ url_for('places_finder.call_sheet', prospect_id=p.id) }}" class="btn btn-gold btn-sm">Call &amp; log it</a>
+      <form method="post" action="{{ url_for('envoy.redraft', prospect_id=p.id) }}">
+        <button type="submit" class="btn btn-outline btn-sm">{{ 'Rewrite drafts' if d else 'Write drafts' }}</button>
+      </form>
+    </div>
+  </div>
+  {% if d %}
+  <div class="env-meta" style="margin-top:8px">
+    {% if d.source == 'ai' %}<span class="badge badge-info">Drafted with AI</span>{% else %}<span class="badge badge-muted">From the template</span>{% endif %}
+    Read it before you use it.
+  </div>
+  {{ copybox('First line', d.first_line, 'd' ~ p.id ~ 'first') }}
+  {{ copybox('Call script (30 seconds)', d.call_script, 'd' ~ p.id ~ 'call', 4) }}
+  {{ copybox('Email subject', d.email_subject, 'd' ~ p.id ~ 'subj', 1) }}
+  {{ copybox('Intro email', d.email_body, 'd' ~ p.id ~ 'email', 10) }}
+  <details class="env-more" style="margin-top:10px">
+    <summary>Follow-ups for day 3 and day 7</summary>
+    {{ copybox('Day 3 follow-up', d.followup_day3, 'd' ~ p.id ~ 'f3') }}
+    {{ copybox('Day 7 follow-up', d.followup_day7, 'd' ~ p.id ~ 'f7') }}
+  </details>
+  {% else %}
+  <p class="env-meta" style="margin:10px 0 0">Drafts not written yet.</p>
+  {% endif %}
+</div>
+{% else %}
+{% if run %}
+<div class="card env-meta" style="margin-bottom:18px">No new businesses today.</div>
+{% endif %}
+{% endfor %}
+
+<!-- ── Follow-ups ─────────────────────────────────────────── -->
+<div class="card" style="margin-bottom:18px">
+  <h2 style="margin:0 0 4px">Follow-ups due</h2>
+  <div class="env-meta" style="margin-bottom:10px">Every lead with a next step due today or earlier, from its own date.</div>
+  {% if followups %}
+  {% for f in followups %}
+  {% set p = f.prospect %}
+  <div style="border-top:1px solid var(--line-soft);padding:10px 0">
+    <div class="env-row" style="justify-content:space-between">
+      <div>
+        <strong>{{ p.business_name }}</strong>
+        <span class="env-meta"> · {{ p.next_action or 'Follow up' }} · due {{ p.next_action_date or 'today' }}</span>
+        {% if f.overdue %}<span class="badge badge-warn">Overdue</span>{% endif %}
+        {% if p.source == 'envoy' %}<span class="badge badge-muted">Envoy</span>{% endif %}
+      </div>
+      <a href="{{ url_for('places_finder.call_sheet', prospect_id=p.id) }}" class="btn btn-outline btn-sm">Open</a>
+    </div>
+    {% if f.followup %}
+    {{ copybox(f.followup_label | capitalize ~ ' follow-up', f.followup, 'f' ~ p.id) }}
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% else %}
+  <p class="env-meta" style="margin:0">Nothing due. Anything scheduled comes back on its own date.</p>
+  {% endif %}
+</div>
+
+<!-- ── Scoreboard ─────────────────────────────────────────── -->
+<div class="card" style="margin-bottom:18px">
+  <h2 style="margin:0 0 8px">Scoreboard</h2>
+  <div class="table-wrap">
+  <table class="env-score" style="width:100%;border-collapse:collapse">
+    <thead><tr><th></th><th>This week</th><th>This month</th></tr></thead>
+    <tbody>
+      {% for key, label in [('found', 'Found'), ('contacted', 'Contacted'), ('walkthroughs', 'Walkthroughs'),
+                            ('quotes', 'Quotes'), ('won', 'Won')] %}
+      <tr><td>{{ label }}</td><td>{{ score.week[key] }}</td><td>{{ score.month[key] }}</td></tr>
+      {% endfor %}
+      <tr><td>New monthly revenue</td>
+          <td>${{ '{:,.0f}'.format(score.week.new_mrr) }}</td>
+          <td>${{ '{:,.0f}'.format(score.month.new_mrr) }}</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <details class="env-more" style="margin-top:8px">
+    <summary>How these are counted</summary>
+    <p class="env-meta" style="margin:6px 0 0">Only businesses Envoy found. Contacted means a call,
+      text or email logged on the call sheet. Walkthroughs are booked or done. Quotes are commercial
+      quotes sent or home quotes written. Won means it became a commercial account, accepted a
+      quote, or its home quote converted. New monthly revenue adds up what those wins are worth a
+      month. Each business counts once per line.</p>
+  </details>
+</div>
+
+<!-- ── Settings ───────────────────────────────────────────── -->
+<div class="card" style="margin-bottom:18px">
+  <h2 style="margin:0 0 10px">Envoy settings</h2>
+  <form method="post" action="{{ url_for('envoy.save_settings') }}">
+    <div class="form-group">
+      <label style="display:flex;gap:8px;align-items:center;font-weight:600">
+        <input type="checkbox" name="enabled" value="1" {{ 'checked' if cfg.enabled }}> Envoy is on
+      </label>
+    </div>
+    <div class="env-grid">
+      <div class="form-group"><label for="env-area">Service area (town and state)</label>
+        <input type="text" id="env-area" name="area" value="{{ cfg.area }}" placeholder="Your town, ST"></div>
+      <div class="form-group"><label for="env-radius">Radius (miles)</label>
+        <input type="number" id="env-radius" name="radius_miles" min="1" max="30" value="{{ cfg.radius_miles }}"></div>
+      <div class="form-group"><label for="env-limit">Businesses a day</label>
+        <input type="number" id="env-limit" name="daily_limit" min="1" max="25" value="{{ cfg.daily_limit }}"></div>
+      <div class="form-group"><label for="env-cap">AI drafts a day (most)</label>
+        <input type="number" id="env-cap" name="ai_cap" min="0" max="50" value="{{ cfg.ai_cap }}"></div>
+    </div>
+    <details class="env-more" style="margin:0 0 12px">
+      <summary>Center on a map point (optional)</summary>
+      <div class="env-grid" style="margin-top:8px">
+        <div class="form-group"><label for="env-lat">Latitude</label>
+          <input type="text" id="env-lat" name="lat" value="{{ cfg.center[0] if cfg.center else '' }}" placeholder="e.g. 35.2271"></div>
+        <div class="form-group"><label for="env-lng">Longitude</label>
+          <input type="text" id="env-lng" name="lng" value="{{ cfg.center[1] if cfg.center else '' }}" placeholder="e.g. -80.8431"></div>
+      </div>
+      <p class="env-meta" style="margin:0">With a point, businesses outside the radius are left out.</p>
+    </details>
+    <label>Who to look for, by day</label>
+    <div class="env-days" style="margin-bottom:14px">
+      {% for i in range(7) %}
+      <div><label for="env-day{{ i }}" style="font-weight:500">{{ weekdays[i] }}</label>
+        <select id="env-day{{ i }}" name="day_{{ i }}">
+          <option value="" {{ 'selected' if not cfg.rotation[i] }}>Day off</option>
+          {% for c in categories %}
+          <option value="{{ c }}" {{ 'selected' if cfg.rotation[i] == c }}>{{ category_labels.get(c, c) }}</option>
+          {% endfor %}
+        </select></div>
+      {% endfor %}
+    </div>
+    <div class="env-grid">
+      <div class="form-group"><label for="env-sender">Drafts signed by</label>
+        <input type="text" id="env-sender" name="sender" value="{{ cfg.sender }}" placeholder="Your first and last name"></div>
+      <div class="form-group"><label for="env-services">What you offer, in a few words</label>
+        <input type="text" id="env-services" name="services" value="{{ cfg.services }}" placeholder="move-out, turnover and recurring cleaning"></div>
+    </div>
+    <div class="form-group"><label for="env-voice">How you sound</label>
+      <input type="text" id="env-voice" name="voice" value="{{ cfg.voice }}" placeholder="warm, plain-spoken, never pushy"></div>
+    <div class="form-group">
+      <label style="display:flex;gap:8px;align-items:center;font-weight:500">
+        <input type="checkbox" name="email_owner" value="1" {{ 'checked' if cfg.email_owner }}> Email me the list each morning
+      </label>
+    </div>
+    <p class="env-meta">Drafts never quote a price. They offer a free walkthrough and a written quote,
+      and only use what the business's listing and website say.</p>
+    <button type="submit" class="btn btn-gold">Save</button>
+  </form>
+</div>
+
+<script>
+(function () {
+  function copy(el, btn) {
+    var done = function () { var t = btn.textContent; btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = t; }, 1400); };
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(el.value).then(done, function () { el.select(); document.execCommand('copy'); done(); });
+    } else { el.select(); document.execCommand('copy'); done(); }
+  }
+  document.querySelectorAll('.env-copy').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var el = document.getElementById(btn.getAttribute('data-copy'));
+      if (el) copy(el, btn);
+    });
+  });
+})();
+</script>
+{% endblock %}

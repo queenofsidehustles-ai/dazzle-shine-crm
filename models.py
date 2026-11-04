@@ -2445,6 +2445,55 @@ class ProspectActivity(db.Model):
     NO_CONVERSATION = ('no_answer', 'voicemail', 'new', None, '')
 
 
+class EnvoyRun(db.Model):
+    """One morning of Envoy (envoy.py): the day's search, and what came of it.
+
+    The run_date is unique, and that is the whole point of the table. The
+    scheduler wakes Envoy every hour, and two of those can overlap; whichever
+    inserts today's row first does the searching, and the other gets an
+    IntegrityError and searches nothing. A second Google search (billed) and a
+    second batch of the same ten businesses is exactly what this prevents.
+    """
+    __tablename__ = 'envoy_run'
+    id = db.Column(db.Integer, primary_key=True)
+    run_date = db.Column(db.String(10), unique=True, nullable=False)   # local YYYY-MM-DD
+    category = db.Column(db.String(40))
+    started_at = db.Column(db.DateTime, default=datetime.utcnow)
+    finished_at = db.Column(db.DateTime)
+    found = db.Column(db.Integer, default=0)       # listings Google returned
+    created = db.Column(db.Integer, default=0)     # new prospects added
+    detail = db.Column(db.String(300))             # why nothing was added, if so
+    emailed_at = db.Column(db.DateTime)            # the owner's morning email
+
+
+class EnvoyDraft(db.Model):
+    """What Envoy wrote for one prospect: the words, never a send.
+
+    Nothing here is sent anywhere. The owner copies what she wants and sends it
+    herself, through the call sheet or her own mail, where the existing rules
+    (sending domain, unsubscribe, quiet hours) already apply.
+
+    `source` says who wrote it: 'ai' (Claude, on the FAST model) or 'template'
+    (no model involved -- the AI switch was off, the daily cap was reached, or
+    Claude's answer broke a rule and was thrown away). `facts` is what the
+    words were allowed to draw on, kept so a draft can be checked against it.
+    """
+    __tablename__ = 'envoy_draft'
+    id = db.Column(db.Integer, primary_key=True)
+    prospect_id = db.Column(db.Integer, unique=True, nullable=False, index=True)
+    first_line = db.Column(db.Text)
+    email_subject = db.Column(db.String(200))
+    email_body = db.Column(db.Text)
+    call_script = db.Column(db.Text)
+    followup_day3 = db.Column(db.Text)
+    followup_day7 = db.Column(db.Text)
+    source = db.Column(db.String(20), default='template')
+    model = db.Column(db.String(60))
+    facts = db.Column(db.Text)                     # JSON
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 class User(db.Model):
     """A person who can log into the CRM.
     role 'owner'  → sees everything, money included (that's Monica).

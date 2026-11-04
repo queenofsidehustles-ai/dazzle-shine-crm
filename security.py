@@ -85,6 +85,9 @@ CRON_PATHS = frozenset({
     '/api/lifecycle-emails',
     '/api/owner-digest',
     '/api/rental-turnovers',
+    # Envoy's hourly wake-up (scheduler.RELEASED_JOBS): a company job like the
+    # rest, only called for the companies it has been released to.
+    '/api/envoy-daily',
 })
 # The product's own jobs (scheduler.PRODUCT_JOBS, and the demo rebuild), run at
 # the product's address rather than a company's.

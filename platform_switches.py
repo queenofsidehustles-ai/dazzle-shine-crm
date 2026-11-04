@@ -8,6 +8,7 @@ stop any of them was to change an environment variable and redeploy:
     sms              every text, from every company, through Akye's Twilio
     voice            every call placed from the Find Leads call sheet
     partner_payouts  sending money to affiliate partners
+    envoy            Envoy's morning searches and drafts (envoy.py)
 
 The console flips them in the `product_switches` table that the email switches
 already use, under a `platform.` prefix so the two can never collide.
@@ -65,6 +66,13 @@ SWITCHES = [
     ('partner_payouts', 'Partner payouts',
      'Stops sending money to affiliate partners. Commissions keep accruing and '
      'nothing is lost; paying resumes when it is turned back on.',
+     None),
+    # Envoy's morning searches cost a Google call each and its drafts cost
+    # Claude credits. Off here stops both for every company it is released to;
+    # the prospects and drafts already made stay where they are.
+    ('envoy', 'Envoy',
+     'Stops Envoy finding new businesses and writing drafts, for every company. '
+     'Prospects and drafts already made are kept.',
      None),
 ]
 KEYS = [k for k, *_ in SWITCHES]

@@ -92,11 +92,17 @@ def api_key_present():
     return not demo_guard.active() and bool(integrations.google_places_api_key())
 
 
-def search_businesses(category, location, api_key=None):
+def search_businesses(category, location, api_key=None, center=None, radius_m=None):
     """Search public business listings for one category in one place.
 
     Returns (success: bool, listings: list[dict], error: str).
     Each listing: {place_id, business_name, phone, website, address, city, rating}.
+
+    `center` ((lat, lng)) and `radius_m` are optional and used by Envoy: Google
+    is asked to prefer results inside that circle, and each listing then also
+    carries its own lat/lng so the caller can drop the ones outside it (a bias
+    is a preference, not a fence). Without them the request is exactly what it
+    always was -- same fields, same price tier.
     """
     import demo_guard
     if demo_guard.active():
@@ -108,15 +114,24 @@ def search_businesses(category, location, api_key=None):
         return False, [], 'Google Places API key not configured'
 
     text_query = f"{CATEGORY_QUERIES.get(category, category)} in {location}".strip()
+    body = {'textQuery': text_query, 'maxResultCount': 20}
+    field_mask = FIELD_MASK
+    if center and radius_m:
+        body['locationBias'] = {'circle': {
+            'center': {'latitude': float(center[0]), 'longitude': float(center[1])},
+            # Google's ceiling for a bias circle is 50 km.
+            'radius': float(min(max(radius_m, 1), 50000)),
+        }}
+        field_mask = FIELD_MASK + ',places.location'
     try:
         resp = requests.post(
             PLACES_URL,
             headers={
                 'Content-Type': 'application/json',
                 'X-Goog-Api-Key': api_key,
-                'X-Goog-FieldMask': FIELD_MASK,
+                'X-Goog-FieldMask': field_mask,
             },
-            json={'textQuery': text_query, 'maxResultCount': 20},
+            json=body,
             timeout=15,
         )
         if resp.status_code != 200:
@@ -129,7 +144,7 @@ def search_businesses(category, location, api_key=None):
 
         listings = []
         for p in resp.json().get('places', []):
-            listings.append({
+            row = {
                 'place_id': p.get('id', ''),
                 'business_name': (p.get('displayName') or {}).get('text', 'Unknown'),
                 'phone': p.get('nationalPhoneNumber', ''),
@@ -137,7 +152,11 @@ def search_businesses(category, location, api_key=None):
                 'address': p.get('formattedAddress', ''),
                 'city': location,
                 'rating': p.get('rating'),
-            })
+            }
+            loc = p.get('location') or {}
+            if 'latitude' in loc and 'longitude' in loc:
+                row['lat'], row['lng'] = loc['latitude'], loc['longitude']
+            listings.append(row)
         return True, listings, ''
     except requests.RequestException as e:
         return False, [], f'Network error reaching Google Places: {e}'

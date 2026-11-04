@@ -113,6 +113,11 @@ TIPS = {
         "Find offices, gyms and restaurants near you that need regular cleaning, "
         "and work through calling them one at a time. Contracts pay every month.",
         None, 'How do I win my first commercial cleaning contract?'),
+    'envoy.page': (
+        'Envoy',
+        "Each morning, a short list of local businesses worth calling, with the "
+        "first email and call already drafted. Nothing is sent until you send it.",
+        None, None),
     'commercial.index': (
         'Commercial accounts',
         "Businesses you clean on contract, with their schedule and monthly value. "
