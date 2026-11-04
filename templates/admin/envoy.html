@@ -21,6 +21,34 @@
 </div>
 {%- endmacro %}
 
+{% macro send_form(p, d, label) -%}
+<div class="envoy-draft">
+  <div class="envoy-draft-head">
+    <span>{{ label }}{% if d.source == 'template' %} <em class="envoy-tag">template</em>{% endif %}</span>
+    <button type="button" class="btn btn-outline btn-sm" data-copy="envoy-d{{ d.id }}">Copy</button>
+  </div>
+  <form method="POST" action="{{ url_for('envoy.send', prospect_id=p.id) }}" class="envoy-send">
+    <input type="hidden" name="kind" value="{{ d.kind }}">
+    <label>To <input type="email" name="to" value="{{ p.email or '' }}" placeholder="No email on their website — add one, or call them" required></label>
+    <label>Subject <input type="text" name="subject" value="{{ d.subject or '' }}" required></label>
+    <textarea name="body" id="envoy-d{{ d.id }}" rows="9" required>{{ d.body }}</textarea>
+    <div class="envoy-send-foot">
+      <span class="envoy-note">Your business address and a "reply no thanks" line are added at the bottom.</span>
+      <button type="submit" class="btn btn-gold btn-sm" {% if not data.mailing_address %}disabled{% endif %}>Send</button>
+    </div>
+  </form>
+</div>
+{%- endmacro %}
+
+{% macro site_line(p) -%}
+{% set site = data.sites.get(p.id) %}
+{% if site and site.ok %}
+<div class="envoy-note">Read their website{% if site.title %}: “{{ site.title[:80] }}”{% endif %}.{% if site.email %} Email found: {{ site.email }}.{% else %} No email on it.{% endif %}</div>
+{% elif site and p.website %}
+<div class="envoy-note">Couldn't read their website ({{ site.error }}).</div>
+{% endif %}
+{%- endmacro %}
+
 <div class="topbar">
   <div>
     <h1>Envoy</h1>
@@ -39,6 +67,13 @@
 
   {% if data.why_off %}
   <div class="card" style="border-left:4px solid var(--amber);margin-bottom:18px">{{ data.why_off }}</div>
+  {% endif %}
+  {% if not data.mailing_address %}
+  <div class="card" style="border-left:4px solid var(--amber);margin-bottom:18px">
+    To send from here, add your business mailing address in
+    <a href="{{ url_for('settings.business') }}">Settings</a>. The law requires it on business
+    emails, and Envoy adds it to the bottom for you.
+  </div>
   {% endif %}
   {% if not data.ai_ready %}
   <div class="card" style="margin-bottom:18px;color:var(--softer)">
@@ -82,16 +117,21 @@
           {% if p.phone %}<a href="tel:{{ p.phone }}">{{ p.phone }}</a>{% else %}No phone listed{% endif %}
           {% if p.website %} · <a href="{{ p.website }}" target="_blank" rel="noopener">website</a>{% endif %}
         </div>
+        {{ site_line(p) }}
       </div>
       <div class="envoy-actions">
-        <a class="btn btn-gold btn-sm" href="{{ url_for('places_finder.lead_page', prospect_id=p.id) }}">Open lead to call or email</a>
+        <a class="btn btn-outline btn-sm" href="{{ url_for('places_finder.lead_page', prospect_id=p.id) }}">Log a call</a>
         <form method="POST" action="{{ url_for('envoy.redraft', prospect_id=p.id) }}">
           <button type="submit" class="btn btn-outline btn-sm">Redraft</button>
         </form>
       </div>
     </div>
     {% if mine %}
-      {% for kind in data.kinds %}{% if mine.get(kind) %}{{ draft_block(mine[kind], kind_labels[kind]) }}{% endif %}{% endfor %}
+      {% for kind in data.kinds %}{% if mine.get(kind) %}
+        {% if kind == 'intro_email' %}{{ send_form(p, mine[kind], kind_labels[kind]) }}
+        {% elif kind in ('first_line', 'call_script') %}{{ draft_block(mine[kind], kind_labels[kind]) }}{% endif %}
+      {% endif %}{% endfor %}
+      <p class="envoy-note">The day-3 and day-7 follow-ups appear under Follow-ups when they are due.</p>
     {% else %}
       <p class="envoy-note">Drafts are being written. Refresh in a moment.</p>
     {% endif %}
@@ -114,7 +154,7 @@
         <a class="btn btn-outline btn-sm" href="{{ url_for('places_finder.lead_page', prospect_id=p.id) }}">Open lead</a>
       </div>
     </div>
-    {% if d %}{{ draft_block(d, kind_labels[d.kind]) }}{% endif %}
+    {% if d %}{{ send_form(p, d, kind_labels[d.kind]) }}{% endif %}
   </div>
   {% endfor %}
 
@@ -186,6 +226,10 @@
   .envoy-subject { display:none; }
   .envoy-body { white-space:pre-wrap; word-break:break-word; font-family:inherit; font-size:0.9rem;
                 line-height:1.55; margin:0; }
+  .envoy-send { display:flex; flex-direction:column; gap:8px; }
+  .envoy-send label { font-size:0.82rem; display:flex; flex-direction:column; gap:3px; }
+  .envoy-send input, .envoy-send textarea { width:100%; box-sizing:border-box; font:inherit; font-size:0.9rem; }
+  .envoy-send-foot { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
   .envoy-table-wrap { overflow-x:auto; }
   .envoy-score { width:100%; border-collapse:collapse; font-size:0.9rem; }
   .envoy-score th, .envoy-score td { padding:6px 8px; text-align:right; white-space:nowrap; }
@@ -200,7 +244,7 @@ document.addEventListener('click', function (e) {
   if (!b) return;
   var el = document.getElementById(b.getAttribute('data-copy'));
   if (!el || !navigator.clipboard) return;
-  navigator.clipboard.writeText(el.textContent.trim()).then(function () {
+  navigator.clipboard.writeText((el.value !== undefined ? el.value : el.textContent).trim()).then(function () {
     var was = b.textContent; b.textContent = 'Copied'; setTimeout(function () { b.textContent = was; }, 1600);
   });
 });

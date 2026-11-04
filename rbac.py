@@ -180,6 +180,7 @@ OWNER_ONLY_ENDPOINTS = frozenset({
     ('envoy.save', 'POST'),
     ('envoy.run_now', 'POST'),
     ('envoy.redraft', 'POST'),
+    ('envoy.send', 'POST'),
     ('messages.request_bgcheck', 'POST'),
     ('staff.index', 'GET'),
     ('staff.edit', 'POST'),

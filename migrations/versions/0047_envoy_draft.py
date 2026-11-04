@@ -1,4 +1,4 @@
-"""Envoy's drafts: the outreach it writes for a person to send.
+"""Envoy's drafts, and what it read on each prospect's website.
 
 One row per prospect per kind of draft (first line, intro email, call script,
 day-3 and day-7 follow-ups). A new table and nothing else, so a company that
@@ -32,6 +32,20 @@ def _has_table(name):
 
 
 def upgrade():
+    if not _has_table('envoy_site'):
+        op.create_table(
+            'envoy_site',
+            sa.Column('id', sa.Integer, primary_key=True),
+            sa.Column('prospect_id', sa.Integer, nullable=False),
+            sa.Column('url', sa.String(300)),
+            sa.Column('ok', sa.Boolean),
+            sa.Column('title', sa.String(200)),
+            sa.Column('summary', sa.Text),
+            sa.Column('email', sa.String(200)),
+            sa.Column('error', sa.String(200)),
+            sa.Column('fetched_at', sa.DateTime),
+        )
+        op.create_index('ix_envoy_site_prospect_id', 'envoy_site', ['prospect_id'], unique=True)
     if _has_table('envoy_draft'):
         return
     op.create_table(
@@ -51,3 +65,5 @@ def upgrade():
 def downgrade():
     if _has_table('envoy_draft'):
         op.drop_table('envoy_draft')
+    if _has_table('envoy_site'):
+        op.drop_table('envoy_site')

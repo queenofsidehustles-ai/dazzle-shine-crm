@@ -2445,6 +2445,26 @@ class ProspectActivity(db.Model):
     NO_CONVERSATION = ('no_answer', 'voicemail', 'new', None, '')
 
 
+class EnvoySite(db.Model):
+    """What Envoy read on one prospect's own website, once (site_reader.py).
+
+    Kept so a redraft does not re-read the site, and so the owner can see what
+    a draft was written from. `email` is a public address found on the
+    business's own domain -- also copied onto the prospect when it has none.
+    Migration 0047.
+    """
+    __tablename__ = 'envoy_site'
+    id = db.Column(db.Integer, primary_key=True)
+    prospect_id = db.Column(db.Integer, nullable=False, unique=True, index=True)
+    url = db.Column(db.String(300))
+    ok = db.Column(db.Boolean, default=False)
+    title = db.Column(db.String(200))
+    summary = db.Column(db.Text)
+    email = db.Column(db.String(200))
+    error = db.Column(db.String(200))
+    fetched_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 class EnvoyDraft(db.Model):
     """One piece of outreach Envoy wrote for one prospect, for a person to send.
 
