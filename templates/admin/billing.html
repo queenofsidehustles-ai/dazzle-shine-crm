@@ -37,11 +37,11 @@
 </div>
 
 {% if referral_url %}
-<div class="card" style="max-width:640px;margin-bottom:16px">
-  <h2 style="margin:0 0 4px;font-size:1.05rem">Refer another cleaning business</h2>
+<div class="card" id="referral" style="max-width:640px;margin-bottom:16px">
+  <h2 style="margin:0 0 4px;font-size:1.05rem">Give a month, get a month</h2>
   <p style="color:var(--muted);margin:0 0 12px">
-    Send this link to an owner you know. When they sign up through it, we'll
-    know it was you.
+    Know another cleaning business owner? Send them your link. When they start
+    paying, you each get a month free, taken off your next bill automatically.
   </p>
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     <input type="text" id="referral-link" value="{{ referral_url }}" readonly
@@ -49,14 +49,30 @@
            onclick="this.select()">
     <button type="button" class="btn-secondary" id="referral-copy">Copy link</button>
   </div>
+  {% set pitch = 'I run my cleaning business on Akye. Sign up with my link and we both get a month free: ' ~ referral_url %}
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+    <a class="btn-secondary" href="sms:?&body={{ pitch | urlencode }}">Text it</a>
+    <a class="btn-secondary" href="mailto:?subject={{ 'A month free on Akye' | urlencode }}&body={{ pitch | urlencode }}">Email it</a>
+    <button type="button" class="btn-secondary" id="referral-share" hidden>Share…</button>
+  </div>
   <p style="color:var(--softer);font-size:0.86rem;margin:10px 0 0">
-    {% if referred %}
-      {{ referred|length }} {{ 'company has' if referred|length == 1 else 'companies have' }}
-      signed up with your link.
+    {% if referral and referral.signed_up %}
+      {{ referral.signed_up }} {{ 'company has' if referral.signed_up == 1 else 'companies have' }}
+      signed up with your link, {{ referral.paying }} paying.
+      {{ referral.months }} of {{ referral.cap }} free months earned.
     {% else %}
-      Nobody has signed up with your link yet.
+      Nobody has signed up with your link yet. You can earn up to
+      {{ referral.cap if referral else 12 }} free months.
     {% endif %}
   </p>
+  {% if referral and referral.rows %}
+  <ul style="list-style:none;margin:10px 0 0;padding:0;font-size:0.9rem">
+    {% for r in referral.rows %}
+    <li style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-top:1px solid var(--border)">
+      <span>{{ r.name }}</span><span style="color:var(--muted)">{{ r.state }}</span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
 </div>
 <script>
   (function () {
@@ -69,6 +85,13 @@
       if (navigator.clipboard) navigator.clipboard.writeText(box.value).then(done, function () { document.execCommand('copy'); done(); });
       else { document.execCommand('copy'); done(); }
     });
+    var share = document.getElementById('referral-share');
+    if (share && navigator.share) {
+      share.hidden = false;
+      share.addEventListener('click', function () {
+        navigator.share({title: 'A month free on Akye', text: 'I run my cleaning business on Akye. Sign up with my link and we both get a month free.', url: box.value}).catch(function () {});
+      });
+    }
   })();
 </script>
 {% endif %}

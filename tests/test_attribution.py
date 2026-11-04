@@ -255,7 +255,8 @@ else:
             from blueprints.billing_routes import _referral
             url, referred = _referral(control_plane.find(engine, first_slug))
         check(url == f'https://akyehq.test/r/{first_slug}', f'the link is on the product site ({url})')
-        check([x['slug'] for x in referred] == [second_slug], 'with who used it')
+        check(referred.get('signed_up') == 1 and len(referred['rows']) == 1,
+              'with who used it')
         owner = app.test_client()
         TENANT = {'Host': f'{first_slug}.akyehq.test'}
         owner.get(welcome, headers=TENANT)

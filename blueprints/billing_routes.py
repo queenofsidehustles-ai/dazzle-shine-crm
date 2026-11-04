@@ -116,32 +116,30 @@ def billing_home():
                 org, f'{branding.crm_base()}/billing')
         except Exception:
             portal_url = None
-    referral_url, referred = _referral(org)
+    referral_url, referral = _referral(org)
     return render_template('admin/billing.html', org=org, state=state,
                            plans=entitlements.PLANS, portal_url=portal_url,
                            can_pay=billing.configured(),
-                           referral_url=referral_url, referred=referred,
+                           referral_url=referral_url, referral=referral,
                            usage={k: entitlements.usage(k)
                                   for k in ('field_workers', 'jobs_per_month',
                                             'clients')})
 
 
 def _referral(org):
-    """This company's referral link on the product site, and who used it.
+    """This company's referral link on the product site, and what it has done.
 
-    (None, []) on a single-business deployment, where there is no product
-    site to send anybody to.
+    (None, {}) on a single-business deployment, where there is no product
+    site to send anybody to. The summary has company names and states only.
     """
-    import product
-    if not org or not product.domain():
-        return None, []
-    host = product.canonical_host() or product.domain()
-    url = f'{product.scheme_for(host)}://{host}/r/{org["slug"]}'
+    import referrals
+    url = referrals.link_for(org)
+    if not url:
+        return None, {}
     try:
-        referred = control_plane.referred_by(billing._engine(), org['slug'])
+        return url, referrals.summary(billing._engine(), org['slug'])
     except Exception:
-        referred = []
-    return url, referred
+        return url, {}
 
 
 @billing_bp.route('/billing/nudge-preference', methods=['POST'])
