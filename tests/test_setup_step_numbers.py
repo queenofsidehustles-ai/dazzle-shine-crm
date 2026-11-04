@@ -63,39 +63,47 @@ with app.app_context():
     BusinessSetting.set('pricing_reviewed', '1')
     db.session.commit()
 
-print('\n1. The required steps number 1..4, the same four the meter counts')
+print('\n1. The required steps number 1..3, the same three the meter counts')
 with app.app_context():
     prog = onboarding.progress()
     total = prog['total']
     req = [s['key'] for s in prog['steps'] if s.get('required')]
-check(total == 4, f'the meter counts four required steps ({total})')
-check(req == ['business', 'team', 'pricing', 'payments'],
-      f'and they are details, team, prices, payments: {req}')
+check(total == 3, f'the meter counts three required steps ({total})')
+check(req == ['business', 'team', 'pricing'],
+      f'and they are details, team, prices: {req}')
 
-print('\n2. The team card says "Step 2 of 4", not "of 9"')
+print('\n2. The team card says "Step 2 of 3", not "of 9"')
 cards = next_card('team')
 team = cards[0]
 check(team.get('kind') == 'team', f"it is the team card ({team.get('kind')})")
-check(team.get('step_total') == 4, f"denominator matches the meter: of {team.get('step_total')}")
-check(team.get('step_no') == 2, f"and it is step {team.get('step_no')} of four")
+check(team.get('step_total') == 3, f"denominator matches the meter: of {team.get('step_total')}")
+check(team.get('step_no') == 2, f"and it is step {team.get('step_no')} of three")
 
-print('\n3. Payments is next, and is the fourth of the four the meter counts')
+print('\n3. Payments is not a numbered step: it waits for a first customer')
 with app.app_context():
     # What the team card's Save leaves: the owner confirmed as a cleaner.
     BusinessSetting.set('team_confirmed', '1')
     db.session.commit()
-cards = all_cards('payments')
-with app.app_context():
-    req = [s['key'] for s in onboarding.progress()['steps'] if s.get('required')]
-check(req.index('payments') + 1 == 4, 'payments is required step 4 of 4 on the meter')
-numbered = [c for c in cards if c.get('step_no')]
-check(all(c.get('step_no') == 4 and c.get('step_total') == 4 for c in numbered),
-      f'any number on its card says 4 of 4: {[(c.get("step_no"), c.get("step_total")) for c in numbered]}')
-check(any(c.get('kind') == 'skip' for c in cards), 'and it can still be skipped for tonight')
+    prog = onboarding.progress()
+check(prog['complete'] is True, 'three of three is complete')
+cards = all_cards('terms')
+check(not [c for c in cards if c.get('step_no')], 'the next card (terms) carries no step number')
+from_payments = None
+with app.app_context(), app.test_request_context():
+    from flask import session
+    session['role'] = 'owner'
+    for k in ('terms', 'balance', 'booking_page'):
+        setup_assistant.skip(k)
+    _t, pcards, pkey = setup_assistant.next_message()
+check(pkey == 'payments', f'payments is offered after the booking page ({pkey})')
+check(not [c for c in pcards if c.get('step_no')], 'and is not numbered')
+check(any(c.get('kind') == 'skip' for c in pcards), 'and can be skipped')
 
 print('\n4. Terms comes after, unnumbered, and offers an edit link, not only Accept')
-with app.app_context(), app.test_request_context():
-    setup_assistant.skip('payments')
+with app.app_context():
+    from models import BusinessSetting as _B
+    _B.set(setup_assistant.SKIPPED_KEY, '')
+    db.session.commit()
 terms = next_card('terms')[0]
 check(not terms.get('step_no') and not terms.get('step_total'),
       f"terms is a go-live check, not step N of 4 ({terms.get('step_no')}/{terms.get('step_total')})")

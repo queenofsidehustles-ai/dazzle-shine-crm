@@ -294,8 +294,8 @@
       {% endif %}
       {# Payments is tracked rather than required: a business can take
          bookings without it and cannot be paid without it, so it stays in
-         front of somebody instead of blocking them. Amber once setup is
-         done, red after three days of being put off. Not on the
+         front of somebody instead of blocking them. Amber once a first
+         booking exists, red after three days of being put off. Not on the
          getting-started page itself: that page already offers payments as its
          next step, and the bar on top made it the same ask twice on screen. #}
       {% if ON_START and SETUP and SETUP.payments
@@ -303,7 +303,7 @@
       <a href="{{ url_for('settings.connections') }}"
          class="setupbar {{ 'urgent' if SETUP.payments == 'red' }}">
         <b>{% if SETUP.payments == 'red' %}Still no way to take card payments.
-           {% else %}You can take bookings. You can't take payments yet.{% endif %}</b>
+           {% else %}You have a booking. You can't take card payments yet.{% endif %}</b>
         Connecting Stripe takes a few minutes and your bank details stay with you.
         <span class="go">Connect →</span>
       </a>

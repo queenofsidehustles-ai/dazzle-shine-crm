@@ -7,9 +7,8 @@ closing "That's the four essentials done" came twice, and the page under the
 chat offered Connect payments again in a bar on top, a Next card and a "more
 things" line -- while a green box said payments were already set.
 
-Since 2026-10-24 balance is no longer one of the four required steps: it is a
-go-live check that comes after payments (and after terms), so it carries no
-"Step N of 4" at all.
+Balance is not a required step: it is a go-live check after terms, so it
+carries no "Step N of 3" at all.
 
 This holds:
   1. balance is ONE card: the question, two answers, and no step number;
@@ -122,31 +121,37 @@ with app.app_context(), app.test_request_context():
              if m.get('role') == 'assistant']
 check(sum(NEXT_Q in m for m in again) == 1,
       'reloading the page does not add it a second time')
-check("You can't take payments yet" not in html,
+check("You can't take payments yet" not in html and "can't take card payments yet" not in html,
       'no payments bar on top of this page')
-check('>Next</div>' in html and 'Connect payments →' in html,
-      'the Next card is the required step still waiting: payments')
-check(html.count('Connect payments →') == 1,
-      'offered once, not in two places')
+check(html.count('Connect payments →') <= 1,
+      'payments is offered at most once, never in two places')
 check('Show me my page →' not in html,
       'and the Next card does not repeat the booking page Nana is asking about')
-check('connect payments,' not in html.lower() and 'connect payments.' not in html.lower(),
-      'and payments is not in the "more things" line either')
 check('payments and balances are all set' not in html,
       'nothing says payments is set when it is not')
 check('id="gs-list"' in html,
       'the list the chat refreshes in place is on the page')
-check('id="gs-ready"' not in html and 'You can take bookings' not in html,
-      'and no "you can take bookings" box while payments, now required, is outstanding')
+check('id="gs-ready"' in html and 'prices are set' in html and 'payments are all set' not in html,
+      'setup is complete without payments, and the box says it is not claiming them')
 
-print('\n4. On the dashboard, the payments bar still shows')
+print('\n4. On the dashboard, no payments bar until a first booking exists')
 with app.test_request_context():
     from flask import url_for
     dash = url_for('admin.dashboard')
 r = c.get(dash, headers=H, follow_redirects=True)
-check("You can't take payments yet" in r.get_data(as_text=True)
+check("can't take card payments yet" not in r.get_data(as_text=True),
+      'nothing nags before there is a customer')
+with app.app_context():
+    from models import Booking
+    db.session.add(Booking(service_type='deep', name='First Customer', email='f@x.test',
+                           phone='4075550101', address='1 Main', price=100.0,
+                           status='confirmed', preferred_date='2030-01-01',
+                           preferred_time='9:00 AM'))
+    db.session.commit()
+r = c.get(dash, headers=H, follow_redirects=True)
+check("can't take card payments yet" in r.get_data(as_text=True)
       or 'Still no way to take card payments' in r.get_data(as_text=True),
-      'the dashboard still carries the reminder')
+      'the first booking brings the reminder')
 
 print()
 if failures:

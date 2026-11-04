@@ -15,9 +15,10 @@ Four things that are genuinely required were not on it:
 
 Two of those four fail silently. Nothing errors; the money does not arrive.
 
-Since 2026-10-24 the required four are details, team, prices and payments.
-Payments is required because being ready to be paid is the point of setting
-up before the first job; it can still be skipped in the chat for tonight.
+Since 2026-11-03 the required three are details, team and prices. Payments
+was the fourth from 2026-10-24, and sign-ups stopped: it asked for a bank
+account and an SSN or EIN before the owner had seen the product work. It is
+now offered after the booking page, and pressed on the first booking.
 The team is required because everybody has one -- the owner herself, if she
 still cleans. Signup makes her row (#158), so the step is done when she has
 confirmed it, not merely because the row exists. Terms and balances both have a safe default (a standard draft
@@ -70,16 +71,16 @@ with app.app_context():
 
 print('\n1. The required steps are the ones that stop a business trading')
 req = keys(required=True)
-check(req == ['business', 'team', 'pricing', 'payments'],
+check(req == ['business', 'team', 'pricing'],
       f'required, in order: {req}')
 # Not on it because nobody is asked: the ZIP decides the timezone at signup,
 # before the owner sees a screen.
 check('timezone' not in req, 'the timezone is worked out, not asked')
-check(keys(required=False) == ['terms', 'balance', 'booking_page', 'client', 'job'],
+check(keys(required=False) == ['terms', 'balance', 'booking_page', 'payments', 'client', 'job'],
       'terms and balance follow as go-live checks; the rest are offered')
 with app.app_context():
     pay = next(s for s in onboarding.journey() if s['key'] == 'payments')
-check(pay.get('urgent') is True, 'payments is still flagged urgent, for the amber/red bar')
+check(not pay.get('required'), 'payments is offered, not required')
 
 print('\n2. None of them need a customer or a job')
 # The team is the one exception that is not one: everybody has themselves.
@@ -123,18 +124,16 @@ with app.app_context():
     BusinessSetting.set('team_confirmed', '1')
     db.session.commit()
     p = onboarding.progress()
-check(p['complete'] is False and p['next_required']['key'] == 'payments',
-      'without payments it is not complete: payments is required now')
-check(p['done'] == 3 and p['total'] == 4, f"three of four ({p['done']}/{p['total']})")
+check(p['complete'] is True, 'without payments it is still complete: payments waits for a first customer')
+check(p['done'] == 3 and p['total'] == 3 and p['percent'] == 100,
+      f"and the bar is full at {p['done']}/{p['total']} ({p['percent']}%)")
 with app.app_context():
     integrations.set('stripe_secret_key', 'sk_live_certifyonly')
     db.session.commit()
     p = onboarding.progress()
 check(p['complete'] is True, 'every required step done is "complete"')
-check(p['done'] == p['total'] == 4 and p['percent'] == 100,
-      f"and the bar is full at {p['done']}/{p['total']} ({p['percent']}%)")
-check(p['optional_done'] == 1 and p['optional_total'] == 5,
-      f"balance chosen above, terms and three offered ones outstanding "
+check(p['optional_done'] == 2 and p['optional_total'] == 6,
+      f"balance and payments done, terms and three offered ones outstanding "
       f"({p['optional_done']}/{p['optional_total']})")
 check(p['next'] is not None and p['next']['key'] == 'terms',
       'there is still a next thing to offer (the terms), so the chat does not go quiet')

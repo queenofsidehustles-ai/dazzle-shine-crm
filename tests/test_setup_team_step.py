@@ -86,7 +86,7 @@ with app.app_context():
     keys = [s['key'] for s in steps if s.get('required')]
     team_step = next(s for s in steps if s['key'] == 'team')
     check(Staff.query.filter_by(is_owner=True).count() == 1, 'signup made her row')
-check(keys == ['business', 'team', 'pricing', 'payments'], f'details, team, prices, payments: {keys}')
+check(keys == ['business', 'team', 'pricing'], f'details, team, prices: {keys}')
 check(team_step['done'] is False, 'her row existing does not finish the step')
 check([s['key'] for s in steps].count('team') == 1, 'and there is no second, optional team step')
 
@@ -97,8 +97,8 @@ with app.app_context(), app.test_request_context():
     _t, cards, key = setup_assistant.next_message()
 team = next((x for x in cards if x.get('kind') == 'team'), None)
 check(key == 'team', f'after details, the chat is on the team ({key})')
-check(team is not None and team.get('step_no') == 2 and team.get('step_total') == 4,
-      'Step 2 of 4')
+check(team is not None and team.get('step_no') == 2 and team.get('step_total') == 3,
+      'Step 2 of 3')
 check(team and team['me']['name'] == 'Mo Lewis' and team['me']['email'] == 'mo@sparkle.test',
       'her name and email are filled in from her row')
 check(team and team['me']['cleans'] is True, '"I clean jobs myself" is ticked')
