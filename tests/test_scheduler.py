@@ -225,6 +225,20 @@ wd = open(os.path.join(os.path.dirname(wf), 'automations-watchdog.yml')).read()
 check('--check' in wd and "'47 */3 * * *'" in wd and 'AKYE_DATABASE_URL' in wd,
       'and a separate schedule fails loudly when the automations stop reporting')
 
+
+print('\n11. A 200 that contains a declined charge is a failed run')
+check(scheduler._judge('{"ok": true, "charged": 1, "results": [{"ok": true}, {"ok": false, "error": "Your card was declined."}]}')
+      == (False, '1 of 2 failed: Your card was declined.'), 'a declined charge fails the job')
+check(scheduler._judge('{"ok": true, "results": [{"ok": true}]}')[0], 'all charged is a success')
+check(scheduler._judge('{"ok": true, "failed": 2}')[0] is False, 'a failed count fails the job')
+check(scheduler._judge('{"ok": true, "failed": ["cleaner reminders: x"]}')[0] is False, 'a list of failures fails the job')
+check(scheduler._judge('{"ok": false, "error": "x"}')[0] is False, 'ok:false fails')
+check(scheduler._judge('{"ok": true, "skipped": "turned off"}')[0], 'skipped is not a failure')
+check(scheduler._judge('{' + 'x' * scheduler.JOB_REPLY_LIMIT)[0] is False,
+      'a reply cut off by the size limit is a failure, not a pass')
+check('Ashley' not in scheduler._judge('{"ok":true,"results":[{"ok":false,"name":"Ashley","error":"e"}]}')[1],
+      'customer names never reach the log')
+
 print()
 if failures:
     print(f'❌ {len(failures)} failed:')

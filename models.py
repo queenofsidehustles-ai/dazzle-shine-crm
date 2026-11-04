@@ -169,6 +169,11 @@ class Booking(db.Model):
     # sends the same request with the same idempotency key instead of a new
     # one. Cleared when Stripe gives a definite answer. Migration 0043.
     charge_pending = db.Column(db.Text)
+    # When an off-session charge was first tried on this job, whatever came of
+    # it. charge_pending is cleared by a decline, so on its own it cannot tell
+    # "declined" from "never tried"; this can. The next-day catch-up only
+    # touches jobs that were never tried. Migration 0046.
+    charge_tried_at = db.Column(db.DateTime)
     deposit_method = db.Column(db.String(20))  # card, cash, zelle, venmo, check, other
     deposit_token = db.Column(db.String(64))   # unique link for paying deposit after a tentative booking
     tip_amount = db.Column(Money, default=0)  # customer's tip — belongs to the cleaner, never revenue

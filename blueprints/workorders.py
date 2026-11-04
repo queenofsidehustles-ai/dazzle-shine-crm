@@ -512,6 +512,9 @@ def add_photo(token):
         upload_id = ''
     if upload_id:
         _one_at_a_time(tenant_slug, upload_id)
+        # Read again now the lock is ours: the checklist was loaded before the
+        # wait, and the attempt we waited for has since committed its photo.
+        db.session.refresh(checklist)
         seen = _photo_with_upload_id(checklist, phase, tenant_slug, upload_id)
         if seen is not None:
             return jsonify({'ok': True, 'duplicate': True,
