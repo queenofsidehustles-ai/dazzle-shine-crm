@@ -175,6 +175,12 @@ OWNER_ONLY_ENDPOINTS = frozenset({
     ('places_finder.assign_many', 'POST'),
     ('places_finder.team', 'GET'),
     ('places_finder.set_targets', 'POST'),
+    # Envoy: the owner's morning list, its settings (which spend a lead
+    # search a day and Claude credits) and its drafts.
+    ('envoy.page', 'GET'),
+    ('envoy.save_settings', 'POST'),
+    ('envoy.run_now', 'POST'),
+    ('envoy.redraft', 'POST'),
     ('messages.request_bgcheck', 'POST'),
     ('staff.index', 'GET'),
     ('staff.edit', 'POST'),

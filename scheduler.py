@@ -80,6 +80,38 @@ PRODUCT_JOBS = [('trial-nudges', 'daily'), ('lead-nurture', 'daily'),
                 ('recording-retention', 'daily')]
 
 
+# Company jobs that exist only for the companies a feature has been released
+# to: (job, cadence, module whose released(slug) decides). Kept out of
+# automations.JOBS on purpose -- that table is every company's Automations
+# page, and a job a company cannot have must not appear there. The endpoint
+# checks the release again for itself, like every other job checks its own
+# switch, so this is a saving of calls rather than the lock.
+#
+# Envoy is hourly although it works once a day: the daily timetable fires in
+# the evening, and the point of Envoy is a list waiting in the morning. Each
+# call before 6am local, or after the day's search, does nothing.
+RELEASED_JOBS = [('envoy-daily', 'hourly', 'envoy')]
+
+
+def released_jobs_for(cadence=None):
+    """The released jobs on this timetable (every timetable when None)."""
+    return [job for job, cad, _m in RELEASED_JOBS if cadence is None or cad == cadence]
+
+
+def released_to(job, slug):
+    """Whether a company gets this job: always for an ordinary job, and for a
+    released one only when its module says the company is in. A module that
+    cannot answer means no -- a job nobody can confirm was released is not."""
+    module = next((m for j, _c, m in RELEASED_JOBS if j == job), None)
+    if module is None:
+        return True
+    try:
+        import importlib
+        return bool(importlib.import_module(module).released(slug))
+    except Exception:
+        return False
+
+
 def jobs_for(cadence):
     return [key for key, _label, _blurb, cad in JOBS if cad == cadence]
 
@@ -306,6 +338,8 @@ def run(jobs, only=None, quiet=False, product_jobs=()):
     for o in orgs:
         slug = o['slug']
         for job in jobs:
+            if not released_to(job, slug):
+                continue
             ok, detail = call(slug, job, base, key)
             if not quiet:
                 mark = '✅' if ok else '❌'
@@ -365,9 +399,10 @@ def main():
         product = [args.job] if args.job in product_jobs_for() else []
         jobs = [] if product else [args.job]
     elif args.cadence:
-        jobs, product = jobs_for(args.cadence), product_jobs_for(args.cadence)
+        jobs = jobs_for(args.cadence) + released_jobs_for(args.cadence)
+        product = product_jobs_for(args.cadence)
     else:
-        jobs, product = all_jobs(), product_jobs_for()
+        jobs, product = all_jobs() + released_jobs_for(), product_jobs_for()
 
     if not jobs and not product:
         sys.exit('No jobs to run — automations.JOBS is empty or the cadence matched none.')

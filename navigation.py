@@ -70,6 +70,8 @@ SECTIONS = [
         ]),
         ('places_finder.dashboard', '🏢', 'Commercial', False, [
             ('places_finder.dashboard', 'Find leads', False),
+            # Shown only to a company Envoy has been released to (RELEASED).
+            ('envoy.page', 'Envoy', True),
             ('commercial.index', 'Accounts', False),
             ('quotes.index', 'Quotes', False),
         ]),
@@ -244,6 +246,7 @@ MIN_PLAN = {
     'settings.automations_page': 'automations',
     'team_logins.index': 'team_logins',
     'places_finder.dashboard': 'lead_finder',
+    'envoy.page': 'lead_finder',
     'commercial.index': 'commercial',
     'quotes.index': 'commercial',
     'settings.commercial': 'multi_brand',
@@ -279,8 +282,28 @@ def _effective_role(role):
     return role if role is not None else 'limited'
 
 
+# Pages that exist only for the companies a feature has been released to, and
+# the module whose released() says which. Not a plan lock (those are drawn,
+# padlocked, to sell the upgrade): a page that is not released to a company
+# does not exist for it, so the menu does not offer it.
+RELEASED = {'envoy.page': 'envoy'}
+
+
+def _released(endpoint):
+    module = RELEASED.get(endpoint)
+    if not module:
+        return True
+    try:
+        import importlib
+        return bool(importlib.import_module(module).released())
+    except Exception:
+        return False
+
+
 def _role_can_open(endpoint, role, owner_only=False):
     """Whether this role may GET the page represented by a menu link."""
+    if not _released(endpoint):
+        return False
     if _is_owner(role):
         return True
     if owner_only:
