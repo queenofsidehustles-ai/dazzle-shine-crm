@@ -417,8 +417,20 @@ def check_request_origin():
         return None
 
     host = request.host
+    # The browser's own word, which a page's script cannot set or fake. When
+    # it says the form came from this very site, that settles it -- and it is
+    # what rescues the in-app browsers (Facebook, Instagram on iPhone) that
+    # send `Origin: null` on an ordinary same-page form, which until now was
+    # refused as "submitted from another site".
+    if (request.headers.get('Sec-Fetch-Site') or '').lower() == 'same-origin':
+        return None
     for header in ('Origin', 'Referer'):
         value = request.headers.get(header)
+        # "null" is a browser declining to say, not naming another site. It
+        # tells us nothing either way, so the Referer decides, exactly as when
+        # no Origin is sent at all.
+        if header == 'Origin' and (value or '').strip().lower() == 'null':
+            continue
         verdict = _same_site(value, host)
         if verdict is None:
             continue
