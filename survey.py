@@ -225,14 +225,16 @@ def existing(engine, slug):
 # ── Reading, for the console ────────────────────────────────────────────────
 
 def responses(engine, limit=500):
-    """Every answer, newest first."""
+    """Answers, newest first. `limit=None` for all of them: totals must be
+    counted over every answer, and only the list of quotes is capped."""
     import control_plane
     from sqlalchemy import select
     t = control_plane.survey_responses
     try:
         with engine.connect() as conn:
             return [dict(r) for r in conn.execute(
-                select(t).order_by(t.c.updated_at.desc()).limit(limit)).mappings()]
+                select(t).order_by(t.c.updated_at.desc())
+                .limit(limit)).mappings()]
     except Exception:
         return []
 

@@ -221,6 +221,17 @@ check('Set up, then went quiet' in page and 'Wants a call' in page
 t = survey.tally(survey.responses(engine))
 check(t['A']['n'] == 1 and t['B']['n'] == 1 and t['B']['calls'] == 1, 'counted per group')
 
+print('\n9b. Totals count every answer, not just the ones listed')
+with engine.begin() as conn:
+    conn.execute(control_plane.survey_responses.insert(), [
+        {'org_slug': f'bulk{i}', 'segment': 'A', 'blockers': 'time',
+         'updated_at': NOW + timedelta(minutes=i)} for i in range(210)])
+page = m.get('/console/survey').data.decode()
+t = survey.tally(survey.responses(engine, limit=None))
+check(t['A']['n'] == 211 and '211 answers' in page,
+      'the group A total is every answer, though only the newest are quoted')
+check(len(survey.responses(engine)) == 212, 'and the default list is still capped higher up')
+
 print('\n10. It ships switched off')
 SENT.clear()
 counts = tn.run(engine, now=NOW, dry_run=False)

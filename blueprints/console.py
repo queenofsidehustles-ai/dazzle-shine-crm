@@ -250,7 +250,10 @@ def survey_view():
     """
     import survey
     engine = _engine()
-    rows = survey.responses(engine)
+    # Totals over every answer; only the list of quotes below is capped.
+    everyone = survey.responses(engine, limit=None)
+    tally = survey.tally(everyone)
+    rows = everyone[:200]
     owners = {o['slug']: o for o in control_plane.all_orgs(engine)}
     for r in rows:
         o = owners.get(r['org_slug']) or {}
@@ -260,7 +263,7 @@ def survey_view():
         r['blocker_labels'] = [survey.BLOCKER_LABELS.get(k, k)
                                for k in (r.get('blockers') or '').split(',') if k]
         r['stuck_label'] = survey.STUCK_LABELS.get(r.get('stuck_at') or '')
-    return render_template('console/survey.html', tally=survey.tally(rows),
+    return render_template('console/survey.html', tally=tally,
                            rows=rows, me=request.console_user,
                            counts=_counts(engine))
 
