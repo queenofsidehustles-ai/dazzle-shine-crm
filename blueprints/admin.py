@@ -158,6 +158,7 @@ def dashboard():
 
     return render_template(
         'admin/dashboard.html',
+        referral_card=_referral_card(),
         plan=_daily_plan(),
         tomorrow_jobs=tomorrow_jobs,
         unassigned_tomorrow=unassigned_tomorrow,
@@ -174,6 +175,24 @@ def dashboard():
         money=money,
         this_month=date.today().strftime('%B'),
     )
+
+
+def _referral_card():
+    """The "give a month, get a month" nudge: the owner, once a job has been
+    paid for through the software -- the moment she is happiest with it.
+    None for anyone else, and when there is no product site to link to."""
+    try:
+        if not is_owner_session():
+            return None
+        if not Booking.query.filter(Booking.paid_at.isnot(None)).first():
+            return None
+        import billing
+        import referrals
+        org = billing.current_org()
+        url = referrals.link_for(org)
+        return {'url': url} if url else None
+    except Exception:
+        return None
 
 
 @admin_bp.route('/reports')

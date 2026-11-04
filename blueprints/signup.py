@@ -303,7 +303,8 @@ def signup():
 
         def again(error):
             return render_template('admin/signup.html', form=form, slug=slug, base=base,
-                                   terms_accepted=terms_accepted, error=error)
+                                   terms_accepted=terms_accepted, error=error,
+                                   sender=_sender())
 
         try:
             error = _validate(form, slug, password, terms_accepted)
@@ -401,7 +402,7 @@ def signup():
         return redirect(f'{scheme}://{slug}.{base}/welcome/{token}')
 
     return render_template('admin/signup.html', form=form, slug='', base=base,
-                           error=None)
+                           error=None, sender=_sender())
 
 
 def _tell_us(slug, form, base):
@@ -480,6 +481,20 @@ def _validate(form, slug, password, terms_accepted=False):
     if not terms_accepted:
         return 'Please agree to the Terms of Service to create an account.'
     return None
+
+
+def _sender():
+    """The company whose link brought this visitor, if it names a real one and
+    the referral is not owed to an affiliate partner (who already earns on it).
+    Shown on the form so the free month is promised only where it is real."""
+    try:
+        came = _came_from()
+        if came.get('aff') or not came.get('ref'):
+            return None
+        import referrals
+        return referrals.sender_name(_engine(), came['ref'])
+    except Exception:
+        return None
 
 
 def _came_from():

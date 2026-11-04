@@ -136,7 +136,14 @@ def getting_started():
             team_me = setup_assistant.team_card()[0]['me']
         except Exception:
             team_me = None
+    referral_link = None
+    try:
+        import billing, referrals
+        referral_link = referrals.link_for(billing.current_org())
+    except Exception:
+        pass
     return render_template('admin/getting_started.html', p=p, chat=chat,
+                           referral_link=referral_link,
                            chat_focus=focus, chat_step=chat_step,
                            assistant_name=setup_assistant.NAME, team_me=team_me)
 

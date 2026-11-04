@@ -357,6 +357,43 @@ affiliate_commissions = Table(
     Column('created_at', DateTime, default=datetime.utcnow),
 )
 
+# What a referral earned, one row per side. "Money follows money": a reward is
+# earned by the referred company's first PAID invoice, never by a signup, so the
+# invoice id is recorded and (referred_slug, side) is unique -- Stripe delivering
+# the same webhook five times earns one reward, and a second invoice earns none.
+# status: pending (waiting for somewhere to be credited) -> applying (claimed,
+# the Stripe call in flight) -> applied (credited to
+# the customer's Stripe balance) -> reversed; or capped / blocked (earned nothing,
+# and why is in `reason`). `amount_cents` is one month's price.
+referral_rewards = Table(
+    'referral_rewards', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('referrer_slug', String(40), nullable=False, index=True),
+    Column('referred_slug', String(40), nullable=False, index=True),
+    Column('side', String(10), nullable=False),            # referrer | referred
+    Column('stripe_invoice_id', String(80), nullable=False),
+    Column('amount_cents', Integer, nullable=False, default=0),
+    Column('status', String(12), nullable=False, default='pending'),
+    Column('stripe_balance_txn', String(80)),
+    # When a credit was last attempted at Stripe, so an uncertain one (the
+    # answer never came back) is looked up before it is ever sent again.
+    Column('attempted_at', DateTime),
+    Column('applied_at', DateTime),
+    Column('reversed_at', DateTime),
+    Column('reason', String(200)),
+    Column('last_error', String(300)),
+    Column('created_at', DateTime, default=datetime.utcnow),
+    UniqueConstraint('referred_slug', 'side', name='uq_referral_reward_once'),
+)
+
+# Invoices refunded in full, so a refund that reaches us before the payment it
+# undoes still undoes it (referrals.earn reads this). One row per invoice.
+referral_refunds = Table(
+    'referral_refunds', control_metadata,
+    Column('stripe_invoice_id', String(80), primary_key=True),
+    Column('created_at', DateTime, default=datetime.utcnow),
+)
+
 affiliate_payouts = Table(
     'affiliate_payouts', control_metadata,
     Column('id', Integer, primary_key=True),
@@ -757,7 +794,7 @@ def ensure_table(engine):
                         product_messages, product_switches,
                         affiliates, affiliate_logins, affiliate_clicks,
                         affiliate_commissions, affiliate_payouts,
-                        platform_runs, howto_misses])
+                        referral_rewards, referral_refunds, platform_runs, howto_misses])
     ensure_columns(engine)
 
 

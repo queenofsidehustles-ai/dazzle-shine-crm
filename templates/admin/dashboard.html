@@ -3,6 +3,30 @@
 {% block page_title %}Dashboard{% endblock %}
 
 {% block content %}
+{% if referral_card %}
+<div id="referral-nudge" hidden>
+<div class="card"
+     style="margin-bottom:16px;border-left:3px solid var(--good);display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+  <div style="flex:1 1 260px">
+    <div style="font-weight:700">Know another cleaning owner?</div>
+    <div style="color:var(--muted);font-size:0.92rem;line-height:1.5">
+      Send them your link. When they start paying, you both get a month free.</div>
+  </div>
+  <a class="btn-primary" href="{{ url_for('billing.billing_home') }}#referral">Get my link</a>
+  <button type="button" class="btn-secondary" id="referral-nudge-x">Not now</button>
+</div>
+</div>
+<script>
+  (function () {
+    var box = document.getElementById('referral-nudge'), key = 'akye-referral-nudge-off';
+    var off = false; try { off = localStorage.getItem(key) === '1'; } catch (e) {}
+    if (!off) box.hidden = false;
+    document.getElementById('referral-nudge-x').addEventListener('click', function () {
+      box.hidden = true; try { localStorage.setItem(key, '1'); } catch (e) {}
+    });
+  })();
+</script>
+{% endif %}
 {# Today's list. Only shown once a business is past setup: a company with no
    customers does not need telling that nobody is waiting on a reply, and the
    getting-started card is a better use of that space. Everything on it is a

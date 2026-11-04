@@ -6,6 +6,11 @@
   <p class="lead">A minute from now you'll have your own CRM at your own web
      address, with nothing in it but your business name.</p>
 
+  {% if sender %}
+  <p class="lead" id="referral-note" style="color:var(--ink);font-weight:600">
+    {{ sender }} sent you. When you start paying, you both get a month free.</p>
+  {% endif %}
+
   {# Track 0: somebody arriving from an ad sees what they are signing up
      for before being asked to. Appears only once the video exists
      (funnel_videos.py) -- never an empty box. #}
