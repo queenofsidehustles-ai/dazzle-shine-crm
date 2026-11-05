@@ -14,7 +14,6 @@
                   background: var(--surface); color: var(--ink); }
   .panel .q { font-weight: 650; margin: var(--s6) 0 var(--s2); }
   .panel .hint { color: var(--softer); font-size: var(--t-xs); margin: 0 0 var(--s2); }
-  .panel .err { color: var(--danger, #b3261e); font-size: var(--t-sm); }
 </style>
 {# Nothing is recorded by opening this page. Mail scanners open every link in
    an email, and a click is not an answer (survey.py). #}
@@ -30,7 +29,7 @@
   <h1>{{ 'What got in the way?' if seg == 'A' else 'What changed?' }}</h1>
   <p class="lead">{{ org.name }}: about a minute, and no sales call. Pick up to
      {{ max_blockers }}.</p>
-  {% if error %}<p class="err">Pick at least one answer, or write a line below.</p>{% endif %}
+  {% if error %}<div class="error">Pick at least one answer, or write a line below.</div>{% endif %}
   <form method="post">
     {% for key, label in options %}
     <label class="opt">
