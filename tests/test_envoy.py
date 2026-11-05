@@ -11,7 +11,9 @@ What has to hold, or it is worse than not having it:
     rule is thrown away for the template
   * the console's AI switch and the company's daily cap are obeyed: with AI
     off, Claude is never called
-  * nothing is ever sent to a prospect; the only email is the owner's own
+  * nothing is sent to a prospect unless the owner presses Send on one draft,
+    and then only with the postal address and an unsubscribe link, never to
+    anybody unsubscribed or marked do-not-contact
   * the scoreboard counts real records, and only Envoy's
 
 Single-business SQLite, like the other logic suites. Tenant isolation and the
@@ -159,8 +161,10 @@ with app.app_context():
     os.environ['ENVOY_SINGLE_BUSINESS'] = '1'
     check(envoy.released(), 'ENVOY_SINGLE_BUSINESS=1 releases it on purpose')
     os.environ['BASE_DOMAIN'] = 'akye.test'
-    check(envoy.cohort() == {'dazzleandshine'}, 'the default cohort is the Dazzle & Shine tenant only')
-    check(envoy.released('dazzleandshine') and not envoy.released('brightnest'),
+    check(envoy.cohort() == {'dazzleandshine', 'cleaningwonder'},
+          'the default cohort is the two founders\' companies, Dazzle & Shine and Cleaning Wonder')
+    check(envoy.released('dazzleandshine') and envoy.released('cleaningwonder')
+          and not envoy.released('brightnest'),
           'on hosted Akye, only a company in the cohort is released')
     check(not envoy.released(''), 'no company named means not released')
     os.environ['ENVOY_TENANTS'] = 'dazzleandshine, brightnest'
@@ -476,7 +480,80 @@ with app.app_context():
           'released but on a plan without Find Leads: sent to the upgrade page')
     BusinessSetting.set('plan', 'scale'); db.session.commit()
 
+    print('\n11. Send: only because the owner pressed it, and only within the rules')
+    from models import EmailOptOut
+    g.pop('_entitlement_state', None)   # back on Scale after section 10's Solo check
+    reset(); turn_on()
+    envoy.run()
+    p = Prospect.query.filter_by(source='envoy').order_by(Prospect.id).first()
+    d = EnvoyDraft.query.filter_by(prospect_id=p.id).first()
+    url = f'/envoy/send/{p.id}'
+    form = {'kind': 'intro', 'to': 'office@lakeside0.example.com',
+            'subject': d.email_subject, 'body': d.email_body}
+    html = c.get('/envoy/').get_data(as_text=True)
+    check(f'action="{url}"' in html and 'Add your business mailing address' in html,
+          'each draft has a Send box, and the page asks for the mailing address first')
+    MAIL.clear()
+    r = c.post(url, data=form, follow_redirects=True)
+    check(not MAIL and 'mailing address' in r.get_data(as_text=True),
+          'without a postal address on file, nothing is sent (CAN-SPAM)')
+    for k, v in {'address': '12 Elm St', 'city': 'Springfield', 'state': 'IL', 'zip_code': '62701'}.items():
+        BusinessSetting.set(k, v)
+    db.session.commit()
+    for bad, why in [({'body': d.email_body + ' Only $99!'}, 'a price typed into it'),
+                     ({'to': 'not-an-address'}, 'no real address to send to'),
+                     ({'kind': 'call'}, 'a draft that is not an email')]:
+        MAIL.clear()
+        c.post(url, data=dict(form, **bad))
+        check(not MAIL, f'refused: {why}')
+    MAIL.clear()
+    c.post(url, data=form)
+    db.session.expire_all()
+    p = db.session.get(Prospect, p.id)
+    check(len(MAIL) == 1 and MAIL[0][0] == 'office@lakeside0.example.com', 'pressed Send: one email, to that address')
+    body = MAIL[0][2]
+    check('12 Elm St, Springfield, IL 62701' in body and '/api/unsubscribe/' in body,
+          'carrying the postal address and a one-click unsubscribe link')
+    check(MAIL[0][1] == d.email_subject, 'with the subject as written')
+    check(ProspectActivity.query.filter_by(prospect_id=p.id, kind='email').count() == 1,
+          'logged as an email on the lead\'s history')
+    check(p.email == 'office@lakeside0.example.com' and p.stage == 'working'
+          and p.next_action == 'Follow up on the email', 'and the lead moves on with a follow-up date, as the call sheet does')
+    check(envoy.scoreboard()['week']['contacted'] == 1, 'the scoreboard counts it as contacted')
+    MAIL.clear()
+    c.post(url, data=dict(form, kind='day3', subject='Re: ' + d.email_subject, body=d.followup_day3))
+    check(not MAIL, 'the same business is not emailed again inside two days')
+
+    p.last_emailed_at = datetime.utcnow() - timedelta(days=3); db.session.commit()
+    token = envoy.unsubscribe_link('office@lakeside0.example.com').rsplit('/', 1)[1]
+    anon = app.test_client()
+    check(anon.get(f'/api/unsubscribe/{token}').status_code == 200
+          and EmailOptOut.query.filter_by(email='office@lakeside0.example.com').first(),
+          'the unsubscribe link in the email works')
+    MAIL.clear()
+    c.post(url, data=dict(form, kind='day3', body=d.followup_day3))
+    check(not MAIL, 'and once unsubscribed, that address is never emailed again')
+
+    q = Prospect.query.filter_by(source='envoy').order_by(Prospect.id.desc()).first()
+    q.status = 'do_not_contact'; db.session.commit()
+    MAIL.clear()
+    c.post(f'/envoy/send/{q.id}', data=dict(form, to='ok@q.example.com'))
+    check(not MAIL, 'a business marked do-not-contact is not emailed')
+    other = Prospect(business_name='Typed in by hand', source='google_places'); db.session.add(other)
+    db.session.commit()
+    check(c.post(f'/envoy/send/{other.id}', data=form).status_code == 404,
+          'only Envoy\'s own prospects, with a draft, can be sent from here')
+    MAIL.clear()
+    r = team.post(url, data=dict(form, to='ok2@q.example.com'))
+    check(not MAIL and r.status_code in (302, 403), 'another role cannot send')
+    switches(envoy=False)
+    MAIL.clear()
+    r2 = Prospect.query.filter_by(source='envoy').order_by(Prospect.id).all()[1]
+    c.post(f'/envoy/send/{r2.id}', data=dict(form, to='ok3@q.example.com'))
+    check(not MAIL, 'a paused Envoy sends nothing')
+    switches()
+
 if failures:
     print(f'\n❌ {len(failures)} failed')
     sys.exit(1)
-print('\n✅ Envoy finds, drafts and counts -- and sends nothing to anybody but the owner.')
+print('\n✅ Envoy finds, drafts and counts -- and sends only when the owner presses Send.')

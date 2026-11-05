@@ -30,6 +30,10 @@
       Connect payments before your first customer pays; the rest below is
       yours to do whenever you have it.
     </p>
+    {% if referral_link %}
+    <p style="margin:8px 0 0;font-size:0.92rem">
+      <a href="{{ url_for('billing.billing_home') }}#referral">Know another cleaning owner? You both get a free month →</a></p>
+    {% endif %}
   </div>
   {% endif %}
   {# The chat comes first when it is switched on: answering a question is an

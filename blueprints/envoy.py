@@ -1,6 +1,7 @@
 """The Envoy page, and the hourly call that does the morning's work.
 
-Everything Envoy decides lives in envoy.py; this is the routes. The page is the
+Everything Envoy decides lives in envoy.py; this is the routes. Nothing here
+sends on its own: the one send is a person pressing Send on one draft. The page is the
 owner's alone: it holds the day's drafts, a plan-feature spend (a lead search
 every morning) and the settings that start it all, so every route here is
 owner-only, plan-gated, and does not exist at all for a company Envoy has not
@@ -51,6 +52,9 @@ def page():
         made=made,
         drafts=envoy.drafts_for(made),
         site_emails=envoy.site_emails,
+        default_to=envoy.default_to,
+        subject_for=envoy.subject_for,
+        mailing_address=envoy.mailing_address(),
         followups=envoy.followups(day),
         score=envoy.scoreboard(day),
         ai_used=envoy.ai_used(day),
@@ -114,6 +118,25 @@ def redraft(prospect_id):
     row = envoy.write_draft(p)
     flash(f'Drafts written for {p.business_name}'
           + (' (from the template, not AI).' if row.source != 'ai' else '.'), 'success')
+    return redirect(url_for('envoy.page') + f'#p{p.id}')
+
+
+@envoy_bp.route('/envoy/send/<int:prospect_id>', methods=['POST'])
+@owner_required
+@released_only
+@requires_plan(envoy.FEATURE)
+def send_draft(prospect_id):
+    """Send one draft, as the owner edited it, because she pressed Send.
+    Envoy's own prospects only, and only ones it has written a draft for."""
+    from flask import session
+    from models import Prospect
+    p = Prospect.query.get_or_404(prospect_id)
+    if p.source != 'envoy' or not envoy.drafts_for([p]).get(p.id):
+        abort(404)
+    ok, said = envoy.send(p, request.form.get('kind'), request.form.get('to'),
+                          request.form.get('subject'), request.form.get('body'),
+                          sent_by=session.get('user_name'), user_id=session.get('user_id'))
+    flash(said, 'success' if ok else 'error')
     return redirect(url_for('envoy.page') + f'#p{p.id}')
 
 

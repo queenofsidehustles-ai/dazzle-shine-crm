@@ -143,6 +143,7 @@ for slug, email in (('sparkle', 'dana@sparkle.test'), ('gleam', 'sam@gleam.test'
     c.post('/signup', data={'business': slug.title() + ' Cleaning', 'slug': slug,
                             'name': 'Owner Reed', 'email': email,
                             'password': 'a-perfectly-fine-password',
+                            'confirm': 'a-perfectly-fine-password',
                             'terms_accepted': '1', 'zip_code': '32801',
                             'phone': '4075550123'}, headers={'Host': 'rollcall.test'})
 # Sparkle signed up 15 days ago and never got going.

@@ -8,6 +8,7 @@ stop any of them was to change an environment variable and redeploy:
     sms              every text, from every company, through Akye's Twilio
     voice            every call placed from the Find Leads call sheet
     partner_payouts  sending money to affiliate partners
+    referral_rewards crediting free months for company referrals
     envoy            Envoy's morning searches and drafts (envoy.py)
 
 The console flips them in the `product_switches` table that the email switches
@@ -20,9 +21,9 @@ database hiccup: all mean ON. A kill switch that fails closed would take the
 product down whenever the database blinked, which is the opposite of what an
 emergency control is for.
 
-## Except the one that sends money
+## Except the ones that send money
 
-`partner_payouts` is the exception: it fails CLOSED. An unreadable table or an
+`partner_payouts` and `referral_rewards` are the exceptions: they fail CLOSED. An unreadable table or an
 unreachable control plane means no transfer is sent, because a switch that
 cannot be read is not permission to move money. `PARTNER_PAYOUTS_OPEN=0` shuts
 it from the environment too, whatever the console says, the same way
@@ -67,6 +68,14 @@ SWITCHES = [
      'Stops sending money to affiliate partners. Commissions keep accruing and '
      'nothing is lost; paying resumes when it is turned back on.',
      None),
+    # Credits a month's price to two customers' Stripe balances, so like payouts
+    # it fails closed. Turning it off stops new credits being given; rewards
+    # already earned are kept and are credited when it is turned back on.
+    ('referral_rewards', 'Referral rewards',
+     'Stops crediting free months for company referrals. Referral links keep '
+     'working and what has been earned is kept; crediting resumes when it is '
+     'turned back on.',
+     None),
     # Envoy's morning searches cost a Google call each and its drafts cost
     # Claude credits. Off here stops both for every company it is released to;
     # the prospects and drafts already made stay where they are.
@@ -79,7 +88,8 @@ KEYS = [k for k, *_ in SWITCHES]
 
 # Switches that mean OFF when they cannot be read, and the environment variable
 # that closes each one whatever the console says (set to 0).
-FAIL_CLOSED = {'partner_payouts': 'PARTNER_PAYOUTS_OPEN'}
+FAIL_CLOSED = {'partner_payouts': 'PARTNER_PAYOUTS_OPEN',
+               'referral_rewards': 'REFERRAL_REWARDS_OPEN'}
 
 _cache = {'at': 0.0, 'map': {}}
 

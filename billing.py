@@ -458,6 +458,15 @@ def apply_event(event):
         # never allowed to fail the payment above (it cannot raise).
         import affiliates
         affiliates.accrue(engine, slug, obj)
+        # And if another company sent this one, this invoice earned both of
+        # them a free month (referrals.py). Same rule: keyed on the company, so
+        # a repeat earns nothing, and a database error raises so Stripe retries.
+        # Crediting itself never raises: a Stripe failure leaves the reward
+        # pending for this company's next payment.
+        import referrals
+        earned = referrals.earn(engine, slug, obj)
+        for who in {slug} | {r['referrer_slug'] for r in earned}:
+            referrals.apply_pending(engine, who)
         return True, f'{slug}: payment received'
 
     if kind == 'charge.refunded':
@@ -467,6 +476,8 @@ def apply_event(event):
         if obj.get('refunded') and obj.get('invoice'):
             import affiliates
             result = affiliates.reverse(engine, obj['invoice'], 'refunded', slug=slug)
+            import referrals
+            referrals.reverse(engine, obj['invoice'], 'refunded')
             return True, f'{slug}: refund, partner commission {result}'
         # Held, not ignored: left alone, the full commission would still pay
         # out once its hold ran out. Staff clear it after deciding what the

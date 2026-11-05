@@ -261,6 +261,41 @@ with app.app_context():
               'deleting a business deletes what Envoy wrote about it')
         db.session.remove()
 
+print('\n4c. Send on hosted Akye: the company\'s own domain, and its own records')
+with app.app_context():
+    from models import BusinessSetting, EnvoyDraft, Prospect
+    with tenancy.use_tenant(A):
+        for k, v in {'address': '1 Main St', 'city': 'Springfield', 'state': 'IL'}.items():
+            BusinessSetting.set(k, v)
+        db.session.commit()
+        sp = Prospect.query.filter_by(source='envoy').first()
+        sid, sdraft = sp.id, EnvoyDraft.query.filter_by(prospect_id=sp.id).first()
+        form = {'kind': 'intro', 'to': 'office@target.example.com',
+                'subject': sdraft.email_subject, 'body': sdraft.email_body}
+        db.session.remove()
+MAIL.clear()
+r = owner(A).post(f'/envoy/send/{sid}', base_url=host(A), data=form, follow_redirects=True)
+check(not MAIL and 'own domain' in r.get_data(as_text=True),
+      'without its own verified sending domain, a company cannot send cold email from Akye')
+import email_domains
+real_may = email_domains.may_send_as
+email_domains.may_send_as = lambda addr: True
+owner(A).post(f'/envoy/send/{sid}', base_url=host(A), data=form)
+email_domains.may_send_as = real_may
+check([to for to, _s in MAIL] == ['office@target.example.com'], 'with one, pressing Send sends that one email')
+with app.app_context():
+    from models import ProspectActivity
+    with tenancy.use_tenant(A):
+        a_logged = ProspectActivity.query.filter_by(prospect_id=sid, kind='email').count()
+        db.session.remove()
+    with tenancy.use_tenant(B):
+        b_logged = ProspectActivity.query.filter_by(kind='email').count()
+        db.session.remove()
+check(a_logged == 1 and b_logged == 0, 'logged in that company\'s own history, and nowhere else')
+r = owner(B).post(f'/envoy/send/{sid}', base_url=host(B), data=form)
+check(r.status_code in (302, 404) and len(MAIL) == 1,
+      'the same prospect id posted on another company\'s address sends nothing')
+
 print('\n5. The console\'s Envoy switch stops it for every company')
 platform_switches.set_switch(engine, 'envoy', False, by='test')
 with app.app_context():

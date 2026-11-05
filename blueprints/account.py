@@ -25,6 +25,7 @@ from flask import (Blueprint, render_template, request, redirect, url_for,
 
 import branding
 import demo_guard
+import passwords
 from auth import login_required
 from extensions import db
 from models import User, LoginToken
@@ -79,7 +80,7 @@ def reset_password(token):
     if request.method == 'POST':
         pw = request.form.get('password') or ''
         confirm = request.form.get('confirm') or ''
-        problem = _password_problem(pw, confirm)
+        problem = passwords.problem(pw, confirm)
         if problem:
             return render_template('admin/reset_password.html', error=problem)
 
@@ -119,7 +120,7 @@ def accept_invite(token):
     if request.method == 'POST':
         pw = request.form.get('password') or ''
         confirm = request.form.get('confirm') or ''
-        problem = _password_problem(pw, confirm)
+        problem = passwords.problem(pw, confirm)
         if problem:
             return render_template('admin/reset_password.html', error=problem, invite=True)
 
@@ -148,16 +149,6 @@ def _peek(token, purpose):
     if not row or row.used_at or row.expires_at < datetime.utcnow():
         return None
     return User.query.get(row.user_id)
-
-
-def _password_problem(pw, confirm):
-    if len(pw) < 8:
-        return 'Please use at least 8 characters.'
-    if pw != confirm:
-        return 'The two passwords do not match.'
-    if pw.lower() in ('password', '12345678', 'changeme', 'qwertyui'):
-        return 'That password is too easy to guess.'
-    return None
 
 
 def _send_reset(user, link):
@@ -236,7 +227,7 @@ def change_password():
     if not user.check_password(current):
         flash('Your current password was not correct.', 'error')
         return redirect(url_for('account.my_account'))
-    problem = _password_problem(new, confirm)
+    problem = passwords.problem(new, confirm)
     if problem:
         flash(problem, 'error')
         return redirect(url_for('account.my_account'))

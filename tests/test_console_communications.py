@@ -69,7 +69,7 @@ print('\n2. A signup is written down')
 c = app.test_client()
 c.post('/signup', data={'business': 'Sparkle Cleaning', 'slug': 'sparkle',
                         'name': 'Dana Reed', 'email': 'dana@sparkle.test',
-                        'password': 'a-perfectly-fine-password',
+                        'password': 'a-perfectly-fine-password', 'confirm': 'a-perfectly-fine-password',
                         'terms_accepted': '1', 'zip_code': '32801',
                         'phone': '4075550123'}, headers={'Host': 'rollcall.test'})
 logged = control_plane.product_messages_for(engine, slug='sparkle')

@@ -76,7 +76,7 @@ def _form(slug, email):
         'slug': slug,
         'name': 'Test Owner',
         'email': email,
-        'password': 'a-strong-test-password',
+        'password': 'a-strong-test-password', 'confirm': 'a-strong-test-password',
         'terms_accepted': '1', 'zip_code': '32801', 'phone': '4075550123',
     }
 
@@ -121,8 +121,8 @@ def test_same_slug_concurrency_has_one_winner(monkeypatch, postgres_url):
     original_validate = signup._validate
     barrier = threading.Barrier(2)
 
-    def synchronized_validate(form, slug, password, terms_accepted=False):
-        result = original_validate(form, slug, password, terms_accepted)
+    def synchronized_validate(form, slug, password, terms_accepted=False, confirm=''):
+        result = original_validate(form, slug, password, terms_accepted, confirm)
         if result is None and slug == 'raceco':
             barrier.wait(timeout=15)
         return result
