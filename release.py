@@ -101,6 +101,17 @@ def next_tag(line):
     walk one product back onto a release belonging to the other."""
     today = date.today().strftime(f'{line.tag_prefix}%Y.%m.%d')
     same_day = [t for t in git('tag', '--list', f'{today}*').split('\n') if t]
+    # A name already written into the RELEASE file counts as taken, even with
+    # no tag: an attempt that committed RELEASE to the working branch and then
+    # failed before the push to the channel leaves exactly that behind, and
+    # reusing the name rewrites RELEASE to what it already says -- an empty
+    # commit, which git refuses, so every retry on that day failed.
+    try:
+        named = (ROOT / 'RELEASE').read_text().split('\n')[0].strip()
+    except OSError:
+        named = ''
+    if named.startswith(today) and named not in same_day:
+        same_day.append(named)
     if not same_day:
         return today
     suffixes = [int(m.group(1)) for t in same_day
