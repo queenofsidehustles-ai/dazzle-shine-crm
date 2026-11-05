@@ -64,6 +64,11 @@ def lifecycle_db():
         conn.execute(text(
             "INSERT INTO public.feedback (org_slug, user_name, body) "
             "VALUES (:slug, 'Bravo Owner', 'bravo private feedback')"), {'slug': B})
+        # A survey answer's free text can name a customer.
+        for slug in (A, B):
+            conn.execute(text(
+                "INSERT INTO public.survey_responses (org_slug, segment, wish) "
+                "VALUES (:slug, 'A', 'Please import Jane Private')"), {'slug': slug})
         # An owner's how-to question with no guide can name a customer.
         for slug in (A, B):
             conn.execute(text(
@@ -131,9 +136,15 @@ def test_eligible_purge_is_tenant_bounded_and_removes_control_plane_content(life
             'SELECT count(*) FROM public.howto_misses WHERE org_slug=:s'), {'s': A}).scalar_one()
         bravo_asked = conn.execute(text(
             'SELECT count(*) FROM public.howto_misses WHERE org_slug=:s'), {'s': B}).scalar_one()
+        alpha_survey = conn.execute(text(
+            'SELECT count(*) FROM public.survey_responses WHERE org_slug=:s'), {'s': A}).scalar_one()
+        bravo_survey = conn.execute(text(
+            'SELECT count(*) FROM public.survey_responses WHERE org_slug=:s'), {'s': B}).scalar_one()
         tombstone = conn.execute(text(
             'SELECT status, name, owner_email, closed_at, purged_at '
             'FROM public.organizations WHERE slug=:s'), {'s': A}).mappings().one()
+    assert alpha_survey == 0, 'a purged company keeps no survey answer'
+    assert bravo_survey == 1, 'another company keeps its own'
     assert alpha_asked == 0, 'a purged company keeps no how-to questions'
     assert bravo_asked == 1, 'another company keeps its own'
     assert bravo == f'{B}-private'

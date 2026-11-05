@@ -46,6 +46,7 @@ Akye, and every email along the way.
 | `quiet` | owner away 7–13 days | on a trial, set up | did the week get away from you? |
 | `free_quiet` | owner away 14–30 days | free plan, set up | need a hand with anything? |
 | `free_start` | 14–21 days after it ends | free plan, never set up | still here when you are ready |
+| `survey` | never set up: day 14–20, or 4–13 days after the trial. Set up then away: 14–30 days (31–60 on the free plan) | segment A (never set up) or B (went quiet) | what got in the way? One-tap answers open a page on their own address; see `survey.py`. Answers: Console → Survey |
 
 Never more than one a day. Never the same one twice. Never to paying, test,
 demo, opted-out or closed companies.
@@ -53,7 +54,7 @@ demo, opted-out or closed companies.
 "Owner away" is `organizations.owner_active_at`, written as the owner uses the
 CRM (at most hourly), not their last password sign-in, which a self-renewing
 session can leave months old. A company with no `owner_active_at` yet is not
-due. The three "gone quiet" emails **ship switched off**: they send only once
+due. The three "gone quiet" emails and `survey` **ship switched off**: they send only once
 somebody turns them on under Console → Communications. An email that is
 switched off is passed over, not waited on: whatever else is due that day and
 switched on goes instead.

@@ -94,7 +94,7 @@ check(tn.due(org(days_old=1)) == 'day1', 'day 1 — two things, two minutes')
 check(tn.due(org(days_old=6, nudges_sent='day1,day2,day4,day5')) is None,
       'day 6, first week done — nothing until day 7')
 check(tn.due(org(days_old=7)) == 'start_7', 'day 7 — the first nudge')
-check(tn.due(org(days_old=14, nudges_sent='start_7')) is None,
+check(tn.due(org(days_old=14, nudges_sent='start_7,survey')) is None,
       'day 14 — quiet again, one email is not a campaign')
 check(tn.due(org(days_old=21, nudges_sent='start_7')) == 'start_21',
       'day 21 — the last useful reminder before the door shuts')
@@ -107,7 +107,7 @@ check(tn.due(org(days_old=9)) == 'start_7',
       'a run two days late still sends the day-7 note')
 check(tn.due(org(days_old=24, nudges_sent='start_7')) == 'start_21',
       'and the day-21 one')
-check(tn.due(org(days_old=40)) is None,
+check(tn.due(org(days_old=40, nudges_sent='survey')) is None,
       'but a window that has long closed does not reopen')
 
 
@@ -146,7 +146,9 @@ print('\n6. The one that could go badly wrong, once')
 # in that table. Without the staleness window this sends "your trial has just
 # finished" to all of them, in one batch, months late.
 for days_ago in (4, 30, 200, 900):
-    old = org(days_old=days_ago + 30,
+    # 'survey' is marked sent: it has its own window just after a lapse (see
+    # test_survey.py), and this section is about the 'ended' note.
+    old = org(days_old=days_ago + 30, nudges_sent='survey',
               trial_ends_at=NOW - timedelta(days=days_ago))
     check(tn.due(old) is None,
           f'a trial that ended {days_ago} days ago is left alone')

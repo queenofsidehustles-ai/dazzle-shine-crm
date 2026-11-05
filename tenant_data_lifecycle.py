@@ -304,6 +304,11 @@ def purge_tenant(engine, slug, *, now=None, media_delete=None):
         if conn.execute(text("SELECT to_regclass('public.howto_misses')")).scalar():
             conn.execute(text('DELETE FROM public.howto_misses WHERE org_slug = :slug'),
                          {'slug': slug})
+        # And so is a survey answer: its free text can name an owner's customer.
+        # Guarded for the same reason.
+        if conn.execute(text("SELECT to_regclass('public.survey_responses')")).scalar():
+            conn.execute(text('DELETE FROM public.survey_responses WHERE org_slug = :slug'),
+                         {'slug': slug})
         # Keep only the narrow tenant/billing/audit tombstone. Ordinary owner PII
         # and display content are no longer needed to serve a purged workspace.
         conn.execute(text(

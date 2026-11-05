@@ -1,0 +1,61 @@
+{% extends "console/_shell.html" %}
+{% block title %}Survey{% endblock %}
+{% block body %}
+
+<p class="con-meta" style="margin:0 0 var(--s5)">
+  Owners who signed up and went quiet, asked what got in the way. Companies,
+  not ticks: someone who picked two answers counts once under each, so a column
+  can add up to more than 100%. Turn the email on under
+  <a href="{{ url_for('console.communications') }}">Communications</a>.
+</p>
+
+{% for seg, title in (('A', 'Never got set up'), ('B', 'Set up, then went quiet')) %}
+{% set t = tally[seg] %}
+<h2 style="font-size:1.05rem;margin:var(--s6) 0 var(--s3)">
+  {{ title }} <span class="con-meta">· {{ t.n }} answer{{ '' if t.n == 1 else 's' }}
+  {% if t.calls %}· {{ t.calls }} said we can call{% endif %}</span>
+</h2>
+{% if not t.n %}
+<div class="con-empty">No answers yet.</div>
+{% else %}
+<table class="con">
+  <tr><th>What got in the way</th><th>Companies</th><th>Share</th></tr>
+  {% for key, label, count, share in t.blockers %}
+  <tr><td>{{ label }}</td><td>{{ count }}</td><td>{{ share }}%</td></tr>
+  {% endfor %}
+</table>
+{% if t.stuck %}
+<table class="con" style="margin-top:var(--s3)">
+  <tr><th>Where they got stuck</th><th>Companies</th><th>Share</th></tr>
+  {% for key, label, count, share in t.stuck %}
+  <tr><td>{{ label }}</td><td>{{ count }}</td><td>{{ share }}%</td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endif %}
+{% endfor %}
+
+<h2 style="font-size:1.05rem;margin:var(--s8) 0 var(--s3)">In their own words</h2>
+{% if not rows %}
+<div class="con-empty">Nothing yet. Answers appear here as the survey email goes out.</div>
+{% endif %}
+{% for r in rows %}
+<div class="con-item">
+  <div class="con-body">
+    {% if r.blocker_labels %}<strong>{{ r.blocker_labels|join(' · ') }}</strong>{% endif %}
+    {% if r.other_text %}<br>{{ r.other_text }}{% endif %}
+    {% if r.wish %}<br><em>Would use it if:</em> {{ r.wish }}{% endif %}
+  </div>
+  <div class="con-meta">
+    <a href="{{ url_for('console.company', slug=r.org_slug) }}"><strong>{{ r.company }}</strong></a> ·
+    {{ 'never set up' if r.segment == 'A' else 'went quiet' }}
+    {% if r.stuck_label %} · stuck: {{ r.stuck_label }}{% endif %}
+    {% if r.days_away is not none %} · away {{ r.days_away }} days{% endif %}
+    · {{ r.updated_at.strftime('%d %b') if r.updated_at }}
+    {% if r.wants_call %}<br><strong>Wants a call:</strong>
+      {{ r.email or '' }}{% if r.phone %} · {{ r.phone }}{% endif %}{% endif %}
+  </div>
+</div>
+{% endfor %}
+
+{% endblock %}
