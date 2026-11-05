@@ -289,7 +289,7 @@ check(len(rows) == 1 and rows[0]['source'] == 'abandoned_signup',
 client.post('/signup/started', json={'email': 'dana@sparkle.test'}, headers=PRODUCT)
 check(len(leads_for('dana@sparkle.test')) == 1, 'tabbing out twice is still one person')
 client.post('/signup/started', json={'email': 'not-an-email'}, headers=PRODUCT)
-client.post('/signup/started', json={'email': 'bot@spam.test', 'website': 'x'},
+client.post('/signup/started', json={'email': 'bot@spam.test', 'akye_trap_x': 'x'},
             headers=PRODUCT)
 check(not leads_for('not-an-email') and not leads_for('bot@spam.test'),
       'nothing written for a bad address or a bot')
@@ -317,7 +317,7 @@ client.post('/signup/started', json={'email': 'new@sparkle.test', 'phone': '4075
 fresh = leads_for('new@sparkle.test')
 check(len(fresh) == 1 and fresh[0]['phone'] == '+14075550142',
       'a number typed with the email (a browser that filled both) is kept the same way')
-client.post('/signup/started', json={'email': 'bot2@spam.test', 'phone': '4075550143', 'website': 'x'},
+client.post('/signup/started', json={'email': 'bot2@spam.test', 'phone': '4075550143', 'akye_trap_x': 'x'},
             headers=PRODUCT)
 check(not leads_for('bot2@spam.test'), 'a bot leaves nothing, number included')
 client.post('/signup/started', json={'email': 'nonumber@sparkle.test'}, headers=PRODUCT)

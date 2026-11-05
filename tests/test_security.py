@@ -154,6 +154,21 @@ check(r.status_code != 403, 'a form posted from this site goes through')
 r = c.post('/settings/business', data={'business_name': 'Test Co'})
 check(r.status_code != 403,
       'and so does one with no Origin at all — privacy tools strip it')
+r = c.post('/settings/business', data={'business_name': 'Test Co'},
+           headers={'Origin': 'null'})
+check(r.status_code != 403,
+      'and one whose browser sends Origin: null (iPhone in-app browsers)')
+r = c.post('/settings/business', data={'business_name': 'Test Co'},
+           headers={'Origin': 'null', 'Referer': 'https://evil.example.com/attack'})
+check(r.status_code == 403,
+      'but Origin: null does not excuse a Referer from another site')
+r = c.post('/settings/business', data={'business_name': 'Test Co'},
+           headers={'Origin': 'null', 'Sec-Fetch-Site': 'same-origin'})
+check(r.status_code != 403,
+      'and the browser saying same-origin settles it')
+r = c.post('/settings/business', data={'business_name': 'Hacked Co'},
+           headers={'Origin': 'https://evil.example.com', 'Sec-Fetch-Site': 'cross-site'})
+check(r.status_code == 403, 'while cross-site is still refused')
 
 print('\n10. Machines that legitimately post from elsewhere are exempt')
 # Twilio's inbound texts arrive from another origin by definition and carry
