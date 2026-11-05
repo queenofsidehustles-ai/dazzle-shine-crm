@@ -326,6 +326,28 @@ try:
 finally:
     rel.git = _real
 
+print('\n9a. A retry the same day does not reuse a name an abandoned attempt left in RELEASE')
+import datetime as _dt
+_today = _dt.date.today().strftime('akye-v%Y.%m.%d')
+_rf = rel.ROOT / 'RELEASE'
+_had = _rf.read_text() if _rf.exists() else None
+_real_git = rel.git
+rel.git = lambda *a, **k: '' if a[:2] == ('tag', '--list') else _real_git(*a, **k)
+try:
+    _rf.write_text('akye-v2000.01.01\n2000-01-01\n')
+    check(rel.next_tag(akye) == _today, 'no tag and an old RELEASE: today\'s first name')
+    _rf.write_text(f'{_today}\n2026-11-05\n')
+    check(rel.next_tag(akye) == f'{_today}.2',
+          'a name already in RELEASE (its tag never pushed) is skipped: .2')
+    _rf.write_text(f'{_today}.2\n2026-11-05\n')
+    check(rel.next_tag(akye) == f'{_today}.3', 'and again for .2')
+finally:
+    rel.git = _real_git
+    if _had is None:
+        _rf.unlink()
+    else:
+        _rf.write_text(_had)
+
 print('\n9b. A suite that already passed on this commit is not run twice')
 _cr = rel.check_runs
 _suite_ok = [{'id': 5, 'name': 'Every test suite', 'status': 'completed', 'conclusion': 'success',
