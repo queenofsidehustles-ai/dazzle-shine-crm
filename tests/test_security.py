@@ -167,6 +167,13 @@ r = c.post('/settings/business', data={'business_name': 'Test Co'},
 check(r.status_code != 403,
       'and the browser saying same-origin settles it')
 r = c.post('/settings/business', data={'business_name': 'Hacked Co'},
+           headers={'Origin': 'null', 'Sec-Fetch-Site': 'cross-site'})
+check(r.status_code == 403,
+      'Origin: null from a page the browser calls cross-site is refused (sandboxed form)')
+r = c.post('/settings/business', data={'business_name': 'Test Co'},
+           headers={'Origin': 'null', 'Sec-Fetch-Site': 'same-site'})
+check(r.status_code != 403, 'and a sibling address of this site is not')
+r = c.post('/settings/business', data={'business_name': 'Hacked Co'},
            headers={'Origin': 'https://evil.example.com', 'Sec-Fetch-Site': 'cross-site'})
 check(r.status_code == 403, 'while cross-site is still refused')
 

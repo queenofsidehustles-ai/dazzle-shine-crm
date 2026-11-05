@@ -433,6 +433,14 @@ def check_request_origin():
         # tells us nothing either way, so the Referer decides, exactly as when
         # no Origin is sent at all.
         if header == 'Origin' and (value or '').strip().lower() == 'null':
+            # ...unless the browser itself says the request came from another
+            # site. A sandboxed cross-site form sends Origin: null too, and
+            # without this it could post a login. Browsers old enough to send
+            # no Sec-Fetch-Site (the in-app ones this exists for) are unaffected.
+            if (request.headers.get('Sec-Fetch-Site') or '').lower() == 'cross-site':
+                _record_rejected_origin(header, value, path)
+                from flask import abort
+                abort(403, description='This form was submitted from another site.')
             continue
         verdict = _same_site(value, host)
         if verdict is None:
