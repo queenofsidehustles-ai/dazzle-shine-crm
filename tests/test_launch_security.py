@@ -178,9 +178,14 @@ def exists(slug):
 
 
 s = client()
-r = signup(s, f'bot{TAG}', website='http://spam.example')
+r = signup(s, f'bot{TAG}', akye_trap_x='http://spam.example')
 check(r.status_code == 200 and not exists(f'bot{TAG}'),
       'a filled-in hidden field creates nothing')
+# The trap used to be called `website`, which iPhone AutoFill fills from the
+# owner's contact card. A person whose phone does that must still get in.
+r = signup(client(), f'auto{TAG}', website='https://sparkle.example')
+check(exists(f'auto{TAG}'),
+      'a phone that autofills a website does not get a real owner refused')
 ip = f'10.200.{secrets.randbelow(250)}.{secrets.randbelow(250)}'
 made = []
 for i in range(4):

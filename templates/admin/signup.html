@@ -22,13 +22,15 @@
   </div>
   {% endif %}
 
-  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  {% if error %}<div class="error" id="signup-error" role="alert" tabindex="-1">{{ error }}</div>
+  <script>try { document.getElementById('signup-error').scrollIntoView({block: 'center'}); } catch (e) {}</script>{% endif %}
 
   <form method="post" id="signup">
     {# Hidden from people and screen readers; bots fill it in (signup.HONEYPOT_FIELD). #}
     <div aria-hidden="true" style="position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden">
-      <label for="website">Leave this empty</label>
-      <input id="website" name="website" type="text" tabindex="-1" autocomplete="off" value="">
+      <label for="akye_trap_x">Leave this empty</label>
+      <input id="akye_trap_x" name="akye_trap_x" type="text" tabindex="-1" autocomplete="off"
+             data-1p-ignore data-lpignore="true" value="">
     </div>
     <label for="business">Business name</label>
     <input id="business" name="business" required autofocus
@@ -37,7 +39,8 @@
     <label for="slug">Your web address</label>
     <div style="display:flex;align-items:center;gap:6px">
       <input id="slug" name="slug" value="{{ slug or form.slug or '' }}"
-             placeholder="sparkle" pattern="[a-z0-9-]{3,40}" style="flex:1" />
+             placeholder="sparkle" pattern="[a-z0-9-]{3,40}" style="flex:1"
+             autocapitalize="none" autocorrect="off" spellcheck="false" />
       <span style="color:var(--softer);font-size:0.9rem;white-space:nowrap">.{{ base }}</span>
     </div>
     <div id="slug-note" class="small" style="margin-top:6px">
@@ -154,13 +157,18 @@
               phone: (phone.value || '').trim(),
               name: (document.getElementById('name').value || '').trim(),
               business: (document.getElementById('business').value || '').trim(),
-              website: (document.getElementById('website').value || '')
+              akye_trap_x: (document.getElementById('akye_trap_x').value || '')
             }), keepalive: true
           }).catch(function () {});
         } catch (e) {}
       }
+      // Blur alone missed people whose phone filled the email in: autofill
+      // never focuses the box, so it never loses focus. A change does fire.
       email.addEventListener('blur', note);
       phone.addEventListener('blur', note);
+      email.addEventListener('change', note);
+      phone.addEventListener('change', note);
+      document.getElementById('signup').addEventListener('submit', note);
     })();
 
     // Say whether the two passwords match, and let them look at what they typed.
@@ -193,7 +201,14 @@
       var slug = document.getElementById('slug');
       var note = document.getElementById('slug-note');
       var touched = slug.value.length > 0;
-      slug.addEventListener('input', function () { touched = true; check(); });
+      // A phone keyboard capitalises the first letter, and the address must be
+      // lower-case: without this the browser refused to send the form at all,
+      // with a "match the requested format" bubble that names no rule.
+      slug.addEventListener('input', function () {
+        var lower = slug.value.toLowerCase().replace(/\s+/g, '-');
+        if (lower !== slug.value) slug.value = lower;
+        touched = true; check();
+      });
       biz.addEventListener('input', function () {
         if (touched) return;
         slug.value = biz.value.toLowerCase()

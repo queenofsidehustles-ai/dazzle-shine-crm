@@ -35,6 +35,7 @@ cannot work and does not appear. SIGNUPS_OPEN is the deliberate *off* switch for
 a by-hand onboarding window (set it to 0 to close the door); leaving it unset
 keeps signup open rather than closed.
 """
+import hashlib
 import os
 import re
 from contextlib import contextmanager
@@ -72,7 +73,17 @@ SIGNUPS_PER_ADDRESS_PER_DAY = int(
     os.environ.get('SIGNUPS_PER_ADDRESS_PER_DAY') or 10)
 DEFAULT_DAILY_SIGNUP_CAP = 50
 # A field people never see. Browsers leave it empty; form-filling bots do not.
-HONEYPOT_FIELD = 'website'
+#
+# It used to be called `website`, and that was the bug: iPhone AutoFill (in
+# Safari and inside the Facebook and Instagram apps) fills a box called
+# "website" from the owner's contact card, hidden or not -- and a cleaning
+# business owner is exactly the person with a website on her card. Every such
+# signup was refused with "please try again", which she did, eleven times, and
+# was refused eleven times. The name is now one no autofill matches. The old
+# name is still read, but only so a bot that learned it is logged, not refused
+# outright: a person on a page cached before the rename must get in.
+HONEYPOT_FIELD = 'akye_trap_x'
+OLD_HONEYPOT_FIELD = 'website'
 
 
 def _daily_cap():
@@ -99,6 +110,11 @@ def _refused(engine):
     import security
     if (request.form.get(HONEYPOT_FIELD) or '').strip():
         return 'We could not create that account. Please try again.'
+    if (request.form.get(OLD_HONEYPOT_FIELD) or '').strip():
+        # Somebody on a page from before the rename whose phone filled in her
+        # website. Noted so the old name can be dropped once nobody sends it.
+        print(f'  ℹ️  signup sent the old trap field '
+              f'({device_label(request.headers.get("User-Agent"))}); let through')
     if not _limits_apply():
         return None
     since = datetime.utcnow() - timedelta(days=1)
@@ -304,6 +320,7 @@ def signup():
         sms_consent = bool(request.form.get('sms_consent'))
 
         def again(error):
+            _note_refusal(error)
             return render_template('admin/signup.html', form=form, slug=slug, base=base,
                                    terms_accepted=terms_accepted, error=error,
                                    sender=_sender())
@@ -405,6 +422,56 @@ def signup():
 
     return render_template('admin/signup.html', form=form, slug='', base=base,
                            error=None, sender=_sender())
+
+
+def device_label(user_agent):
+    """'iPhone · Facebook app', 'Android · Chrome' -- enough to spot a pattern.
+
+    Nothing more than the phone and the app: never the full user-agent, which
+    is close to a fingerprint of one person."""
+    ua = user_agent or ''
+    if 'iPhone' in ua or 'iPad' in ua:
+        phone = 'iPhone'
+    elif 'Android' in ua:
+        phone = 'Android'
+    elif 'Macintosh' in ua or 'Windows' in ua or 'Linux' in ua:
+        phone = 'computer'
+    else:
+        phone = 'unknown device'
+    if 'FBAN' in ua or 'FBAV' in ua or 'FB_IAB' in ua:
+        app_name = 'Facebook app'
+    elif 'Instagram' in ua:
+        app_name = 'Instagram app'
+    elif 'CriOS' in ua or 'Chrome' in ua:
+        app_name = 'Chrome'
+    elif 'Safari' in ua:
+        app_name = 'Safari'
+    else:
+        app_name = 'browser'
+    return f'{phone} · {app_name}'
+
+
+def _note_refusal(message):
+    """Write down why a signup was turned away, so the next one is not a mystery.
+
+    Until this existed a refused signup left a 200 in the request log and
+    nothing else -- two people tried eleven times between them and nobody could
+    say which sentence they were shown. One line in the log, and one row per
+    reason and device in Console -> Health (counted, not repeated). Never the
+    email, name or anything else they typed."""
+    try:
+        where = device_label(request.headers.get('User-Agent'))
+        # The sentence, not what they typed into it: '"sparkle" is taken'
+        # becomes '"…" is taken'.
+        message = re.sub(r'"[^"]*"', '"…"', message or '')
+        print(f'  ⚠️  signup refused ({where}): {message}')
+        from models import ErrorLog
+        ErrorLog.record(kind='blocked', message=f'Signup refused ({where}): {message}'[:400],
+                        path='/signup', method='POST', endpoint='signup.refused',
+                        fingerprint=hashlib.sha256(
+                            f'signup-refused|{where}|{message}'.encode()).hexdigest()[:32])
+    except Exception:
+        pass
 
 
 def _tell_us(slug, form, base):
