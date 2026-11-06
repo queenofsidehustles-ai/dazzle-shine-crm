@@ -59,6 +59,14 @@ def ask():
     # belongs to the person having it, and it should end when they leave.
     history = session.get('nana_history') or []
     out = assistant.ask(question, history=history)
+    try:
+        from flask import g
+        import control_plane
+        import provisioning
+        control_plane.note_nana_use(provisioning._engine(),
+                                    getattr(g, 'tenant_slug', None), 'ask')
+    except Exception:
+        pass
 
     said = out.get('say') or ''
     history = (history + [{'role': 'user', 'content': question[:1000]},

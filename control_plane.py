@@ -15,7 +15,7 @@ business running today never touches it.
 """
 from datetime import datetime, timedelta
 
-from sqlalchemy import (Column, DateTime, Integer, String, Boolean, MetaData,
+from sqlalchemy import (Column, Date, DateTime, Integer, String, Boolean, MetaData,
                         LargeBinary, Text, UniqueConstraint,
                         Table, select, insert, update, delete, text, func, or_, and_)
 
@@ -392,6 +392,22 @@ referral_refunds = Table(
     'referral_refunds', control_metadata,
     Column('stripe_invoice_id', String(80), primary_key=True),
     Column('created_at', DateTime, default=datetime.utcnow),
+)
+
+# How much each company has used Nana, one row per company, day and kind. The
+# console's Nana page used to count only the offers that need a button pressed,
+# so "nobody has used it" and "nobody has been offered anything" read the same.
+# kind: 'setup' (the setup chat) or 'ask' (Ask Nana). One counter per row, kept
+# by an upsert, so the table grows by a few rows a day however busy it is.
+nana_usage = Table(
+    'nana_usage', control_metadata,
+    Column('id', Integer, primary_key=True),
+    Column('org_slug', String(40), nullable=False, index=True),
+    Column('day', Date, nullable=False),
+    Column('kind', String(12), nullable=False),
+    Column('messages', Integer, nullable=False, default=0),
+    Column('last_at', DateTime),
+    UniqueConstraint('org_slug', 'day', 'kind', name='uq_nana_usage_day'),
 )
 
 affiliate_payouts = Table(
@@ -821,7 +837,7 @@ def ensure_table(engine):
                         product_messages, product_switches,
                         affiliates, affiliate_logins, affiliate_clicks,
                         affiliate_commissions, affiliate_payouts,
-                        referral_rewards, referral_refunds, platform_runs, howto_misses,
+                        referral_rewards, referral_refunds, nana_usage, platform_runs, howto_misses,
                         survey_responses])
     ensure_columns(engine)
 
@@ -2063,6 +2079,60 @@ def clear_affiliate_flag(engine, slug):
 # ---------------------------------------------------------------------------
 
 PLATFORM_RUN_KEEP_DAYS = 45
+
+
+def note_nana_use(engine, slug, kind, now=None):
+    """Count one message to Nana for this company today. Never raises: counting
+    is not worth failing an answer for.
+
+    One row per (company, day, kind), bumped in place. PostgreSQL does it in a
+    single statement, so two messages at once cannot lose one; anything else
+    (a single-business install) falls back to read-then-write."""
+    try:
+        now = now or datetime.utcnow()
+        slug = (slug or '').strip().lower()[:40]
+        kind = (kind or '')[:12]
+        if not slug or not kind:
+            return False
+        day = now.date()
+        with engine.begin() as conn:
+            if conn.dialect.name == 'postgresql':
+                from sqlalchemy.dialects.postgresql import insert as pg_insert
+                stmt = pg_insert(nana_usage).values(
+                    org_slug=slug, day=day, kind=kind, messages=1, last_at=now)
+                conn.execute(stmt.on_conflict_do_update(
+                    constraint='uq_nana_usage_day',
+                    set_={'messages': nana_usage.c.messages + 1, 'last_at': now}))
+            else:
+                row = conn.execute(select(nana_usage.c.id).where(
+                    nana_usage.c.org_slug == slug, nana_usage.c.day == day,
+                    nana_usage.c.kind == kind)).first()
+                if row:
+                    conn.execute(update(nana_usage).where(nana_usage.c.id == row[0])
+                                 .values(messages=nana_usage.c.messages + 1, last_at=now))
+                else:
+                    conn.execute(insert(nana_usage).values(
+                        org_slug=slug, day=day, kind=kind, messages=1, last_at=now))
+        return True
+    except Exception:
+        return False
+
+
+def nana_usage_summary(engine, days=30, now=None):
+    """Who has used Nana lately: [{slug, setup, ask, last_at}], most recent
+    first. Messages in the last `days` days, per company and kind."""
+    now = now or datetime.utcnow()
+    since = (now - timedelta(days=days)).date()
+    out = {}
+    with engine.connect() as conn:
+        for r in conn.execute(select(nana_usage).where(nana_usage.c.day >= since)).mappings():
+            row = out.setdefault(r['org_slug'], {'slug': r['org_slug'], 'setup': 0,
+                                                 'ask': 0, 'last_at': None})
+            if r['kind'] in ('setup', 'ask'):
+                row[r['kind']] += r['messages'] or 0
+            if r['last_at'] and (row['last_at'] is None or r['last_at'] > row['last_at']):
+                row['last_at'] = r['last_at']
+    return sorted(out.values(), key=lambda x: x['last_at'] or datetime.min, reverse=True)
 
 
 def record_platform_run(engine, kind, ok=True, items=None, detail=None, now=None):

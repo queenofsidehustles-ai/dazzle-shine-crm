@@ -145,15 +145,20 @@ try:
     check(platform_health.stripe_webhook(engine, NOW)['state'] == 'failed', "Stripe's webhook is failed, never stale")
 
     print('\n2b. Settings the platform cannot say are missing, and the inbound webhook')
-    full = {'RESEND_WEBHOOK_SECRET': 'whsec_x', 'METRICS_API_KEY': 'k' * 16}
+    full = {'RESEND_WEBHOOK_SECRET': 'whsec_x', 'METRICS_API_KEY': 'k' * 16,
+            'ANTHROPIC_API_KEY': 'sk-ant-x'}
     check(platform_health.config_gaps(full) == [], 'everything set: nothing to say (a delivery-events secret falls back to the inbound one)')
     gaps = ' | '.join(g['text'] for g in platform_health.config_gaps({}))
     check('RESEND_WEBHOOK_SECRET is not set' in gaps and 'delivery events' in gaps and 'METRICS_API_KEY' in gaps,
           'nothing set: all three are named, by variable name, never by value')
+    check(any('ANTHROPIC_API_KEY' in g['text'] for g in platform_health.config_gaps({})),
+          'no Claude key: named, because Nana and the setup chat vanish without it')
+    check(not any('ANTHROPIC_API_KEY' in g['text'] for g in platform_health.config_gaps(full)),
+          'and silent once it is set')
     check(any('METRICS_API_KEY' in g['text'] for g in platform_health.config_gaps(dict(full, METRICS_API_KEY='short'))),
           'a metrics key under 16 characters is no key (the endpoint ignores it too)')
     check(not any('delivery events' in g['text'] for g in platform_health.config_gaps(
-              {'RESEND_WEBHOOK_SECRET': 'whsec_x', 'METRICS_API_KEY': 'k' * 16})),
+              {'RESEND_WEBHOOK_SECRET': 'whsec_x', 'METRICS_API_KEY': 'k' * 16, 'ANTHROPIC_API_KEY': 'sk-ant-x'})),
           'one secret serves both webhooks, as api.py accepts')
     with app.app_context():
         check(platform_health.inbound_replies(engine, NOW)['state'] == 'never',

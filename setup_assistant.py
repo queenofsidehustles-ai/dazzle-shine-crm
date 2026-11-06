@@ -1232,13 +1232,18 @@ TROUBLE = {
 # ---------------------------------------------------------------------------
 
 def _post(body, timeout=20):
-    import requests
-    r = requests.post(API_URL, timeout=timeout, json=body, headers={
-        'x-api-key': api_key(),
-        'anthropic-version': API_VERSION,
-        'content-type': 'application/json',
-    })
-    return r.json()
+    """One Messages API request, through llm.post: the one place that retries a
+    busy (429/529) answer once, and the one that says what an error was. An
+    error comes back in the shape the callers already read, so a Claude that
+    answered with an error is still told apart from one that could not be
+    reached at all (which raises)."""
+    import llm
+    try:
+        return llm.post(body, timeout=timeout)
+    except llm.ClaudeUnreachable:
+        raise
+    except llm.ClaudeError as e:
+        return {'type': 'error', 'error': {'message': str(e)}}
 
 
 def _api_history(history):
