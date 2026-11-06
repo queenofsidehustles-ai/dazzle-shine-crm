@@ -31,6 +31,11 @@ SMART_MODEL = os.environ.get('NANA_MODEL', 'claude-haiku-4-5')
 HOWTO_MODEL = os.environ.get('NANA_HOWTO_MODEL', 'claude-sonnet-5-5')
 
 
+# Pause before the one retry of a busy answer, and the least time worth a retry.
+RETRY_PAUSE = 1.5
+MIN_RETRY_SECONDS = 3
+
+
 class ClaudeError(Exception):
     """The API answered with an error, or did not answer."""
 
@@ -69,11 +74,22 @@ def ready():
     return True
 
 
-def post(body, timeout=30):
-    """Send one Messages API request. Returns the parsed reply or raises."""
+def post(body, timeout=30, budget=None):
+    """Send one Messages API request. Returns the parsed reply or raises.
+
+    `timeout` is how long one attempt may take. `budget`, when given, is how
+    long the whole call may take, retry included: a caller that has a deadline
+    of its own (the setup chat must answer inside the web worker's limit) says
+    so, and the retry is then skipped, or shortened, to fit what is left."""
     import time
     import requests
+    started = time.monotonic()
     for attempt in (1, 2):
+        if attempt == 2 and budget is not None:
+            left = budget - (time.monotonic() - started) - RETRY_PAUSE
+            if left < MIN_RETRY_SECONDS:
+                raise ClaudeError(first_error)
+            timeout = min(timeout, left)
         try:
             r = requests.post(API_URL, timeout=timeout, json=body, headers={
                 'x-api-key': key(),
@@ -87,11 +103,12 @@ def post(body, timeout=30):
             return out
         err = (out.get('error') if isinstance(out, dict) else None) or {}
         # Busy or rate-limited is usually gone a moment later. One more try.
+        first_error = str(err.get('message') or out)[:200]
         if attempt == 1 and (getattr(r, 'status_code', 0) in (429, 529)
                              or err.get('type') in ('overloaded_error', 'rate_limit_error')):
-            time.sleep(1.5)
+            time.sleep(RETRY_PAUSE)
             continue
-        raise ClaudeError(str(err.get('message') or out)[:200])
+        raise ClaudeError(first_error)
 
 
 def text_of(reply):

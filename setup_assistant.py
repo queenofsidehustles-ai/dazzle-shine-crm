@@ -1239,7 +1239,10 @@ def _post(body, timeout=20):
     reached at all (which raises)."""
     import llm
     try:
-        return llm.post(body, timeout=timeout)
+        # `timeout` is all the time this step has left (ask() recomputes it
+        # against the web worker's limit), so the retry of a busy answer has to
+        # fit inside it too: budget, not just a timeout per attempt.
+        return llm.post(body, timeout=timeout, budget=timeout)
     except llm.ClaudeUnreachable:
         raise
     except llm.ClaudeError as e:
