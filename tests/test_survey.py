@@ -233,6 +233,39 @@ check(t['A']['n'] == 211 and '211 answers' in page,
       'the group A total is every answer, though only the newest are quoted')
 check(len(survey.responses(engine)) == 212, 'and the default list is still capped higher up')
 
+print('\n9c. Only managers see the answers')
+control_plane.add_console_user(engine, 'help-survey@example.com', 'Helper',
+                               'a-real-console-password-1', role='helper')
+h = app.test_client()
+h.post('/console/login', data={'email': 'help-survey@example.com',
+                               'password': 'a-real-console-password-1'})
+r = h.get('/console/survey')
+check(r.status_code in (301, 302) and '/console/survey' not in r.headers.get('Location', ''),
+      'a helper is turned away from the page')
+check('Survey</a>' not in h.get('/console/').data.decode(), 'and does not see the tab')
+check('Survey</a>' in m.get('/console/').data.decode(), 'a manager does')
+
+print('\n9d. Old answers expire')
+old = NOW - timedelta(days=survey.RETENTION_DAYS + 5)
+with engine.begin() as conn:
+    conn.execute(control_plane.survey_responses.insert().values(
+        org_slug='stale1', segment='B', blockers='price', wish='Jane Private',
+        updated_at=old))
+    conn.execute(control_plane.survey_responses.insert().values(
+        org_slug='fresh1', segment='B', blockers='price',
+        updated_at=NOW - timedelta(days=survey.RETENTION_DAYS - 5)))
+check(survey.purge_expired(engine, NOW) == 1, 'one answer is past a year')
+check(survey.existing(engine, 'stale1') is None and survey.existing(engine, 'fresh1'),
+      'the old one goes and the recent one stays')
+with engine.begin() as conn:
+    conn.execute(control_plane.survey_responses.insert(),
+                 {'org_slug': 'stale2', 'segment': 'A', 'updated_at': old})
+tn.run(engine, now=NOW, dry_run=True)
+check(survey.existing(engine, 'stale2') is not None, 'a dry run deletes nothing')
+counts = tn.run(engine, now=NOW, dry_run=False)
+check(counts.get('survey_expired') == 1 and survey.existing(engine, 'stale2') is None,
+      'the daily run does, and says how many')
+
 print('\n10. It ships switched off')
 SENT.clear()
 counts = tn.run(engine, now=NOW, dry_run=False)

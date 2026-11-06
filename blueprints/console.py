@@ -249,6 +249,11 @@ def survey_view():
     owners' own words below and the ones who said we may call.
     """
     import survey
+    # Managers and the owner only. The free text can name an owner's customers
+    # and the call list carries phone numbers, so a helper does not need it.
+    if control_plane.rank(request.console_user.get('role')) < control_plane.rank('manager'):
+        flash('Survey answers are for managers.', 'error')
+        return redirect(url_for('console.inbox'))
     engine = _engine()
     # Totals over every answer; only the list of quotes below is capped.
     everyone = survey.responses(engine, limit=None)

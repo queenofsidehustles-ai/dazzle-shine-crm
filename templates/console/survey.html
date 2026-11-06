@@ -7,6 +7,7 @@
   not ticks: someone who picked two answers counts once under each, so a column
   can add up to more than 100%. Turn the email on under
   <a href="{{ url_for('console.communications') }}">Communications</a>.
+  Answers are kept for a year, then deleted; only managers can see this page.
 </p>
 
 {% for seg, title in (('A', 'Never got set up'), ('B', 'Set up, then went quiet')) %}

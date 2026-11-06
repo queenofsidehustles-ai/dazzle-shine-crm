@@ -730,6 +730,10 @@ def run(engine=None, now=None, dry_run=False, sent_by='auto'):
         counts[kind] += 1
 
     counts['plan'] = plan
+    if not dry_run:
+        # Old survey answers expire (survey.RETENTION_DAYS). Here because this
+        # is the product's daily run; a dry run deletes nothing.
+        counts['survey_expired'] = survey.purge_expired(engine, now)
     return counts
 
 

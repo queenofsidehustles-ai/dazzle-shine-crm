@@ -63,8 +63,10 @@
        class="{{ 'on' if request.endpoint in ('console.affiliates_view', 'console.affiliate') }}">Partners{% if counts and counts.partners %}<span class="pill" title="Partners to approve, or with a balance ready to pay">{{ counts.partners }}</span>{% endif %}</a>
     <a href="{{ url_for('console.communications') }}"
        class="{{ 'on' if request.endpoint and request.endpoint.startswith('console.communications') }}">Communications</a>
+    {% if me.role in ('owner', 'manager') %}
     <a href="{{ url_for('console.survey_view') }}"
        class="{{ 'on' if request.endpoint == 'console.survey_view' }}">Survey</a>
+    {% endif %}
     <a href="{{ url_for('console.nana_proposals') }}"
        class="{{ 'on' if request.endpoint == 'console.nana_proposals' }}">Nana</a>
     <a href="{{ url_for('console.people') }}"

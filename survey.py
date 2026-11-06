@@ -85,6 +85,13 @@ MAX_TEXT = 1000
 LINK_MAX_AGE = timedelta(days=60)
 _SALT = 'akye-survey'
 
+# How long an answer is kept. Its free text can name an owner's customers, so
+# it is not kept for ever: an answer not updated for this long is deleted by
+# the daily run (purge_expired). A year is long enough to compare one season
+# with the next. Deleting a purged company's answer is separate and immediate
+# (tenant_data_lifecycle.purge_tenant).
+RETENTION_DAYS = 365
+
 # Segment A has to have had time to get set up before "what got in the way" is
 # a fair question. Five days, matching the end of the first-week run.
 A_MIN_AGE_DAYS = 5
@@ -220,6 +227,23 @@ def existing(engine, slug):
     with engine.connect() as conn:
         row = conn.execute(select(t).where(t.c.org_slug == slug)).mappings().first()
     return dict(row) if row else None
+
+
+def purge_expired(engine, now=None, days=None):
+    """Delete answers not updated for RETENTION_DAYS. Returns how many.
+
+    Never raises: it rides on the daily email run, which must not fail because
+    a table is missing or a delete was refused.
+    """
+    import control_plane
+    from sqlalchemy import delete
+    cutoff = (now or datetime.utcnow()) - timedelta(days=days or RETENTION_DAYS)
+    t = control_plane.survey_responses
+    try:
+        with engine.begin() as conn:
+            return conn.execute(delete(t).where(t.c.updated_at < cutoff)).rowcount or 0
+    except Exception:
+        return 0
 
 
 # ── Reading, for the console ────────────────────────────────────────────────
