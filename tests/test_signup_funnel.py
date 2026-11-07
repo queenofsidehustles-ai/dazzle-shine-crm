@@ -178,11 +178,37 @@ check(tn.due(dict(free, nudges_sent=free['nudges_sent'] + ',free_quiet')) is Non
 never = org(days_old=46, trial_ends_at=NOW - timedelta(days=16),
             nudges_sent='day1,day2,day4,day5,start_7,start_21,ending,ended')
 check(tn.due(never) == 'free_start', 'free plan, never set up, 16 days on: still here')
-check(tn.due(dict(never, created_at=NOW - timedelta(days=120),
-                  trial_ends_at=NOW - timedelta(days=90))) is None,
-      'never to a trial that ended months ago')
+check(tn.due(dict(never, created_at=NOW - timedelta(days=300),
+                  trial_ends_at=NOW - timedelta(days=270))) is None,
+      'never to a trial that ended most of a year ago')
 check(tn.due(dict(never, trial_ends_at=NOW - timedelta(days=5), nudges_sent='survey')) is None, 'nor in its first week')
 check(tn.due(dict(never, nudges_sent=never['nudges_sent'] + ',free_start')) is None, 'only once')
+print('\n6b. One more offer of help, once, for the ones the other notes missed')
+lapsed_old = org(days_old=75, trial_ends_at=NOW - timedelta(days=45),
+                 nudges_sent='day1,day2,day4,day5,start_7,start_21,ending,ended')
+check(tn.due(lapsed_old) == 'reactivate',
+      'never set up, 45 days after it ended, free_start never sent: one more offer')
+check(tn.due(dict(lapsed_old, nudges_sent=lapsed_old['nudges_sent'] + ',reactivate')) is None,
+      'only once')
+check(tn.due(dict(lapsed_old, nudges_sent=lapsed_old['nudges_sent'] + ',free_start')) is None,
+      'never after free_start, which says it is the last note about getting started')
+check(tn.due(dict(never), skip=('free_start',)) is None,
+      'while free_start is still inside its own window, reactivate waits (16 days: too early)')
+check(tn.due(dict(lapsed_old, trial_ends_at=NOW - timedelta(days=30)), skip=('free_start',)) == 'reactivate',
+      'but a free_start that is switched off does not stop it (it was never sent)')
+check(tn.due(dict(lapsed_old, trial_ends_at=NOW - timedelta(days=200), created_at=NOW - timedelta(days=230))) is None,
+      'not to a company that lapsed over four months ago')
+check(tn.due(dict(lapsed_old, trial_ends_at=NOW - timedelta(days=18))) != 'reactivate',
+      'not before 22 days: that window belongs to free_start')
+check(tn.due(dict(lapsed_old, activated_at=NOW - timedelta(days=50))) != 'reactivate',
+      'never to somebody who did get it working')
+for label, o in (('test account', dict(lapsed_old, is_test=True)), ('demo', dict(lapsed_old, is_demo=True)),
+                 ('opted out', dict(lapsed_old, nudges_opted_out=True)),
+                 ('suspended', dict(lapsed_old, status='suspended')),
+                 ('paying', dict(lapsed_old, subscription_status='active')),
+                 ('emailed today', dict(lapsed_old, nudge_last_at=NOW - timedelta(hours=2)))):
+    check(tn.due(o) is None, f'{label}: not sent')
+
 for label, o in (('test account', dict(free, is_test=True)), ('demo', dict(free, is_demo=True)),
                  ('opted out', dict(free, nudges_opted_out=True)),
                  ('suspended', dict(free, status='suspended'))):
@@ -192,11 +218,21 @@ check(tn.due(dict(free, nudge_last_at=NOW - timedelta(hours=2))) is None,
 
 print('\n7. Every new email reads right')
 for kind in ('day1', 'day2', 'day4', 'day5', 'activated', 'feature',
-             'first_booking', 'winback', 'quiet', 'free_quiet', 'free_start'):
+             'first_booking', 'winback', 'quiet', 'free_quiet', 'free_start',
+             'reactivate'):
     subj, html = tn.compose(running(1), kind, step)
     check('Brightside' in subj and 'brightside.rollcall.test' in html
           and '/billing' in html,
           f'{kind}: names them, links to their own address, says how to stop')
+# The emails that ask an owner to get started send her to Nana's guided setup,
+# not to a bare form, and name her so the button is not a surprise.
+for kind in ('day1', 'start_7', 'free_start', 'reactivate'):
+    _s, h = tn.compose(org(days_old=8), kind)
+    check('Nana' in h and 'brightside.rollcall.test/settings/getting-started' in h
+          and 'Set it up with Nana' in h,
+          f'{kind}: names Nana and the button opens the guided setup on her own address')
+    check(h.count('class="') == 0 and h.count('&rarr;') == 1,
+          f'{kind}: one button')
 _s, h = tn.compose(org(days_old=1), 'day2')
 check('brightside.rollcall.test/book' in h, 'day 2 shows their real booking link')
 _s, h = tn.compose(running(0), 'activated')

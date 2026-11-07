@@ -31,7 +31,7 @@ Akye, and every email along the way.
 | Key | When | Who | Says |
 |---|---|---|---|
 | welcome | at signup | everyone | your address, sign-in email, confirm code |
-| `day1` | day 1–2 | not activated | get the schedule out of your head |
+| `day1` | day 1–2 | not activated | get the schedule out of your head; Nana sets it up with you |
 | `day2` | day 2–4 | everyone on trial | the jobs you lose while you're cleaning |
 | `day4` | day 4–5 | not activated | what usually gets in the way |
 | `day5` | day 5–6 | not activated | your customer list is one lost phone from gone |
@@ -46,6 +46,7 @@ Akye, and every email along the way.
 | `quiet` | owner away 7–13 days | on a trial, set up | did the week get away from you? |
 | `free_quiet` | owner away 14–30 days | free plan, set up | need a hand with anything? |
 | `free_start` | 14–21 days after it ends | free plan, never set up | still here when you are ready |
+| `reactivate` | 22–120 days after the trial ended | free plan, never set up, and did not get `free_start` | one more offer of help: Nana sets it up with you. Once. Ships switched off |
 | `survey` | never set up: day 14–20, or 4–13 days after the trial. Set up then away: 14–30 days (31–60 on the free plan) | segment A (never set up) or B (went quiet) | what got in the way? One-tap answers open a page on their own address; see `survey.py`. Answers: Console → Survey |
 
 Never more than one a day. Never the same one twice. Never to paying, test,
@@ -54,7 +55,7 @@ demo, opted-out or closed companies.
 "Owner away" is `organizations.owner_active_at`, written as the owner uses the
 CRM (at most hourly), not their last password sign-in, which a self-renewing
 session can leave months old. A company with no `owner_active_at` yet is not
-due. The three "gone quiet" emails and `survey` **ship switched off**: they send only once
+due. The three "gone quiet" emails, `reactivate` and `survey` **ship switched off**: they send only once
 somebody turns them on under Console → Communications. An email that is
 switched off is passed over, not waited on: whatever else is due that day and
 switched on goes instead.

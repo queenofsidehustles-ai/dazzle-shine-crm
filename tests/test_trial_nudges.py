@@ -146,9 +146,10 @@ print('\n6. The one that could go badly wrong, once')
 # in that table. Without the staleness window this sends "your trial has just
 # finished" to all of them, in one batch, months late.
 for days_ago in (4, 30, 200, 900):
-    # 'survey' is marked sent: it has its own window just after a lapse (see
-    # test_survey.py), and this section is about the 'ended' note.
-    old = org(days_old=days_ago + 30, nudges_sent='survey',
+    # 'survey' and 'reactivate' are marked sent: each has its own window after
+    # a lapse (test_survey.py, test_signup_funnel.py), and this section is
+    # about the 'ended' note.
+    old = org(days_old=days_ago + 30, nudges_sent='survey,reactivate',
               trial_ends_at=NOW - timedelta(days=days_ago))
     check(tn.due(old) is None,
           f'a trial that ended {days_ago} days ago is left alone')

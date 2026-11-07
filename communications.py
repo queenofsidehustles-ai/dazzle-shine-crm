@@ -51,6 +51,9 @@ CATALOG = [
      'Owner away 14 to 30 days', 'On the free plan, set up, gone quiet'),
     ('free_start', 'owner', 'Still here when you are ready',
      '2 to 3 weeks after the trial ends', 'On the free plan, never set up'),
+    ('reactivate', 'owner', 'Want a hand getting it set up?',
+     '22 to 120 days after the trial ends',
+     'On the free plan, never set up, and did not get "Still here when you are ready"'),
     ('survey', 'owner', 'What got in the way?',
      'Never set up: day 14 to 20, or 4 to 13 days after the trial. '
      'Went quiet: away 14 to 30 days (31 to 60 on the free plan)',
@@ -84,7 +87,7 @@ PARTNER_KEYS = {'partner_login', 'partner_paid'}
 # the emails that existed before switches did, wrong for one added today,
 # which would start sending on the first run after a deploy, before anybody
 # had read it. These send only once a person turns them on in the console.
-DEFAULT_OFF = {'quiet', 'free_quiet', 'free_start', 'survey'}
+DEFAULT_OFF = {'quiet', 'free_quiet', 'free_start', 'survey', 'reactivate'}
 
 LABELS = {k: label for k, _a, label, _w, _who in CATALOG}
 

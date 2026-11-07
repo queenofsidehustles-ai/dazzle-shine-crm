@@ -80,6 +80,8 @@ one who reached the free plan without ever starting. Three more, each once:
     quiet         trial running, set up, owner away 7-13 days
     free_quiet    free plan, set up, owner away 14-30 days
     free_start    free plan, never set up, 14-21 days after the trial ended
+    reactivate    free plan, never set up, 22-120 days after it ended, and only
+                  if free_start was never sent (one more offer of help, once)
 
 "Away" is organizations.owner_active_at, which the app writes as the owner
 uses it (auth.note_activity). Never the tenant's last password sign-in: a
@@ -138,6 +140,11 @@ WINBACK = (7, 10)
 QUIET = (7, 13)
 FREE_QUIET = (14, 30)
 FREE_START = (14, 21)
+# One more try, once, for a company that reached the free plan without ever
+# getting going and whose free_start window has already passed (or was switched
+# off): 22 to 120 days after the trial ended. Never to one that already had
+# free_start, which says it is the last note about getting started.
+REACTIVATE = (22, 120)
 # Fewer hours than a day, so a cron that runs at 9:05 one morning and 8:55
 # the next is still "the next day".
 ONE_A_DAY_HOURS = 20
@@ -158,7 +165,7 @@ SURVEY_B_FREE = (31, 60)
 ALL = ('start_7', 'start_21', 'ending', 'ended',
        'day1', 'day2', 'day4', 'day5', 'activated', 'feature',
        'first_booking', 'winback', 'quiet', 'free_quiet', 'free_start',
-       'survey')
+       'survey', 'reactivate')
 # Sent when something happens, not on a timetable.
 EVENTS = ('activated', 'first_booking')
 
@@ -250,6 +257,13 @@ def due(org, now=None, next_step=None, skip=()):
         # with an end, so the first run does not write to every old account.
         if not org.get('activated_at') and open_(FREE_START, 'free_start', lapsed):
             return 'free_start'
+        # Past that window and never set up: one more offer of help. Judged on
+        # what was really SENT, not on what is switched off, so a free_start
+        # that was never turned on does not stop this one; and one that did go
+        # out (it says "the last note") is never followed by it.
+        if not org.get('activated_at') and 'free_start' not in _sent(org) \
+                and open_(REACTIVATE, 'reactivate', lapsed):
+            return 'reactivate'
         # Last, so every note above keeps its day. The windows do not overlap,
         # but a switched-off note passes over into this one through `skip`.
         if 'survey' not in already:
@@ -361,14 +375,16 @@ def compose(org, kind, next_step=None):
             'A week in, and nothing has run through it yet',
             f'''<p>You have everything — scheduling, the team, quotes, hiring,
             the lot — and so far none of it has had a real job to do.</p>
-            <p><strong>About two minutes:</strong> add one customer you already
-            clean for, then book their next clean and give it to yourself. You
-            are already on the team as the first cleaner, so that is enough to
-            see the whole thing work end to end.</p>
+            <p><strong>A few minutes with Nana:</strong> the assistant inside
+            Akye sets up your details and prices with you, one question at a
+            time, and you tap Save on each card. Then she offers to add one
+            customer you already clean for and book their next clean. You are
+            already on the team as the first cleaner, so that is enough to see
+            the whole thing work end to end.</p>
             <p style="color:#7a8499;font-size:14px">You have
             <strong>{left} day{plural}</strong> left of your
             {billing.TRIAL_DAYS} days.</p>''',
-            'Add a customer', f'{url}/bookings/clients/new'))
+            'Set it up with Nana', f'{url}/settings/getting-started'))
 
     if kind == 'start_21':
         return (f'{name}: {left} day{plural} left on your trial',
@@ -437,14 +453,14 @@ def compose(org, kind, next_step=None):
             f'''<p>Addresses screenshotted into a group chat. A cleaner texting
             &ldquo;which house again?&rdquo; at 8am. The whole week living in
             your head and your phone.</p>
-            <p>That ends with two things: add <strong>one customer</strong>
-            you already clean for, and book their next clean. You are already
-            on the team as the first cleaner, so give it to yourself and watch
-            it show up with the address, the time and the checklist.</p>
-            <p>About two minutes. Your {billing.TRIAL_DAYS} days are already
-            running, so the sooner you see it work the better.</p>
+            <p>It starts with Nana, the assistant inside Akye. She asks a few
+            questions and shows you a card for each answer. Tap Save and your
+            details, your team and your prices are set. A few minutes.</p>
+            <p>You are already on the team as the first cleaner, so your first
+            customer and job can be yours too. Your {billing.TRIAL_DAYS} days
+            are already running, so the sooner you see it work the better.</p>
             {funnel_videos.email_block('team_and_customer')}''',
-            'Add my first customer', f'{url}/bookings/clients/new'))
+            'Set it up with Nana', f'{url}/settings/getting-started'))
 
     if kind == 'day2':
         return (f'{name}: the jobs you lose while you are cleaning',
@@ -593,16 +609,29 @@ def compose(org, kind, next_step=None):
                 wrap(
             'Still here when you are ready',
             '''<p>Your account is still open on the free plan. It never got
-            its first customer and job, so you have not seen it do
-            anything yet.</p>
+            set up, so you have not seen it do anything yet.</p>
             <p>The free plan is enough to try it properly: up to 3 cleaners,
-            every customer you have, and 20 jobs a month. Two things, about two
-            minutes: add <strong>one customer</strong> you already clean for,
-            and give their next clean to yourself. You are already the first
-            cleaner.</p>
+            every customer you have, and 20 jobs a month. Nana, the assistant
+            inside, sets it up with you: a few questions, a card to Save for
+            each, a few minutes. You are already the first cleaner.</p>
             <p>If something put you off, reply and tell us. This is the last
             note about getting started.</p>''',
-            'Add a customer', f'{url}/bookings/clients/new'))
+            'Set it up with Nana', f'{url}/settings/getting-started'))
+
+    if kind == 'reactivate':
+        return (f'{name}: want a hand getting it set up?',
+                wrap(
+            'Want a hand getting it set up?',
+            '''<p>You opened an Akye account a while back and it never got
+            going. That happens a lot. The month fills up, and a new thing to
+            set up loses.</p>
+            <p>It is still here on the free plan, and nothing was deleted.
+            Nana, the assistant inside, can set it up with you: she asks a few
+            questions, shows a card for each answer, and you tap Save. A few
+            minutes, and you are already the first cleaner.</p>
+            <p>If something stopped you, reply and tell us. This is the only
+            note like this.</p>''',
+            'Set it up with Nana', f'{url}/settings/getting-started'))
 
     if kind == 'survey':
         seg = survey.segment(org) or ('B' if org.get('activated_at') else 'A')

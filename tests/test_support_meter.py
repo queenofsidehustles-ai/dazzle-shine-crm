@@ -108,7 +108,7 @@ check(cd.support_meter(company(), {'ok': False}, None, NOW)['level'] == 'watch',
       "a company whose data will not read is worth a look, not a crash")
 
 print('\n2. New emails ship switched off')
-for key in ('quiet', 'free_quiet', 'free_start'):
+for key in ('quiet', 'free_quiet', 'free_start', 'reactivate'):
     check(key in communications.LABELS, f'{key}: on the Communications page')
     check(not communications.is_on(key, {}), f'{key}: off until somebody turns it on')
     check(communications.is_on(key, {key: True}), f'{key}: on once switched on')
@@ -117,7 +117,7 @@ for key in ('quiet', 'free_quiet', 'free_start'):
 check(communications.is_on('day1', {}), 'an email from before keeps its old default: on')
 check(communications.state('quiet', {}) is False and communications.state('day1', {}) is True,
       'and the page shows each as it is')
-for key in ('quiet', 'free_quiet', 'free_start'):
+for key in ('quiet', 'free_quiet', 'free_start', 'reactivate'):
     subject, html = communications.sample_preview(key)
     check(subject.startswith('Sparkle Cleaning') and 'sparkle.' in html,
           f'{key}: the console preview renders ({subject})')
@@ -126,7 +126,7 @@ print('\n3. The words')
 o = company(name='Brightside Cleaning', slug='brightside', owner_email='dana@b.test',
             subscription_status='trialing', trial_ends_at=NOW + timedelta(days=9),
             created_at=ago(21))
-for key in ('quiet', 'free_quiet', 'free_start'):
+for key in ('quiet', 'free_quiet', 'free_start', 'reactivate'):
     subject, html = tn.compose(o, key)
     words = (subject + html).lower()
     check('brightside' in subject.lower() and 'brightside.akye.test' in html
