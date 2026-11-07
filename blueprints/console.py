@@ -2203,7 +2203,19 @@ def nana_proposals():
         a['times'] += 1
         a['companies'].add(names.get(m['org_slug'], m['org_slug'] or '?'))
     misses = sorted(asked.values(), key=lambda a: (-a['times'], a['question'] or ''))
+    # Who has actually talked to Nana, which the offers above cannot say: most
+    # of what an owner does is ask or answer, and none of it is an "offer".
+    meta = {o['slug']: o for o in control_plane.all_orgs(engine)}
+    usage = []
+    for u in control_plane.nana_usage_summary(engine, days=30):
+        o = meta.get(u['slug'])
+        if not o:
+            continue            # a company that has since been purged
+        usage.append(dict(u, name=o.get('name') or u['slug'],
+                          test=bool(o.get('is_test') or o.get('is_demo'))))
+    real_users = [u for u in usage if not u['test']]
     return render_template('console/nana.html', rows=rows[:300],
+                           usage=usage, real_users=len(real_users),
                            by_action=sorted(by_action.items()), misses=misses[:100],
                            me=request.console_user, counts=_counts(engine))
 

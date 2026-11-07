@@ -146,6 +146,9 @@ def config_gaps(env=None):
     if not has('RESEND_EVENTS_WEBHOOK_SECRET', 'RESEND_WEBHOOK_SECRET'):
         out.append({'where': 'Email', 'text': 'No signing secret for delivery events: bounces and '
                     'spam reports are refused, so "sent" stays "sent"'})
+    if not has('ANTHROPIC_API_KEY'):
+        out.append({'where': 'AI', 'text': 'ANTHROPIC_API_KEY is not set: Nana, the setup chat and '
+                    'the drafted writing are switched off for every company, with nothing on screen to say why'})
     if not has('METRICS_API_KEY', min_len=16):
         out.append({'where': 'Reports', 'text': 'METRICS_API_KEY is not set (or is under 16 characters): '
                     'the daily report cannot read /console/metrics.json without a console sign-in'})

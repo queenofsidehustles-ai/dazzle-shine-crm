@@ -108,6 +108,19 @@ def _was_finished(step_key):
     return False
 
 
+def _count_use(kind):
+    """One more message to Nana from this company, for the console's Nana page.
+    Never raises."""
+    try:
+        from flask import g
+        import control_plane
+        import provisioning
+        control_plane.note_nana_use(provisioning._engine(),
+                                    getattr(g, 'tenant_slug', None), kind)
+    except Exception:
+        pass
+
+
 @setup_assistant_bp.route('/ask', methods=['POST'])
 @login_required
 @owner_required
@@ -119,6 +132,7 @@ def ask():
     chat = transcript()
     opening = chat[0]['content'] if chat and chat[0].get('role') == 'assistant' else ''
     out = setup_assistant.ask(text, history=chat, opening=opening)
+    _count_use('setup')
     chat = chat + [{'role': 'user', 'content': text[:1500]},
                    {'role': 'assistant', 'content': (out.get('say') or '')[:3000],
                     'cards': out.get('cards') or []}]

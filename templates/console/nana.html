@@ -21,6 +21,27 @@
 <div class="con-empty" style="margin-bottom:var(--s6)">Every "how do I" question so far had a walkthrough.</div>
 {% endif %}
 
+<h2 style="font-size:1.05rem;margin:0 0 var(--s3)">Who has talked to Nana, last 30 days</h2>
+<p style="color:var(--muted);margin:0 0 var(--s3)">
+  Every message to the setup chat and to Ask Nana, from when this started being
+  counted. {{ real_users }} real {{ 'company' if real_users == 1 else 'companies' }}
+  (test and demo companies are marked and not counted).</p>
+{% if usage %}
+<table class="con" style="margin-bottom:var(--s6)">
+  <tr><th>Company</th><th>Setup chat</th><th>Ask Nana</th><th>Last used</th></tr>
+  {% for u in usage %}
+  <tr>
+    <td>{{ u.name }}{% if u.test %} <span style="color:var(--softer)">(test)</span>{% endif %}</td>
+    <td>{{ u.setup }}</td>
+    <td>{{ u.ask }}</td>
+    <td>{{ u.last_at.strftime('%d %b %H:%M') if u.last_at }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<div class="con-empty" style="margin-bottom:var(--s6)">Nobody has sent Nana a message since this was counted.</div>
+{% endif %}
+
 <h2 style="font-size:1.05rem;margin:0 0 var(--s3)">What Nana has offered, across every company</h2>
 
 {% if by_action %}
